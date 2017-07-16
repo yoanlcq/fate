@@ -1,6 +1,6 @@
 [package]
-authors = ["Yoan Lecoq"]
-description = "Fight And Travel (Game) Engine."
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "Fight And Travel (Game) Engine. Focused on games which need to move fast in huge worlds, and fighting mechanics."
 #documentation = "http://yoanlcq.github.io/fate"
 #homepage = "https://yoanlecoq.com/fate"
 keywords = ["cross-platform"]

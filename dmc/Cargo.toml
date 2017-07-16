@@ -1,0 +1,21 @@
+[package]
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "Idiomatic replacement for SDL2.\nThe acronym originally standed for DirectMedia Crate."
+documentation = "http://yoanlcq.github.io/dmc"
+homepage = "https://github.com/yoanlcq/fate/tree/master/dmc"
+keywords = ["sdl2"]
+categories = [ "multimedia", "game-engines" ]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/yoanlcq/fate"
+name = "dmc"
+version = "0.1.0"
+build = "build.rs"
+
+
+[dependencies]
+num-traits = "0.1.37"
+uuid = "0.5"
+
+[target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "dragonfly", target_os = "openbsd", target_os = "netbsd"))'.dependencies.x11]
+version = "2.14.0"
+features = ["xlib", "glx"]
