@@ -1,15 +1,21 @@
 //! Fight And Travel (Game) Engine.
 //!
-//! A long-lasting effort to make a performant engine focused on crunching huge worlds really fast,
-//! and changing the general "Scene-oriented" mindset that popular engines shoehorn into games.
+//! [It started in C](https://github.com/yoanlcq/fate-c), it will end in Rust.
 
 //#![deny(missing_docs)]
-//#![no_std]
 #![doc(test(attr(deny(warnings))))]
 #![feature(test)]
+#![feature(inclusive_range, inclusive_range_syntax)]
+#![feature(i128_type)]
+#![feature(link_llvm_intrinsics)]
 //#![feature(repr_simd)]
 
 extern crate test;
 extern crate vek;
 
 pub use vek::*;
+
+pub mod intrin;
+pub use intrin::*;
+pub mod marker;
+pub use marker::*;
