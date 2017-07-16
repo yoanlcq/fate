@@ -1,0 +1,20 @@
+[package]
+authors = ["Yoan Lecoq"]
+description = "Fight And Travel (Game) Engine."
+#documentation = "http://yoanlcq.github.io/fate"
+#homepage = "https://yoanlecoq.com/fate"
+keywords = ["cross-platform"]
+categories = [ "game-engines", "multimedia", "rendering" ]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/yoanlcq/fate"
+name = "fate"
+version = "0.1.0"
+
+[dependencies]
+
+[dependencies.vek]
+optional = false
+path = "./vek"
+version = "0.1.0"
+
+[features]

@@ -1,0 +1,35 @@
+//! Generic linear algebra focused on computer graphics and intent.
+//!
+//! It does not try to be extensive (e.g rect primitives don't ship with a physics engine.)
+
+// TODO tests
+// TODO benchmarks
+// TODO doc
+// TODO provide efficient functions for AoS and SoA
+
+//#![deny(missing_docs)]
+#![no_std]
+#![doc(test(attr(deny(warnings))))]
+#![feature(test)]
+#![feature(repr_simd)]
+
+extern crate test;
+
+pub mod bezier;
+pub use bezier::*;
+pub mod clamp;
+pub use clamp::*;
+pub mod geom;
+pub use geom::*;
+pub mod lerp;
+pub use lerp::*;
+pub mod mat;
+pub use mat::*;
+pub mod quat;
+pub use quat::*;
+pub mod tween;
+pub use tween::*;
+pub mod vec;
+pub use vec::*;
+pub mod wrap;
+pub use wrap::*;
