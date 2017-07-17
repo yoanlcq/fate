@@ -1,3 +1,5 @@
+// https://pomax.github.io/bezierinfo
+
 use vec::{Vec3, Vec4};
 use geom::{Line2, Line3};
 
@@ -56,6 +58,19 @@ macro_rules! bezier_impl_quadratic {
                     )
                 }
             }
+            pub fn split(self, t: Progress) -> (Self, Self) {
+                let first = $QuadraticBezier(
+                    self.0,
+                    self.1*t - self.0*(t-1),
+                    self.2*t*t - self.1*2*t*(t-1) + self.0*(t-1)*(t-1),
+                );
+                let second = $QuadraticBezier(
+                    self.2*t*t - self.1*2*t*(t-1) + self.0*(t-1)*(t-1),
+                    self.2*t - self.1*(t-1),
+                    self.2,
+                );
+                (first, second)
+            }
         }
         
         impl<T> From<Vec3<$Point<T>>> for $QuadraticBezier {
@@ -103,6 +118,21 @@ macro_rules! bezier_impl_cubic {
                         Vec4(-1,  3, -3, 1),
                     )
                 }
+            }
+            pub fn split(self, t: Progress) -> (Self, Self) {
+                let first = $CubicBezier(
+                    self.0,
+                    self.1*t - self.0*(t-1),
+                    self.2*t*t - self.1*2*t*(t-1) + self.0*(t-1)*(t-1),
+                    self.3*t*t*t - self.2*3*t*t*(t-1) + self.1*3*t*(t-1)*(t-1) - self.0*(t-1)*(t-1)*(t-1),
+                );
+                let second = $CubicBezier(
+                    self.3*t*t*t - self.2*3*t*t*(t-1) + self.1*3*t*(t-1)*(t-1) - self.0*(t-1)*(t-1)*(t-1),
+                    self.3*t*t - self.2*2*t*(t-1) + self.1*(t-1)*(t-1),
+                    self.3*t - self.2*(t-1),
+                    self.3,
+                );
+                (first, second)
             }
             // pub fn circle(radius: T, curve_count: u32) ->
         }
