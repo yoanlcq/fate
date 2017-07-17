@@ -3,8 +3,8 @@
 use vec::{Vec3, Vec4};
 use geom::{Line2, Line3};
 
-// TODO impl from/into vec4 and vec3, respectively
 // TODO into_iter, iter_mut, etc (for concisely applying the same xform to all points)
+// TODO AABBs from beziers
 
 macro_rules! bezier_impl_any {
     ($Bezier:ident $Point:ident) => {
@@ -58,6 +58,7 @@ macro_rules! bezier_impl_quadratic {
                     )
                 }
             }
+            // TODO: reuse computations somehow (i.e impl split_first() and split_second() separately)
             pub fn split(self, t: Progress) -> (Self, Self) {
                 let first = $QuadraticBezier(
                     self.0,
@@ -119,6 +120,7 @@ macro_rules! bezier_impl_cubic {
                     )
                 }
             }
+            // TODO: reuse computations somehow (i.e impl split_first() and split_second() separately)
             pub fn split(self, t: Progress) -> (Self, Self) {
                 let first = $CubicBezier(
                     self.0,
