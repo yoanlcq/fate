@@ -726,14 +726,14 @@ macro_rules! vec_impl_directions_2d {
     ($($Self:ident)+) => {
         $(
             impl<T: Zero + One> $Self<T> {
-                fn unit_x() -> Self { Self::from(Xyzw::new_direction(T:: one(), T::zero(), T::zero())) }
-                fn unit_y() -> Self { Self::from(Xyzw::new_direction(T::zero(), T:: one(), T::zero())) }
-                fn right () -> Self { Self::unit_x() }
-                fn up    () -> Self { Self::unit_y() }
+                pub fn unit_x() -> Self { Self::from(Xyzw::new_direction(T:: one(), T::zero(), T::zero())) }
+                pub fn unit_y() -> Self { Self::from(Xyzw::new_direction(T::zero(), T:: one(), T::zero())) }
+                pub fn right () -> Self { Self::unit_x() }
+                pub fn up    () -> Self { Self::unit_y() }
             }
             impl<T: Zero + One + Neg<Output=T>> $Self<T> {
-                fn left() -> Self { -Self::right() }
-                fn down() -> Self { -Self::up()    }
+                pub fn left() -> Self { -Self::right() }
+                pub fn down() -> Self { -Self::up()    }
             }
         )+
     }
@@ -742,20 +742,60 @@ macro_rules! vec_impl_directions_3d {
     ($($Self:ident)+) => {
         $(
             impl<T: Zero + One> $Self<T> {
-                fn unit_z    () -> Self { Self::from(Xyzw::new_direction(T::zero(), T::zero(), T::one())) }
+                pub fn unit_z    () -> Self { Self::from(Xyzw::new_direction(T::zero(), T::zero(), T::one())) }
                 /// Forward direction vector in left-handed coordinate space.
-                fn forward_lh() -> Self { Self::unit_z() }
+                pub fn forward_lh() -> Self { Self::unit_z() }
                 /// Backwards direction vector in right-handed coordinate space.
-                fn back_rh   () -> Self { Self::unit_z() }
+                pub fn back_rh   () -> Self { Self::unit_z() }
             }
 
             impl<T: Zero + One + Neg<Output=T>> $Self<T> {
                 /// Forward direction vector in right-handed coordinate space.
-                fn forward_rh() -> Self { -Self::back_rh() }
+                pub fn forward_rh() -> Self { -Self::back_rh() }
                 /// Backwards direction vector in left-handed coordinate space.
-                fn back_lh   () -> Self { -Self::forward_lh() }
+                pub fn back_lh   () -> Self { -Self::forward_lh() }
             }
         )+
+    }
+}
+
+macro_rules! vec_impl_rgb_constants {
+    ($($Self:ident)+) => {
+        $(
+            impl<T: ColorChannel> $Self<T> {
+                pub fn black   () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::zero(), T::zero())) }
+                pub fn white   () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::full())) }
+                pub fn red     () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::zero())) }
+                pub fn green   () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::full(), T::zero())) }
+                pub fn blue    () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::zero(), T::full())) }
+                pub fn cyan    () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::full(), T::full())) }
+                pub fn magenta () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::full())) }
+                pub fn yellow  () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::zero())) }
+            }
+        )+
+    }
+}
+
+impl<T: ColorChannel> Rgba<T> {
+    pub fn new_opaque(r: T, g: T, b: T) -> Self {
+        Self::new(r, g, b, T::full())
+    }
+    pub fn new_transparent(r: T, g: T, b: T) -> Self {
+        Self::new(r, g, b, T::zero())
+    }
+    pub fn opaque<V: Into<Rgb<T>>>(color: V) -> Self {
+        let Rgb { r, g, b } = color.into();
+        Self::new_opaque(r, g, b)
+    }
+    pub fn transparent<V: Into<Rgb<T>>>(color: V) -> Self {
+        let Rgb { r, g, b } = color.into();
+        Self::new_transparent(r, g, b)
+    }
+}
+impl<T> Rgba<T> {
+    pub fn translucent<V: Into<Rgb<T>>>(color: V, opacity: T) -> Self {
+        let Rgb { r, g, b } = color.into();
+        Self::new(r, g, b, opacity)
     }
 }
 
@@ -846,6 +886,8 @@ vec_impl_point_or_direction!(Vec4 Xyzw);
 vec_impl_directions_2d!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
 vec_impl_directions_3d!(Vec4 Vec3      Xyzw Xyz   );
 
+vec_impl_rgb_constants!(Rgba Rgb);
+
 
 /// Trait for types that are suitable for representing a color channel value.
 pub trait ColorChannel : Zero {
@@ -875,21 +917,6 @@ impl ColorChannel for Wrapping<i8 > { fn full() -> Self { Wrapping(ColorChannel:
 impl ColorChannel for Wrapping<i16> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
 impl ColorChannel for Wrapping<i32> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
 impl ColorChannel for Wrapping<i64> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-
-/// Basic color constants such as black, white, red, green, blue, cyan, magenta and yellow.
-#[allow(missing_docs)]
-pub trait RgbConstants<T: ColorChannel> : From<Vec4<T>> {
-    fn black   () -> Self { Self::from(Vec4(T::zero(), T::zero(), T::zero(), T::full())) }
-    fn white   () -> Self { Self::from(Vec4(T::full(), T::full(), T::full(), T::full())) }
-    fn red     () -> Self { Self::from(Vec4(T::zero(), T::full(), T::zero(), T::full())) }
-    fn green   () -> Self { Self::from(Vec4(T::zero(), T::full(), T::zero(), T::full())) }
-    fn blue    () -> Self { Self::from(Vec4(T::zero(), T::zero(), T::full(), T::full())) }
-    fn cyan    () -> Self { Self::from(Vec4(T::zero(), T::full(), T::full(), T::full())) }
-    fn magenta () -> Self { Self::from(Vec4(T::full(), T::zero(), T::full(), T::full())) }
-    fn yellow  () -> Self { Self::from(Vec4(T::full(), T::full(), T::zero(), T::full())) }
-}
-impl<T: ColorChannel + Clone + Default> RgbConstants<T> for Rgba<T> {}
-impl<T: ColorChannel + Clone + Default> RgbConstants<T> for Rgb<T>  {}
 
 
 #[cfg(test)]
