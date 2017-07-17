@@ -10,6 +10,8 @@ use core::ops::*;
 use vec::*;
 use clamp::{Clamp01, clamp01};
 
+// TODO split into two traits, Lerp and LerpUnclamped
+
 pub trait Lerp<Progress=f32>: Sized + Add<Output=Self> + Mul<Progress, Output=Self>
     where Progress : Clone + Clamp01 + Sub<Output=Progress>
 {
