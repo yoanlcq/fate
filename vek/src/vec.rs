@@ -12,6 +12,7 @@ use core::ptr;
 use core::borrow::{Borrow, BorrowMut};
 use core::ops::*;
 use mat::Mat2;
+use clamp::PartialMinMax;
 
 /// A two-components generic vector type.
 ///
@@ -772,8 +773,23 @@ macro_rules! vec_impl_rgb_constants {
                 pub fn magenta () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::full())) }
                 pub fn yellow  () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::zero())) }
                 pub fn gray(value: T) -> Self { Self::from(Rgba::new_opaque(value, value, value)) }
-                /// The exact same as 'gray()'.
-                pub fn grey(value: T) -> Self { Self::gray(value) }
+                // NOTE: Let's not get started with the 'gray' vs 'grey' debate. I picked 'gray' because that's
+                // what the Unity Engine happens to favor. From that, there's no point in implementing aliases
+                // just because people might prefer to spell 'grey' on a whim. A choice has to be made.
+            }
+            impl<T: PartialMinMax> $Self<T> {
+                // The highest color component, i.e max(r,g,b).
+                pub fn max_color_component(self) -> T {
+                    T::partial_max(T::partial_max(self.r, self.g), self.b)
+                }
+                // The lowest color component, i.e in(r,g,b).
+                pub fn min_color_component(self) -> T {
+                    T::partial_min(T::partial_min(self.r, self.g), self.b)
+                }
+                // TODO: impl grayscale(self) -> T fast, precisely, and preventing integer overflow.
+                // Once it's done, implement into_gray(self) -> Self, which preserves opacity if any.
+                
+                // TODO: impl from_html_hex(s: &str) or something like that
             }
         )+
     }
