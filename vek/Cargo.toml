@@ -1,6 +1,6 @@
 [package]
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
-description = "Colorful vector+matrix+quaternion+rectangle library for graphics, with focus on intent."
+description = "Colorful vector+matrix+quaternion+basic shapes library for graphics, with focus on intent and the small bits that make you happier as a user."
 documentation = "http://yoanlcq.github.io/vek"
 homepage = "https://github.com/yoanlcq/fate/tree/master/vek"
 keywords = ["vector", "quaternion", "matrix", "rect", "rgb", "rgba", "xyz", "xyzw", "lerp"]
