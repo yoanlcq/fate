@@ -2,6 +2,9 @@
 //! convert them back to integers. This eases our implementation and gives you explicit control
 //! over the conversion behavior.
 
+
+// TODO would be good to be able to directly Lerp on Rgb<T: ColorChannel> though
+
 use core::ops::*;
 
 use vec::*;
