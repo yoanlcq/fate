@@ -771,6 +771,9 @@ macro_rules! vec_impl_rgb_constants {
                 pub fn cyan    () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::full(), T::full())) }
                 pub fn magenta () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::full())) }
                 pub fn yellow  () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::zero())) }
+                pub fn gray(value: T) -> Self { Self::from(Rgba::new_opaque(value, value, value)) }
+                /// The exact same as 'gray()'.
+                pub fn grey(value: T) -> Self { Self::gray(value) }
             }
         )+
     }
