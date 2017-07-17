@@ -154,6 +154,8 @@ where T: Mul<Output=T> + Clone
     }
 }
 
+// TODO impl slerp, nlerp, mul_vec3, etc
+
 /*
 
 static inline void mat4_from_quat(mat4 M, quat q)
