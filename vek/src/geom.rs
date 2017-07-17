@@ -1,5 +1,7 @@
 // TODO add useful impls to this module (inclusing basic conversions from rect to vec pairs)
 
+// NOTE: in this module, the type parameters <P,E> usually stand for Position and Extent.
+
 extern crate num_traits;
 use self::num_traits::NumCast;
 use core::mem;
@@ -9,24 +11,24 @@ use vec::*;
 
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Rect<P,E> {
-    /// The top-left corner, because it is the de facto standard for this kind of struct.
+    /// Commonly assumed to be the top-left corner, because it is the de facto standard for this kind of struct.
     pub position: Xy<P>,
     /// Extent, with Y axis going downwards.
     pub extent: Extent2<E>,
 }
+/// A `Rect` extended to 3D.
+///
+/// This would have been named `Box`, but it was "taken" by the standard library already.
+///
+/// You should probably use `Aabb` because it is less confusing.
+///
+/// Rect3 is only useful when using extra precise integer coordinates where `Aabb` would only
+/// allow for representing half the possible values for the extent. 
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct RectByCenter<P,E> {
-    pub center: Xy<P>,
-    pub extent: Extent2<E>,
-}
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Box<P,E> {
+pub struct Rect3<P,E> {
+    /// Commonly assumed to be the top-left-near corner.
     pub position: Xyz<P>,
-    pub extent: Extent3<E>,
-}
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct BoxByCenter<P,E> {
-    pub center: Xyz<P>,
+    /// Extent, with Y axis going downwards.
     pub extent: Extent3<E>,
 }
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -34,17 +36,56 @@ pub struct Aabb<P,E> {
     pub center: Xyz<P>,
     pub half_extent: Extent3<E>,
 }
+
+// NOTE: Only implement axis-aligned primitives (a.k.a don't go on a rampage).
+// 
+// Don't write, e.g a "Disk in 3D-space" structure, because users would rather
+// represent it with a (Disk, z, orientation) tuple or anything else that suits their particular needs.
+//
+// On the other hand, everybody agrees that a minimal "Disk" struct is a position+radius pair.
+// (even if it's just expressed as a radius with no
+// position, then fine, just use the radius as-is, without making it it a new struct).
+// 
+// Any other info, such as fill color, border thickness, etc. are just extras that users can
+// put on top (see composition over inheritance, etc).
+
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct Circle<P,E> {
+pub struct Disk<P,E> {
     pub center: Xy<P>,
     pub radius: E,
 }
+
+impl<P,E> Disk<P,E> {
+    pub fn area(self) -> E { unimplemented!() }
+    pub fn diameter(&self) -> E { self.radius + self.radius }
+    pub fn collision(self, other: Self) -> Xy<P> { unimplemented!() }
+    pub fn collision_with_point(self, p: Xy<P>) -> Xy<P> { unimplemented!() }
+}
+
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Sphere<P,E> {
+    pub center: Xyz<P>,
+    pub radius: E,
+}
+impl<P,E> Sphere<P,E> {
+    pub fn surface_area(self) -> E { unimplemented!() } // 4*pi*r*r
+    pub fn volume(self) -> E { unimplemented!() } // pi*r*r*r*4/3
+    pub fn diameter(&self) -> E { self.radius + self.radius }
+    pub fn collision(self, other: Self) -> Xyz<P> { unimplemented!() }
+    pub fn collision_with_point(self, p: Xyz<P>) -> Xyz<P> { unimplemented!() }
+}
+
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Ellipsis<P,E> {
     pub center: Xy<P>,
     pub radius: Extent2<E>,
 }
-pub type Disk<P,E> = Circle<P,E>;
+/// Nobody can possibly use this ???
+#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Potato<P,E> {
+    pub center: Xyz<P>,
+    pub radius: Extent3<E>,
+}
 
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Line2<T> {
@@ -84,7 +125,7 @@ impl<P,E> Rect<P,E> {
         if let Some(e) = self.extent  .cast() { out.extent   = e; } else { return None; };
         Some(out)
     }
-    pub fn intersection(self, _other: Self) -> Xy<P> {
+    pub fn collision_vector(self, _other: Self) -> Xy<P> {
         unimplemented!()    
     }
     pub fn split_v(self, _from_left: E) -> (Self, Self) {
