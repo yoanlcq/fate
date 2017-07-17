@@ -5,6 +5,9 @@ use geom::{Line2, Line3};
 
 // TODO into_iter, iter_mut, etc (for concisely applying the same xform to all points)
 // TODO AABBs from beziers
+// TODO OOBBs from beziers
+// TODO "Tracing a curve at fixed distance intervals"
+// TODO project a point on a curve using e.g binary search after a coarse linear search
 
 macro_rules! bezier_impl_any {
     ($Bezier:ident $Point:ident) => {
@@ -12,7 +15,8 @@ macro_rules! bezier_impl_any {
             pub fn normalized_tangent(self, t: Progress) -> $Point<T> {
                 self.evaluate_derivative(t).normalized()
             }
-            // Approximates the curve's length by subdividing it into step_count+1 straight lines.
+	        // TODO: add some kind of bias to the calculation ?
+            /// Approximates the curve's length by subdividing it into step_count+1 straight lines.
             pub fn approx_length(self, step_count: u32) {
 	            let mut length = T::zero();
 	            let mut prev_point = self.evaluate(T::zero());
@@ -136,6 +140,7 @@ macro_rules! bezier_impl_cubic {
                 );
                 (first, second)
             }
+            // TODO impl circle with either 2 curves or 4 curves
             // pub fn circle(radius: T, curve_count: u32) ->
         }
         
