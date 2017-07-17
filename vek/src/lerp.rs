@@ -33,29 +33,17 @@ pub fn lerp<Progress, T>(from: T, to: T, progress: Progress) -> T
     T::lerp(from, to, progress)
 }
 
-impl Lerp<f32> for         f32  {}
-impl Lerp<f32> for Vec2   <f32> {}
-impl Lerp<f32> for Vec3   <f32> {}
-impl Lerp<f32> for Vec4   <f32> {}
-impl Lerp<f32> for Xyzw   <f32> {}
-impl Lerp<f32> for Xyz    <f32> {}
-impl Lerp<f32> for Xy     <f32> {}
-impl Lerp<f32> for Uvw    <f32> {}
-impl Lerp<f32> for Uv     <f32> {}
-impl Lerp<f32> for Rgba   <f32> {}
-impl Lerp<f32> for Rgb    <f32> {}
-impl Lerp<f32> for Extent3<f32> {}
-impl Lerp<f32> for Extent2<f32> {}
-impl Lerp<f64> for         f64  {}
-impl Lerp<f64> for Vec2   <f64> {}
-impl Lerp<f64> for Vec3   <f64> {}
-impl Lerp<f64> for Vec4   <f64> {}
-impl Lerp<f64> for Xyzw   <f64> {}
-impl Lerp<f64> for Xyz    <f64> {}
-impl Lerp<f64> for Xy     <f64> {}
-impl Lerp<f64> for Uvw    <f64> {}
-impl Lerp<f64> for Uv     <f64> {}
-impl Lerp<f64> for Rgba   <f64> {}
-impl Lerp<f64> for Rgb    <f64> {}
-impl Lerp<f64> for Extent3<f64> {}
-impl Lerp<f64> for Extent2<f64> {}
+impl Lerp<f32> for f32 {}
+impl Lerp<f64> for f64 {}
+
+macro_rules! lerp_impl_for_vecs {
+    ($($Vec:ident)+) => {
+        $(
+            impl<T: Clone + Clamp01 + Sub<Output=T>> Lerp<     T > for $Vec <T> {}
+            // TODO: Extend Clamp to vectors somehow
+            // impl<T: Clone + Clamp01 + Sub<Output=T>> Lerp<$Vec<T>> for $Vec <T> {}
+        )+
+    }
+}
+
+lerp_impl_for_vecs!(Vec4 Vec3 Vec2 Xyzw Xyz Xy Rgba Rgb Uvw Uv Extent3 Extent2);
