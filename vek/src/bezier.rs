@@ -1,6 +1,8 @@
 use vec::{Vec3, Vec4};
+use geom::{Line2, Line3};
 
 // TODO impl from/into vec4 and vec3, respectively
+// TODO into_iter, iter_mut, etc (for concisely applying the same xform to all points)
 
 macro_rules! bezier_impl_any {
     ($Bezier:ident $Point:ident) => {
@@ -25,7 +27,7 @@ macro_rules! bezier_impl_any {
 }
 
 macro_rules! bezier_impl_quadratic {
-    ($QuadraticBezier:ident $Point:ident) => {
+    ($QuadraticBezier:ident $Point:ident $Line:ident) => {
         
         #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $QuadraticBezier<T>(pub $Point<T>, pub $Point<T>, pub $Point<T>);
@@ -38,6 +40,9 @@ macro_rules! bezier_impl_quadratic {
                 let n = T::one() + T::one();
                 (1-t)*n*(self.1-self.0) + t*n*(self.2-self.1)
             }
+            pub fn from_line(line: $Line<T>) -> Self {
+                $QuadraticBezier(line.a, line.a, line.b)
+            }
         }
         
         bezier_impl_any!($QuadraticBezier $Point)
@@ -45,7 +50,7 @@ macro_rules! bezier_impl_quadratic {
 }
 
 macro_rules! bezier_impl_cubic {
-    ($CubicBezier:ident $Point:ident) => {
+    ($CubicBezier:ident $Point:ident $Line:ident) => {
         
         #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
         pub struct $CubicBezier<T>(pub $Point<T>, pub $Point<T>, pub $Point<T>, pub $Point<T>);
@@ -58,13 +63,17 @@ macro_rules! bezier_impl_cubic {
         	    let n = T::one() + T::one() + T::one();
         		(1-t)*(1-t)*n*(self.1-self.0) + 2*(1-t)*t*n*(self.2-self.1) + t*t*n*(self.3-self.2)
         	}
+            pub fn from_line(line: $Line<T>) -> Self {
+                $CubicBezier(line.a, line.a, line.b, line.b)
+            }
+            // pub fn circle(radius: T, curve_count: u32) ->
         }
         
         bezier_impl_any!($CubicBezier $Point)
     }
 }
 
-bezier_impl_quadratic!(QuadraticBezier2 Xy);
-bezier_impl_quadratic!(QuadraticBezier3 Xyz);
-bezier_impl_cubic!(CubicBezier2 Xy);
-bezier_impl_cubic!(CubicBezier3 Xyz);
+bezier_impl_quadratic!(QuadraticBezier2 Xy Line2);
+bezier_impl_quadratic!(QuadraticBezier3 Xyz Line3);
+bezier_impl_cubic!(CubicBezier2 Xy Line2);
+bezier_impl_cubic!(CubicBezier3 Xyz Line3);
