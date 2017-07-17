@@ -722,6 +722,43 @@ macro_rules! vec_impl_rotate2d {
     }
 }
 
+macro_rules! vec_impl_directions_2d {
+    ($($Self:ident)+) => {
+        $(
+            impl<T: Zero + One> $Self<T> {
+                fn unit_x() -> Self { Self::from(Xyzw::new_direction(T:: one(), T::zero(), T::zero())) }
+                fn unit_y() -> Self { Self::from(Xyzw::new_direction(T::zero(), T:: one(), T::zero())) }
+                fn right () -> Self { Self::unit_x() }
+                fn up    () -> Self { Self::unit_y() }
+            }
+            impl<T: Zero + One + Neg<Output=T>> $Self<T> {
+                fn left() -> Self { -Self::right() }
+                fn down() -> Self { -Self::up()    }
+            }
+        )+
+    }
+}
+macro_rules! vec_impl_directions_3d {
+    ($($Self:ident)+) => {
+        $(
+            impl<T: Zero + One> $Self<T> {
+                fn unit_z    () -> Self { Self::from(Xyzw::new_direction(T::zero(), T::zero(), T::one())) }
+                /// Forward direction vector in left-handed coordinate space.
+                fn forward_lh() -> Self { Self::unit_z() }
+                /// Backwards direction vector in right-handed coordinate space.
+                fn back_rh   () -> Self { Self::unit_z() }
+            }
+
+            impl<T: Zero + One + Neg<Output=T>> $Self<T> {
+                /// Forward direction vector in right-handed coordinate space.
+                fn forward_rh() -> Self { -Self::back_rh() }
+                /// Backwards direction vector in left-handed coordinate space.
+                fn back_lh   () -> Self { -Self::forward_lh() }
+            }
+        )+
+    }
+}
+
 
 // NOTE: Traits for type that convert _exactly_ into the given type.
 // Implement only if neither "shortening" nor "extension" takes place during conversion.
@@ -804,8 +841,10 @@ vec_impl_spatial_ops!(Exactly3, Vec3 Xyz Extent3);
 vec_impl_spatial_ops!(Exactly2, Vec2 Xy Extent2);
 vec_impl_distance!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
 vec_impl_cross!(Vec3 Xyz Extent3);
-vec_impl_point_or_direction!(Vec4 Xyzw);
 vec_impl_rotate2d!(Vec2 Xy Extent2);
+vec_impl_point_or_direction!(Vec4 Xyzw);
+vec_impl_directions_2d!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
+vec_impl_directions_3d!(Vec4 Vec3      Xyzw Xyz   );
 
 
 /// Trait for types that are suitable for representing a color channel value.
@@ -852,58 +891,6 @@ pub trait RgbConstants<T: ColorChannel> : From<Vec4<T>> {
 impl<T: ColorChannel + Clone + Default> RgbConstants<T> for Rgba<T> {}
 impl<T: ColorChannel + Clone + Default> RgbConstants<T> for Rgb<T>  {}
 
-/// The "right" and "up" direction constants.
-#[allow(missing_docs)]
-pub trait PositiveDirection2D<T: Zero + One> : From<Xyzw<T>> {
-    fn unit_x() -> Self { Self::from(Xyzw::new_direction(T:: one(), T::zero(), T::zero())) }
-    fn unit_y() -> Self { Self::from(Xyzw::new_direction(T::zero(), T:: one(), T::zero())) }
-    fn right () -> Self { Self::unit_x() }
-    fn up    () -> Self { Self::unit_y() }
-}
-/// The "right", "up" and Z direction constants.
-#[allow(missing_docs)]
-pub trait PositiveDirection3D<T: Zero + One> : PositiveDirection2D<T> {
-    fn unit_z    () -> Self { Self::from(Xyzw::new_direction(T::zero(), T::zero(), T::one())) }
-    /// Forward direction vector in left-handed coordinate space.
-    fn forward_lh() -> Self { Self::unit_z() }
-    /// Backwards direction vector in right-handed coordinate space.
-    fn back_rh   () -> Self { Self::unit_z() }
-}
-/// The "left" and "down" direction constants.
-#[allow(missing_docs)]
-pub trait NegativeDirection2D<T: Zero + One + Neg<Output=T>> : From<Xyzw<T>> {
-    fn left      () -> Self { -Self::right() }
-    fn down      () -> Self { -Self::up() }
-}
-/// The "left", "down" and Z direction constants.
-#[allow(missing_docs)]
-pub trait NegativeDirection3D<T: Zero + One + Neg<Output=T>> : NegativeDirection2D<T> {
-    /// Forward direction vector in right-handed coordinate space.
-    fn forward_rh() -> Self { -Self::back_rh() }
-    /// Backwards direction vector in left-handed coordinate space.
-    fn back_lh   () -> Self { -Self::forward_lh() }
-}
-
-/// The "right", "up", "left" and "down" direction constants.
-#[allow(missing_docs)]
-pub trait Direction2D<T: Zero + One + Neg<Output=T>> : NegativeDirection2D<T> + PositiveDirection2D<T> {}
-/// The "right", "up", "left", "down", "forwards" and "backwards" direction constants.
-#[allow(missing_docs)]
-pub trait Direction3D<T: Zero + One + Neg<Output=T>> : NegativeDirection3D<T> + PositiveDirection3D<T> {}
-
-impl<T: Zero + One                > PositiveDirection2D<T> for Xyzw<T> {}
-impl<T: Zero + One + Neg<Output=T>> NegativeDirection2D<T> for Xyzw<T> {}
-impl<T: Zero + One                > PositiveDirection3D<T> for Xyzw<T> {}
-impl<T: Zero + One + Neg<Output=T>> NegativeDirection3D<T> for Xyzw<T> {}
-impl<T: Zero + One +              > PositiveDirection2D<T> for Xyz<T>  {}
-impl<T: Zero + One + Neg<Output=T>> NegativeDirection2D<T> for Xyz<T>  {}
-impl<T: Zero + One +              > PositiveDirection3D<T> for Xyz<T>  {}
-impl<T: Zero + One + Neg<Output=T>> NegativeDirection3D<T> for Xyz<T>  {}
-impl<T: Zero + One                > PositiveDirection2D<T> for Xy<T>   {}
-impl<T: Zero + One + Neg<Output=T>> NegativeDirection2D<T> for Xy<T>   {}
-
-impl<V, T: Zero + One + Neg<Output=T>> Direction2D<T> for V where V: NegativeDirection2D<T> + PositiveDirection2D<T> {}
-impl<V, T: Zero + One + Neg<Output=T>> Direction3D<T> for V where V: NegativeDirection3D<T> + PositiveDirection3D<T> {}
 
 #[cfg(test)]
 mod test {
