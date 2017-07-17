@@ -182,6 +182,7 @@ macro_rules! mat_impl {
                     }
                 }
             }
+            // TODO implement vec*mat. Not used often, but does exist.
 
             impl<T> MulAssign for $Mat<T>
                 where T: Clone + Zero + Add<Output=T> + Mul<Output=T>
