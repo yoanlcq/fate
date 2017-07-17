@@ -45,6 +45,17 @@ macro_rules! bezier_impl_quadratic {
             }
         }
         
+        impl<T> From<Vec3<$Point<T>>> for $QuadraticBezier {
+            fn from(v: Vec3<$Point<T>>) -> Self {
+                $QuadraticBezier(v.0, v.1, v.2)
+            }
+        }
+        impl<T> From<$QuadraticBezier> for Vec3<$Point<T>> {
+            fn from(v: $QuadraticBezier) -> Self {
+                Vec3(v.0, v.1, v.2)
+            }
+        }
+        
         bezier_impl_any!($QuadraticBezier $Point)
     }
 }
@@ -67,6 +78,17 @@ macro_rules! bezier_impl_cubic {
                 $CubicBezier(line.a, line.a, line.b, line.b)
             }
             // pub fn circle(radius: T, curve_count: u32) ->
+        }
+        
+        impl<T> From<Vec4<$Point<T>>> for $QuadraticBezier {
+            fn from(v: Vec4<$Point<T>>) -> Self {
+                $QuadraticBezier(v.0, v.1, v.2, v.3)
+            }
+        }
+        impl<T> From<$QuadraticBezier> for Vec4<$Point<T>> {
+            fn from(v: $QuadraticBezier) -> Self {
+                Vec4(v.0, v.1, v.2, v.3)
+            }
         }
         
         bezier_impl_any!($CubicBezier $Point)
