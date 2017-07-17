@@ -691,13 +691,19 @@ macro_rules! vec_impl_point_or_direction {
     ($($Type:ident)+) => {
         $(
             impl<T> $Type<T> {
+                pub fn new_point(x: T, y: T, z: T) -> Self where T: One {
+                    Self::new(x, y, z, T::one())
+                }
+                pub fn new_direction(x: T, y: T, z: T) -> Self where T: Zero {
+                    Self::new(x, y, z, T::zero())
+                }
                 pub fn point<V: Into<Xyz<T>>>(v: V) -> Self where T: One {
                     let Xyz { x, y, z } = v.into();
-                    Self::new(x, y, z, T::one())
+                    Self::new_point(x, y, z)
                 }
                 pub fn direction<V: Into<Xyz<T>>>(v: V) -> Self where T: Zero {
                     let Xyz { x, y, z } = v.into();
-                    Self::new(x, y, z, T::zero())
+                    Self::new_direction(x, y, z)
                 }
             }
         )+
@@ -849,33 +855,33 @@ impl<T: ColorChannel + Clone + Default> RgbConstants<T> for Rgb<T>  {}
 /// The "right" and "up" direction constants.
 #[allow(missing_docs)]
 pub trait PositiveDirection2D<T: Zero + One> : From<Xyzw<T>> {
-    fn unit_x() -> Self { Self::from(Xyzw::direction(Xyz::new(T:: one(), T::zero(), T::zero()))) }
-    fn right () -> Self { Self::from(Xyzw::direction(Xyz::new(T:: one(), T::zero(), T::zero()))) }
-    fn unit_y() -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T:: one(), T::zero()))) }
-    fn up    () -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T:: one(), T::zero()))) }
+    fn unit_x() -> Self { Self::from(Xyzw::new_direction(T:: one(), T::zero(), T::zero())) }
+    fn unit_y() -> Self { Self::from(Xyzw::new_direction(T::zero(), T:: one(), T::zero())) }
+    fn right () -> Self { Self::unit_x() }
+    fn up    () -> Self { Self::unit_y() }
 }
 /// The "right", "up" and Z direction constants.
 #[allow(missing_docs)]
 pub trait PositiveDirection3D<T: Zero + One> : PositiveDirection2D<T> {
-    fn unit_z    () -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T::zero(), T::one()))) }
+    fn unit_z    () -> Self { Self::from(Xyzw::new_direction(T::zero(), T::zero(), T::one())) }
     /// Forward direction vector in left-handed coordinate space.
-    fn forward_lh() -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T::zero(), T::one()))) }
+    fn forward_lh() -> Self { Self::unit_z() }
     /// Backwards direction vector in right-handed coordinate space.
-    fn back_rh   () -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T::zero(), T::one()))) }
+    fn back_rh   () -> Self { Self::unit_z() }
 }
 /// The "left" and "down" direction constants.
 #[allow(missing_docs)]
 pub trait NegativeDirection2D<T: Zero + One + Neg<Output=T>> : From<Xyzw<T>> {
-    fn left      () -> Self { Self::from(Xyzw::direction(Xyz::new(-T:: one(),  T::zero(),  T::zero()))) }
-    fn down      () -> Self { Self::from(Xyzw::direction(Xyz::new( T::zero(), -T:: one(),  T::zero()))) }
+    fn left      () -> Self { -Self::right() }
+    fn down      () -> Self { -Self::up() }
 }
 /// The "left", "down" and Z direction constants.
 #[allow(missing_docs)]
 pub trait NegativeDirection3D<T: Zero + One + Neg<Output=T>> : NegativeDirection2D<T> {
     /// Forward direction vector in right-handed coordinate space.
-    fn forward_rh() -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T::zero(), -T::one()))) }
+    fn forward_rh() -> Self { -Self::back_rh() }
     /// Backwards direction vector in left-handed coordinate space.
-    fn back_lh   () -> Self { Self::from(Xyzw::direction(Xyz::new(T::zero(), T::zero(), -T::one()))) }
+    fn back_lh   () -> Self { -Self::forward_lh() }
 }
 
 /// The "right", "up", "left" and "down" direction constants.
