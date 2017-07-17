@@ -43,6 +43,19 @@ macro_rules! bezier_impl_quadratic {
             pub fn from_line(line: $Line<T>) -> Self {
                 $QuadraticBezier(line.a, line.a, line.b)
             }
+		    // XXX not sure about the name
+            /// Returns the constant matrix M such that,
+            /// given `T = [1, t*t, t*t*t]` and `P` the vector of control points,
+            /// `dot(T * M, P)` evalutes the Bezier curve at 't'.
+	        pub fn matrix() -> Mat3<T> {
+                Mat3 {
+                    rows: Vec3(
+                        Vec3( 1,  0, 0),
+                        Vec3(-2,  2, 0),
+                        Vec3( 1, -2, 1),
+                    )
+                }
+            }
         }
         
         impl<T> From<Vec3<$Point<T>>> for $QuadraticBezier {
@@ -76,6 +89,20 @@ macro_rules! bezier_impl_cubic {
         	}
             pub fn from_line(line: $Line<T>) -> Self {
                 $CubicBezier(line.a, line.a, line.b, line.b)
+            }
+            // XXX not sure about the name
+            /// Returns the constant matrix M such that,
+            /// given `T = [1, t*t, t*t*t, t*t*t*t]` and `P` the vector of control points,
+            /// `dot(T * M, P)` evalutes the Bezier curve at 't'.
+	        pub fn matrix() -> Mat4<T> {
+                Mat4 {
+                    rows: Vec4(
+                        Vec4( 1,  0,  0, 0),
+                        Vec4(-3,  3,  0, 0),
+                        Vec4( 3, -6,  3, 0),
+                        Vec4(-1,  3, -3, 1),
+                    )
+                }
             }
             // pub fn circle(radius: T, curve_count: u32) ->
         }
