@@ -14,6 +14,8 @@ use core::ops::*;
 use mat::Mat2;
 use clamp::PartialMinMax;
 
+// TODO handle the big repr(simd) issue
+
 /// A two-components generic vector type.
 ///
 /// - If you intend to use it as spatial coordinates, consider using [Xy](struct.Xy.html) instead.
@@ -794,6 +796,8 @@ macro_rules! vec_impl_rgb_constants {
         )+
     }
 }
+
+// TODO blend() and invert()
 
 impl<T: ColorChannel> Rgba<T> {
     pub fn new_opaque(r: T, g: T, b: T) -> Self {
