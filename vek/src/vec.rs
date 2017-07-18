@@ -127,8 +127,8 @@ pub struct Uv<T> { pub u:T, pub v:T }
 #[allow(missing_docs)] pub type Rgba32 = Rgba<u8>;
 #[allow(missing_docs)] pub type Rgbf   = Rgb<f32>;
 #[allow(missing_docs)] pub type Rgb24  = Rgb<u8>;
-#[allow(missing_docs)] pub type TexCoords2f = Uv<f32>;
-#[allow(missing_docs)] pub type TexCoords3f = Uvw<f32>;
+#[allow(missing_docs)] pub type TexUv  = Uv<f32>;
+#[allow(missing_docs)] pub type TexUvw = Uvw<f32>;
 
 
 #[allow(missing_docs)]
