@@ -1,3 +1,4 @@
+#![doc(html_root_url = "https://docs.rs/many-derive/0.1.0")]
 #![feature(associated_type_defaults)]
 #![feature(inclusive_range, inclusive_range_syntax)]
 

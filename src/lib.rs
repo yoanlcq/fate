@@ -2,6 +2,7 @@
 //!
 //! [It started in C](https://github.com/yoanlcq/fate-c), it will end in Rust.
 
+#![doc(html_root_url = "https://docs.rs/fate/0.1.0")]
 //#![deny(missing_docs)]
 #![doc(test(attr(deny(warnings))))]
 #![feature(test)]

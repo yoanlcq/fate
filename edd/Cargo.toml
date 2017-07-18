@@ -7,7 +7,7 @@ categories = [ "gui", "no-standard-library" ]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/yoanlcq/fate"
 name = "edd"
-version = "0.1.0"
+version = "0.1.0" # remember to update html_root_url
 
 [dependencies.vek]
 optional = false

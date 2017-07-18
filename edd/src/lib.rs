@@ -1,5 +1,7 @@
 // TODO: Make this compile, and use the vek crate.
 
+#![doc(html_root_url = "https://docs.rs/edd/0.1.0")]
+
 extern crate vek;
 
 use self::vek::{Xy, Extent2, Rect, Rgba32, Uv};

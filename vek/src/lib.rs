@@ -7,6 +7,8 @@
 // TODO doc
 // TODO provide efficient functions for AoS and SoA
 
+
+#![doc(html_root_url = "https://docs.rs/vek/0.1.0")]
 //#![deny(missing_docs)]
 #![no_std]
 #![doc(test(attr(deny(warnings))))]

@@ -3,6 +3,7 @@
 //! This is an attempt at an SDL2 rewrite in Rust. The end goal is to get
 //! rid of the dependency on SDL2's DLL for Rust apps.
 
+#![doc(html_root_url = "https://docs.rs/dmc/0.1.0")]
 //#![feature(test)]
 //#![warn(missing_docs)]
 #![doc(test(attr(deny(warnings))))]
