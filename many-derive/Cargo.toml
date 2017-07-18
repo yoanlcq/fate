@@ -1,13 +1,12 @@
 [package]
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
-description = "Derive structs for optimizing the processing of many elements, aiming for maximum cache-efficiency."
-documentation = "http://yoanlcq.github.io/many"
-homepage = "https://github.com/yoanlcq/fate/tree/master/many"
+description = "(placeholder) Derive structs for optimizing the processing of many elements, aiming for maximum cache-efficiency. Related to AoS vs SoA."
+documentation = "https://docs.rs/many-derive"
 keywords = ["derive", "data-oriented design", "cache"]
 categories = [ "algorithms", "data-structures", "no-standard-library" ]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/yoanlcq/fate"
-name = "many"
+name = "many-derive"
 version = "0.1.0"
 
 

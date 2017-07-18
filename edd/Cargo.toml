@@ -1,15 +1,13 @@
 [package]
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
-description = "GUI lib for debug editors."
-documentation = "http://yoanlcq.github.io/edd"
-homepage = "https://github.com/yoanlcq/fate/tree/master/edd"
+description = "(placeholder) 'no_std' backend-agnostic debug-GUI lib."
+documentation = "https://docs.rs/edd"
 keywords = ["imgui", "gui"]
 categories = [ "gui", "no-standard-library" ]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/yoanlcq/fate"
 name = "edd"
 version = "0.1.0"
-
 
 [dependencies.vek]
 optional = false

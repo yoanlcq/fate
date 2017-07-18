@@ -1,8 +1,7 @@
 [package]
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
-description = "Idiomatic replacement for SDL2.\nThe acronym originally standed for DirectMedia Crate."
-documentation = "http://yoanlcq.github.io/dmc"
-homepage = "https://github.com/yoanlcq/fate/tree/master/dmc"
+description = "(placeholder) Idiomatic replacement for SDL2.\nThe acronym originally stood for DirectMedia Crate."
+documentation = "https://docs.rs/dmc"
 keywords = ["sdl2"]
 categories = [ "multimedia", "game-engines" ]
 license = "MIT/Apache-2.0"

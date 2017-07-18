@@ -1,8 +1,7 @@
 [package]
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
-description = "Colorful vector+matrix+quaternion+basic shapes library for graphics, with focus on intent and the small bits that make you happier as a user."
-documentation = "http://yoanlcq.github.io/vek"
-homepage = "https://github.com/yoanlcq/fate/tree/master/vek"
+description = "(placeholder) Colorful vector+matrix+quaternion+basic shapes library for graphics, with focus on intent and the small bits that make you happier as a user."
+documentation = "https://docs.rs/vek"
 keywords = ["vector", "quaternion", "matrix", "rect", "rgb", "rgba", "xyz", "xyzw", "lerp"]
 categories = [ "algorithms", "data-structures", "no-standard-library", "science" ]
 license = "MIT/Apache-2.0"
