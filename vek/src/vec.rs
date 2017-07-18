@@ -774,7 +774,7 @@ macro_rules! vec_impl_rgb_constants {
                 pub fn cyan    () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::full(), T::full())) }
                 pub fn magenta () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::full())) }
                 pub fn yellow  () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::zero())) }
-                pub fn gray(value: T) -> Self { Self::from(Rgba::new_opaque(value, value, value)) }
+                pub fn gray(value: T) -> Self where T: Copy { Self::from(Rgba::new_opaque(value, value, value)) }
                 // NOTE: Let's not get started with the 'gray' vs 'grey' debate. I picked 'gray' because that's
                 // what the Unity Engine happens to favor. From that, there's no point in implementing aliases
                 // just because people might prefer to spell 'grey' on a whim. A choice has to be made.

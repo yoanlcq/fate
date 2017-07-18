@@ -5,6 +5,7 @@
 extern crate num_traits;
 use self::num_traits::NumCast;
 use core::mem;
+use core::ops::*;
 
 use mat::Mat2;
 use vec::*;
@@ -57,9 +58,9 @@ pub struct Disk<P,E> {
 
 impl<P,E> Disk<P,E> {
     pub fn area(self) -> E { unimplemented!() }
-    pub fn diameter(&self) -> E { self.radius + self.radius }
-    pub fn collision(self, other: Self) -> Xy<P> { unimplemented!() }
-    pub fn collision_with_point(self, p: Xy<P>) -> Xy<P> { unimplemented!() }
+    pub fn diameter(self) -> E where E: Copy + Add<Output=E> { self.radius + self.radius }
+    pub fn collision(self, _other: Self) -> Xy<P> { unimplemented!() }
+    pub fn collision_with_point(self, _p: Xy<P>) -> Xy<P> { unimplemented!() }
 }
 
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -70,9 +71,9 @@ pub struct Sphere<P,E> {
 impl<P,E> Sphere<P,E> {
     pub fn surface_area(self) -> E { unimplemented!() } // 4*pi*r*r
     pub fn volume(self) -> E { unimplemented!() } // pi*r*r*r*4/3
-    pub fn diameter(&self) -> E { self.radius + self.radius }
-    pub fn collision(self, other: Self) -> Xyz<P> { unimplemented!() }
-    pub fn collision_with_point(self, p: Xyz<P>) -> Xyz<P> { unimplemented!() }
+    pub fn diameter(self) -> E where E: Copy + Add<Output=E> { self.radius + self.radius }
+    pub fn collision(self, _other: Self) -> Xyz<P> { unimplemented!() }
+    pub fn collision_with_point(self, _p: Xyz<P>) -> Xyz<P> { unimplemented!() }
 }
 
 #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]

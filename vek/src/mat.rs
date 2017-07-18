@@ -40,7 +40,9 @@ macro_rules! mat_impl {
      ($($get_row:tt)+)
      $(($MulRow:ident $MulCol:ident))+
     ) => {
-        mod $mat {
+        pub mod $mat {
+            use super::*;
+
             #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
             pub struct $Mat<T> { pub rows: $Row<$Col<T>> }
 
@@ -83,7 +85,7 @@ macro_rules! mat_impl {
                     self.into_iter()
                 }
                 pub fn into_col_iter(self) -> IntoColIter<T> {
-                    $IntoColIter::new(self)
+                    IntoColIter::new(self)
                 }
                 // WISH: _unchecked() variants.
                 pub fn row<V>(self, i: usize) -> V where T: Clone, V: $ExactlyRow<T> {
@@ -359,21 +361,21 @@ macro_rules! mat_impl {
 
             impl<T> IntoIterator for $Mat<T> {
                 type Item = $Row<T>;
-                type IntoIter = $IntoRowIter<T>;
+                type IntoIter = IntoRowIter<T>;
                 fn into_iter(self) -> Self::IntoIter {
                     Self::IntoIter::new(self)
                 }
             }
             impl<'a, T> IntoIterator for &'a $Mat<T> {
                 type Item = &'a $Row<T>;
-                type IntoIter = slice::Iter<'a, $Row<T>>;
+                type IntoIter = RowIter<'a, T>;
                 fn into_iter(self) -> Self::IntoIter {
                     self.as_slice().into_iter()
                 }
             }
             impl<'a, T> IntoIterator for &'a mut $Mat<T> {
                 type Item = &'a mut $Row<T>;
-                type IntoIter = slice::IterMut<'a, $Row<T>>;
+                type IntoIter = RowIterMut<'a, T>;
                 fn into_iter(self) -> Self::IntoIter {
                     self.as_mut_slice().into_iter()
                 }
