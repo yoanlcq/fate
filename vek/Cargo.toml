@@ -2,7 +2,7 @@
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
 description = "(placeholder) Colorful vector+matrix+quaternion+basic shapes library for graphics, with focus on intent and the small bits that make you happier as a user."
 documentation = "https://docs.rs/vek"
-keywords = ["vector", "quaternion", "matrix", "rect", "rgb", "rgba", "xyz", "xyzw", "lerp"]
+keywords = ["vector", "quaternion", "matrix", "rect", "bezier"]
 categories = [ "algorithms", "data-structures", "no-standard-library", "science" ]
 license = "MIT/Apache-2.0"
 repository = "https://github.com/yoanlcq/fate"
