@@ -749,7 +749,7 @@ impl<T> Mat4<T> {
     pub fn picking_region<V2: Into<Xy<T>>>(center: V2, delta: V2, viewport: Viewport) -> Self
         where T: Zero + One + Copy + NumCast + PartialOrd + Sub<Output=T> + Div<Output=T>
     {
-        let (center, delta, viewport) = (center.into(), delta.into(), viewport.cast::<T,T>().unwrap());
+        let (center, delta, viewport) = (center.into(), delta.into(), viewport.cast(|p| T::from(p).unwrap(), |e| T::from(e).unwrap()));
         assert!(delta.x > T::zero());
         assert!(delta.y > T::zero());
         let two = T::one() + T::one();
@@ -770,7 +770,7 @@ impl<T> Mat4<T> {
         where T: Zero + One + Copy + NumCast + Add<Output=T> + Mul<Output=T> + Div<Output=T>,
               V3: Into<Xyz<T>> + From<Xyz<T>>
     {
-        let viewport = viewport.cast::<T,T>().unwrap();
+        let viewport = viewport.cast(|p| T::from(p).unwrap(), |e| T::from(e).unwrap());
         let mut tmp = Xyzw::point(obj.into());
         tmp = modelview * tmp;
         tmp = proj * tmp;
@@ -789,7 +789,7 @@ impl<T> Mat4<T> {
         where T: Float,
               V3: Into<Xyz<T>> + From<Xyz<T>>
     {
-        let viewport = viewport.cast::<T,T>().unwrap();
+        let viewport = viewport.cast(|p| T::from(p).unwrap(), |e| T::from(e).unwrap());
         let inverse = (proj * modelview).inverted();
 
         let two = T::one() + T::one();

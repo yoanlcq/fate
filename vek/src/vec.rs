@@ -2,7 +2,7 @@
 
 extern crate num_traits;
 
-use self::num_traits::{NumCast, Zero, One, Float, Signed};
+use self::num_traits::{Zero, One, Float, Signed};
 use core::iter::FromIterator;
 use core::num::Wrapping;
 use core::slice;
@@ -343,16 +343,10 @@ macro_rules! vec_impl_basic_ops {
                 !self.is_any_negative()
             }
 
-            pub fn cast<D>(self) -> Option<$Type<D>> where T: NumCast, D: NumCast {
+            pub fn cast<D,F>(self, f: F) -> $Type<D> where F: Fn(T) -> D {
                 let mut out: $Type<D> = unsafe { mem::uninitialized() };
-                $(
-                    if let Some(x) = D::from(self.$get) {
-                        out.$get = x;
-                    } else {
-                        return None;
-                    }
-                )+
-                Some(out)
+                $(out.$get = f(self.$get);)+
+                out
             }
             pub fn into_array(self) -> [T; $len] {
                 [$(self.$get, )+]

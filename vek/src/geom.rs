@@ -2,8 +2,6 @@
 
 // NOTE: in this module, the type parameters <P,E> usually stand for Position and Extent.
 
-extern crate num_traits;
-use self::num_traits::NumCast;
 use core::mem;
 use core::ops::*;
 
@@ -118,13 +116,13 @@ impl<P,E> Rect<P,E> {
     pub fn y(self) -> P { self.position.y }
     pub fn w(self) -> E { self.extent.w   }
     pub fn h(self) -> E { self.extent.h   }
-    pub fn cast<DP,DE>(self) -> Option<Rect<DP,DE>> 
-        where P: NumCast, E: NumCast, DP: NumCast, DE: NumCast
+    pub fn cast<DP,DE,PF,EF>(self, pf: PF, ef: EF) -> Rect<DP,DE>
+        where PF: Fn(P) -> DP, EF: Fn(E) -> DE
     {
         let mut out: Rect<DP,DE> = unsafe { mem::uninitialized() };
-        if let Some(p) = self.position.cast() { out.position = p; } else { return None; };
-        if let Some(e) = self.extent  .cast() { out.extent   = e; } else { return None; };
-        Some(out)
+        out.position = self.position.cast(pf);
+        out.extent   = self.extent  .cast(ef);
+        out
     }
     pub fn collision_vector(self, _other: Self) -> Xy<P> {
         unimplemented!()    
