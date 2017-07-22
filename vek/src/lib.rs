@@ -1,6 +1,8 @@
 //! Generic linear algebra focused on computer graphics and intent.
 //!
 //! It does not try to be extensive (e.g rect primitives don't ship with a physics engine.)
+//!
+//! DO NOT USE (yet). This is very much a work-in progress, breaking changes happen all the time on a whim.
 
 // TODO tests
 // TODO benchmarks
@@ -21,6 +23,8 @@ pub mod bezier;
 pub use bezier::*;
 pub mod clamp;
 pub use clamp::*;
+pub mod color_component;
+pub use color_component::*;
 pub mod geom;
 pub use geom::*;
 pub mod lerp;

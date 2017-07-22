@@ -1,3 +1,5 @@
+// TODO document why euler angles are not supported
+
 use vec::*;
 
 extern crate num_traits;
@@ -15,6 +17,8 @@ impl<T: Zero + One> Default for Quat<T> {
         Self::identity()
     }
 }
+
+// TODO replace length() by magnitude() ???
 
 impl<T> Quat<T> {
     pub fn new(x: T, y: T, z: T, w: T) -> Self {
@@ -55,6 +59,11 @@ impl<T> Quat<T> {
         let w = (angle_radians/two).cos();
         Self { x, y, z, w }
     }
+    /*
+    pub fn into_axis_angle(self) -> (T, Vec3<T>) {
+        // Q57
+    }
+     */
     pub fn mul_vec3<V: Exactly3<T>>(self, v: V) -> V
         where T: Float
     {
@@ -153,8 +162,6 @@ where T: Mul<Output=T> + Clone
         }
     }
 }
-
-// TODO impl slerp, nlerp, mul_vec3, etc
 
 /*
 

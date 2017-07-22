@@ -66,6 +66,21 @@ macro_rules! mat_impl {
                     $((out.rows.$get_row).$get_row = T::one();)+
                     out
                 }
+                /*
+                pub fn broadcast_major_diagonal(val: T) { // TODO
+                    
+                }
+                pub fn pow(self, n: i32) {}
+                pub fn determinant(self) -> T {}
+                pub fn invert_2x2() {}
+                pub fn invert_3x3() {}
+                pub fn rotation_from_two_vectors() {
+                    axis = vs * vf;
+                    angle = arccos(vs.dot(vf));
+                }
+                pub fn shearing_x|y|z
+                pub fn from_quaternion() { /* Q54*/ }
+                */
                 pub fn row_count(&self) -> usize {
                     $rows
                 }
@@ -416,7 +431,7 @@ impl<T> Mat2<T> {
             )
         }
     }
-    pub fn scale_2d<V: Into<Xy<T>>>(v: V) -> Self where T: Zero {
+    pub fn scaling_2d<V: Into<Xy<T>>>(v: V) -> Self where T: Zero {
         let Xy { x, y } = v.into();
         Self {
             rows: Vec2(
@@ -451,7 +466,7 @@ impl<T> Mat3<T> {
         (out.rows.1).2 = v.y;
         out
     }
-    pub fn scale_3d<V: Into<Xyz<T>>>(v: V) -> Self where T: Zero {
+    pub fn scaling_3d<V: Into<Xyz<T>>>(v: V) -> Self where T: Zero {
         let Xyz { x, y, z } = v.into();
         Self {
             rows: Vec3(
@@ -599,8 +614,8 @@ impl<T> Mat4<T> {
         (self.rows.3).3 += self.rows.3.clone().dot(t.clone());
     }
 
-    pub fn scale_3d<V: Into<Xyz<T>>>(v: V) -> Self where T: Zero + One {
-        Mat3::scale_3d(v).into()
+    pub fn scaling_3d<V: Into<Xyz<T>>>(v: V) -> Self where T: Zero + One {
+        Mat3::scaling_3d(v).into()
     }
     pub fn rotation_x(angle_radians: T) -> Self where T: Float {
         Mat3::rotation_x(angle_radians).into()
@@ -764,7 +779,7 @@ impl<T> Mat4<T> {
             viewport.h() / delta.y,
             T::one()
         );
-        Self::scale_3d(sc) * (Self::translation_3d(tr))
+        Self::scaling_3d(sc) * (Self::translation_3d(tr))
     }
     pub fn project<V3>(obj: V3, modelview: Self, proj: Self, viewport: Viewport) -> V3
         where T: Zero + One + Copy + NumCast + Add<Output=T> + Mul<Output=T> + Div<Output=T>,

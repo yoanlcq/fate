@@ -31,7 +31,7 @@ macro_rules! bezier_impl_any {
                 for i in 1..step_count+2 {
     		        let t = T::from(i).unwrap()/(T::from(step_count).unwrap()+T::one());
     		        let next_point = self.evaluate(t);
-                    length += (next_point - prev_point).length();
+                    length += (next_point - prev_point).magnitude();
     		        prev_point = next_point;
                 }
 	            length

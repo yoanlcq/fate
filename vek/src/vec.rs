@@ -1,10 +1,11 @@
-//! Shuffling is well-done by destructuring and thus not implemented here.
+//! TODO document that shuffling is well-done by destructuring and thus not implemented here.
+//! TODO document the guidelines for supported types. To make it short, we want to be able to go as
+//! far as supporting vectors of bignums.
 
 extern crate num_traits;
 
 use self::num_traits::{Zero, One, Float, Signed};
 use core::iter::FromIterator;
-use core::num::Wrapping;
 use core::slice;
 use core::marker::PhantomData;
 use core::mem;
@@ -13,177 +14,232 @@ use core::borrow::{Borrow, BorrowMut};
 use core::ops::*;
 use mat::Mat2;
 use clamp::PartialMinMax;
+use color_component::ColorComponent;
 
+// TODO impl Display for vecs
 // TODO handle the big repr(simd) issue
 
-/// A two-components generic vector type.
-///
-/// - If you intend to use it as spatial coordinates, consider using [Xy](struct.Xy.html) instead.
-/// - If you intend to use it as texture coordinates, consider using [Uv](struct.Uv.html) instead.
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Vec2<T>(pub T, pub T);
-/// A three-components generic vector type.
-///
-/// - If you intend to use it as spatial coordinates, consider using [Xyz](struct.Xyz.html) instead.
-/// - If you intend to use it as RGB color data, consider using [Rgb](struct.Rgb.html) instead.
-/// - If you intend to use it as texture coordinates, consider using [Uvw](struct.Uvw.html) instead.
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Vec3<T>(pub T, pub T, pub T);
-/// A four-components generic vector type.
-///
-/// - If you intend to use it as homogeneous spatial coordinates, consider using [Xyzw](struct.Xyzw.html) instead.
-/// - If you intend to use it as RGBA color data, consider using [Rgba](struct.Rgba.html) instead.
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Vec4<T>(pub T, pub T, pub T, pub T);
+macro_rules! vec_declare_types {
+    (#[$attrs:meta]) => {
+        /// A two-components generic vector type.
+        ///
+        /// - If you intend to use it as spatial coordinates, consider using [Xy](struct.Xy.html) instead.
+        /// - If you intend to use it as texture coordinates, consider using [Uv](struct.Uv.html) instead.
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec2<T>(pub T, pub T);
+        /// A three-components generic vector type.
+        ///
+        /// - If you intend to use it as spatial coordinates, consider using [Xyz](struct.Xyz.html) instead.
+        /// - If you intend to use it as RGB color data, consider using [Rgb](struct.Rgb.html) instead.
+        /// - If you intend to use it as texture coordinates, consider using [Uvw](struct.Uvw.html) instead.
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec3<T>(pub T, pub T, pub T);
+        /// A four-components generic vector type.
+        ///
+        /// - If you intend to use it as homogeneous spatial coordinates, consider using [Xyzw](struct.Xyzw.html) instead.
+        /// - If you intend to use it as RGBA color data, consider using [Rgba](struct.Rgba.html) instead.
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec4<T>(pub T, pub T, pub T, pub T);
 
-/// Vector type suited for homogeneous 3D spatial coordinates.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Xyzw<T> { pub x:T, pub y:T, pub z:T, pub w:T }
-/// Vector type suited for 3D spatial coordinates.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Xyz<T> { pub x:T, pub y:T, pub z:T }
-/// Vector type suited for 2D spatial coordinates.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Xy<T> { pub x:T, pub y:T }
+        /// An eight-components generic vector type.
+        ///
+        /// This type exists mostly for crunching arrays of values.  
+        /// For instance, on AVX2-enabled x86 CPUs, a `Vec8<i32>` makes sense.  
+        /// Otherwise, LLVM lowers it to a fixed-sized array of whichever "best" SIMD vector type is available.  
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec8<T>(pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T);
 
-/// Vector type suited for 3D extents (width, height and depth).
-///
-/// There is no `Unsigned` trait bound because it is not practical, 
-/// since we sometimes want to be
-/// able to express extents as floating-point numbers, for instance.
-///
-/// If you want to assert unsignedness at runtime, you can use the
-/// `is_all_positive()` or `is_any_negative()` methods.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Extent3<T> { pub w:T, pub h:T, pub d:T }
-/// Vector type suited for 2D extents (width and height).
-///
-/// There is no `Unsigned` trait bound because it is not practical, 
-/// since we sometimes want to be
-/// able to express extents as floating-point numbers, for instance.
-///
-/// If you want to assert unsignedness at runtime, you can use the
-/// `is_all_positive()` or `is_any_negative()` methods.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Extent2<T> { pub w:T, pub h:T }
+        /// A sixteen-components generic vector type.
+        ///
+        /// This type exists mostly for crunching arrays of values.  
+        /// For instance, on AVX2-enabled x86 CPUs, a `Vec16<i16>` makes sense.  
+        /// Otherwise, LLVM lowers it to a fixed-sized array of whichever "best" SIMD vector type is available.  
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec16<T>(pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T);
+
+        /// A thirty-two-components generic vector type.
+        ///
+        /// This type exists mostly for crunching arrays of values.  
+        /// For instance, on AVX512-enabled x86 CPUs, a `Vec32<i16>` makes sense.  
+        /// Otherwise, LLVM lowers it to a fixed-sized array of whichever "best" SIMD vector type is available.  
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec32<T>(pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T);
+
+        /// A sixty-four-components generic vector type.
+        ///
+        /// This type exists mostly for crunching arrays of values.  
+        /// For instance, on AVX512-enabled x86 CPUs, a `Vec64<i8>` makes sense.  
+        /// Otherwise, LLVM is able to process it as a fixed-sized array of whichever "best" SIMD vector type available.  
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Vec64<T>(pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T, pub T);
 
 
-/// Vector type suited for RGBA color data.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Rgba<T> { pub r:T, pub g:T, pub b:T, pub a:T }
-/// Vector type suited for RGB color data.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Rgb<T> { pub r:T, pub g:T, pub b:T }
+        /// Vector type suited for homogeneous 3D spatial coordinates.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Xyzw<T> { pub x:T, pub y:T, pub z:T, pub w:T }
+        /// Vector type suited for 3D spatial coordinates.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Xyz<T> { pub x:T, pub y:T, pub z:T }
+        /// Vector type suited for 2D spatial coordinates.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Xy<T> { pub x:T, pub y:T }
 
-/// Vector type suited for 3D texture coordinates.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Uvw<T> { pub u:T, pub v:T, pub w:T }
-/// Vector type suited for 2D texture coordinates.
-#[allow(missing_docs)]
-#[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-#[repr(packed,simd)]
-pub struct Uv<T> { pub u:T, pub v:T }
-
-
-
-#[allow(missing_docs)] pub type Vec4f = Vec4<f32>;
-#[allow(missing_docs)] pub type Vec4i = Vec4<i32>;
-#[allow(missing_docs)] pub type Vec4u = Vec4<u32>;
-#[allow(missing_docs)] pub type Vec4b = Vec4<bool>;
-#[allow(missing_docs)] pub type Vec3f = Vec3<f32>;
-#[allow(missing_docs)] pub type Vec3i = Vec3<i32>;
-#[allow(missing_docs)] pub type Vec3u = Vec3<u32>;
-#[allow(missing_docs)] pub type Vec3b = Vec3<bool>;
-#[allow(missing_docs)] pub type Vec2f = Vec2<f32>;
-#[allow(missing_docs)] pub type Vec2i = Vec2<i32>;
-#[allow(missing_docs)] pub type Vec2u = Vec2<u32>;
-#[allow(missing_docs)] pub type Vec2b = Vec2<bool>;
-#[allow(missing_docs)] pub type Extent3f = Extent3<f32>;
-#[allow(missing_docs)] pub type Extent3u = Extent3<u32>;
-#[allow(missing_docs)] pub type Extent3s = Extent2<u16>;
-#[allow(missing_docs)] pub type Extent3b = Extent3<bool>;
-#[allow(missing_docs)] pub type Extent2f = Extent2<f32>;
-#[allow(missing_docs)] pub type Extent2u = Extent2<u32>;
-#[allow(missing_docs)] pub type Extent2s = Extent2<u16>;
-#[allow(missing_docs)] pub type Extent2b = Extent2<bool>;
-#[allow(missing_docs)] pub type Rgbaf  = Rgba<f32>;
-#[allow(missing_docs)] pub type Rgba32 = Rgba<u8>;
-#[allow(missing_docs)] pub type Rgbf   = Rgb<f32>;
-#[allow(missing_docs)] pub type Rgb24  = Rgb<u8>;
-#[allow(missing_docs)] pub type TexUv  = Uv<f32>;
-#[allow(missing_docs)] pub type TexUvw = Uvw<f32>;
+        /// Vector type suited for 3D extents (width, height and depth).
+        ///
+        /// There is no `Unsigned` trait bound because it is not practical, 
+        /// since we sometimes want to be
+        /// able to express extents as floating-point numbers, for instance.
+        ///
+        /// If you want to assert unsignedness at runtime, you can use the
+        /// `is_all_positive()` or `is_any_negative()` methods.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Extent3<T> { pub w:T, pub h:T, pub d:T }
+        /// Vector type suited for 2D extents (width and height).
+        ///
+        /// There is no `Unsigned` trait bound because it is not practical, 
+        /// since we sometimes want to be
+        /// able to express extents as floating-point numbers, for instance.
+        ///
+        /// If you want to assert unsignedness at runtime, you can use the
+        /// `is_all_positive()` or `is_any_negative()` methods.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Extent2<T> { pub w:T, pub h:T }
 
 
-#[allow(missing_docs)]
-impl<T> Vec2<T> {
-    pub fn new(x:T, y:T) -> Self {
-        Vec2(x,y)
-    }
-    pub fn into_tuple(self) -> (T,T) {
-        (self.0, self.1)
-    }
-    pub fn to_tuple(&self) -> (T,T) where T: Clone {
-        (self.0.clone(), self.1.clone())
+        /// Vector type suited for RGBA color data.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Rgba<T> { pub r:T, pub g:T, pub b:T, pub a:T }
+        /// Vector type suited for RGB color data.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Rgb<T> { pub r:T, pub g:T, pub b:T }
+
+        /// Vector type suited for 3D texture coordinates.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Uvw<T> { pub u:T, pub v:T, pub w:T }
+        /// Vector type suited for 2D texture coordinates.
+        #[allow(missing_docs)]
+        #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[$attrs]
+        pub struct Uv<T> { pub u:T, pub v:T }
+
+        #[allow(missing_docs)] pub type Vec4f = Vec4<f32>;
+        #[allow(missing_docs)] pub type Vec4i = Vec4<i32>;
+        #[allow(missing_docs)] pub type Vec4u = Vec4<u32>;
+        #[allow(missing_docs)] pub type Vec4b = Vec4<bool>;
+        #[allow(missing_docs)] pub type Vec3f = Vec3<f32>;
+        #[allow(missing_docs)] pub type Vec3i = Vec3<i32>;
+        #[allow(missing_docs)] pub type Vec3u = Vec3<u32>;
+        #[allow(missing_docs)] pub type Vec3b = Vec3<bool>;
+        #[allow(missing_docs)] pub type Vec2f = Vec2<f32>;
+        #[allow(missing_docs)] pub type Vec2i = Vec2<i32>;
+        #[allow(missing_docs)] pub type Vec2u = Vec2<u32>;
+        #[allow(missing_docs)] pub type Vec2b = Vec2<bool>;
+        #[allow(missing_docs)] pub type Extent3f = Extent3<f32>;
+        #[allow(missing_docs)] pub type Extent3u = Extent3<u32>;
+        #[allow(missing_docs)] pub type Extent3s = Extent2<u16>;
+        #[allow(missing_docs)] pub type Extent3b = Extent3<bool>;
+        #[allow(missing_docs)] pub type Extent2f = Extent2<f32>;
+        #[allow(missing_docs)] pub type Extent2u = Extent2<u32>;
+        #[allow(missing_docs)] pub type Extent2s = Extent2<u16>;
+        #[allow(missing_docs)] pub type Extent2b = Extent2<bool>;
+        #[allow(missing_docs)] pub type Rgbaf  = Rgba<f32>;
+        #[allow(missing_docs)] pub type Rgba32 = Rgba<u8>;
+        #[allow(missing_docs)] pub type Rgbf   = Rgb<f32>;
+        #[allow(missing_docs)] pub type Rgb24  = Rgb<u8>;
+        #[allow(missing_docs)] pub type TexUv  = Uv<f32>;
+        #[allow(missing_docs)] pub type TexUvw = Uvw<f32>;
     }
 }
-#[allow(missing_docs)]
-impl<T> Vec3<T> {
-    pub fn new(x:T, y:T, z:T) -> Self {
-        Vec3(x,y,z)
-    }
-    pub fn into_tuple(self) -> (T,T,T) {
-        (self.0, self.1, self.2)
-    }
-    pub fn to_tuple(&self) -> (T,T,T) where T: Clone {
-        (self.0.clone(), self.1.clone(), self.2.clone())
-    }
-}
-#[allow(missing_docs)]
-impl<T> Vec4<T> {
-    pub fn new(x:T, y:T, z:T, w:T) -> Self {
-        Vec4(x,y,z,w)
-    }
-    pub fn into_tuple(self) -> (T,T,T,T) {
-        (self.0, self.1, self.2, self.3)
-    }
-    pub fn to_tuple(&self) -> (T,T,T,T) where T: Clone {
-        (self.0.clone(), self.1.clone(), self.2.clone(), self.3.clone())
-    }
-}
-impl<T> From<(T,T,T,T)> for Vec4<T> {
-    fn from(t: (T,T,T,T)) -> Self {
-        Vec4::new(t.0, t.1, t.2, t.3)
+
+macro_rules! vec_impl_vec {
+    ($Vec:ident ($($get:tt)+) ($($namedget:tt)+) $Tuple:ty) => {
+        #[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+        #[allow(missing_docs)]
+        impl<T> $Vec<T> {
+            #[cfg_attr(feature = "cargo-clippy", allow(too_many_arguments))]
+            pub fn new($($namedget:T),+) -> Self {
+                $Vec($($namedget),+)
+            }
+            pub fn into_tuple(self) -> $Tuple {
+                ($(self.$get),+)
+            }
+            pub fn to_tuple(&self) -> $Tuple where T: Clone {
+                ($(self.$get.clone()),+)
+            }
+        }
+        #[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+        impl<T> From<$Tuple> for $Vec<T> {
+            fn from(t: $Tuple) -> Self {
+                $Vec($(t.$get),+)
+            }
+        }
     }
 }
-impl<T> From<(T,T,T)> for Vec3<T> {
-    fn from(t: (T,T,T)) -> Self {
-        Vec3::new(t.0, t.1, t.2)
-    }
+
+pub mod repr_simd {
+    vec_declare_types!(#[repr(packed,simd)]);
+    vec_impl_vec!(Vec2 (0 1) (x y) (T,T));
+    vec_impl_vec!(Vec3 (0 1 2) (x y z) (T,T,T));
+    vec_impl_vec!(Vec4 (0 1 2 3) (x y z w) (T,T,T,T));
+    vec_impl_vec!(Vec8 (0 1 2 3 4 5 6 7) (m0 m1 m2 m3 m4 m5 m6 m7) (T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec16 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec32 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec64 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31 m32 m33 m34 m35 m36 m37 m38 m39 m40 m41 m42 m43 m44 m45 m46 m47 m48 m49 m50 m51 m52 m53 m54 m55 m56 m57 m58 m59 m60 m61 m62 m63) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
 }
-impl<T> From<(T,T)> for Vec2<T> {
-    fn from(t: (T,T)) -> Self {
-        Vec2::new(t.0, t.1)
-    }
+pub mod repr_c {
+    vec_declare_types!(#[repr(packed,C)]);
+    vec_impl_vec!(Vec2 (0 1) (x y) (T,T));
+    vec_impl_vec!(Vec3 (0 1 2) (x y z) (T,T,T));
+    vec_impl_vec!(Vec4 (0 1 2 3) (x y z w) (T,T,T,T));
+    vec_impl_vec!(Vec8 (0 1 2 3 4 5 6 7) (m0 m1 m2 m3 m4 m5 m6 m7) (T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec16 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec32 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+    vec_impl_vec!(Vec64 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31 m32 m33 m34 m35 m36 m37 m38 m39 m40 m41 m42 m43 m44 m45 m46 m47 m48 m49 m50 m51 m52 m53 m54 m55 m56 m57 m58 m59 m60 m61 m62 m63) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
 }
+
+pub use repr_simd::*;
+
+/*
+type CVec2<T>    = repr_c::Vec2<T>;
+type CVec3<T>    = repr_c::Vec3<T>;
+type CVec4<T>    = repr_c::Vec4<T>;
+type CVec8<T>    = repr_c::Vec8<T>;
+type CVec16<T>   = repr_c::Vec16<T>;
+type CVec32<T>   = repr_c::Vec32<T>;
+type CVec64<T>   = repr_c::Vec64<T>;
+type CXyzw<T>    = repr_c::Xyzw<T>;
+type CXyz<T>     = repr_c::Xyz<T>;
+type CXy<T>      = repr_c::Xy<T>;
+type CRgba<T>    = repr_c::Rgba<T>;
+type CRgb<T>     = repr_c::Rgb<T>;
+type CUvw<T>     = repr_c::Uvw<T>;
+type CUv<T>      = repr_c::Uv<T>;
+type CExtent2<T> = repr_c::Extent2<T>;
+type CExtent3<T> = repr_c::Extent3<T>;
+*/
 
 
 macro_rules! vec_impl_upgrade_tuple2 {
@@ -594,15 +650,15 @@ macro_rules! vec_impl_spatial_ops {
                 pub fn dot<V>(self, v: V) -> T where T: Zero + Mul<Output=T>, V: $Exactly<T> {
                     self.into_iter().zip(v.into().into_iter()).fold(T::zero(), |acc, (a, b)| acc + a*b)
                 }
-                pub fn length_squared(self) -> T where T: Zero + Mul<Output=T> + Clone {
+                pub fn squared_magnitude(self) -> T where T: Zero + Mul<Output=T> + Clone {
                     let v = self.clone();
                     self.dot(v)
                 }
-                pub fn length(self) -> T where T: Float {
-                    self.length_squared().sqrt()
+                pub fn magnitude(self) -> T where T: Float {
+                    self.squared_magnitude().sqrt()
                 }
                 pub fn normalized(self) -> Self where T: Float {
-                    let len = self.clone().length();
+                    let len = self.clone().magnitude();
                     self / len
                 }
             }
@@ -614,7 +670,7 @@ macro_rules! vec_impl_distance {
         $(
             impl<T> $Type<T> {
                 pub fn distance(self, other: Self) -> T where T: Float {
-                    (self - other).length()
+                    (self - other).magnitude()
                 }
                 pub fn reflect(self, surface_normal: Self) -> Self
                     where T: Zero + Mul<Output=T> + Sub<Output=T> + Clone
@@ -759,7 +815,7 @@ macro_rules! vec_impl_directions_3d {
 macro_rules! vec_impl_rgb_constants {
     ($($Self:ident)+) => {
         $(
-            impl<T: ColorChannel> $Self<T> {
+            impl<T: ColorComponent> $Self<T> {
                 pub fn black   () -> Self { Self::from(Rgba::new_opaque(T::zero(), T::zero(), T::zero())) }
                 pub fn white   () -> Self { Self::from(Rgba::new_opaque(T::full(), T::full(), T::full())) }
                 pub fn red     () -> Self { Self::from(Rgba::new_opaque(T::full(), T::zero(), T::zero())) }
@@ -793,7 +849,8 @@ macro_rules! vec_impl_rgb_constants {
 
 // TODO blend() and invert()
 
-impl<T: ColorChannel> Rgba<T> {
+// TODO impl these also for repr_c
+impl<T: ColorComponent> Rgba<T> {
     pub fn new_opaque(r: T, g: T, b: T) -> Self {
         Self::new(r, g, b, T::full())
     }
@@ -847,9 +904,13 @@ vec_impl_new!(Rgb  r g b  );
 vec_impl_new!(Extent3 w h d);
 vec_impl_new!(Extent2 w h  );
 
-vec_impl_basic_ops!(2, Vec2 0 1    );
-vec_impl_basic_ops!(3, Vec3 0 1 2  );
-vec_impl_basic_ops!(4, Vec4 0 1 2 3);
+vec_impl_basic_ops!(2, Vec2  0 1    );
+vec_impl_basic_ops!(3, Vec3  0 1 2  );
+vec_impl_basic_ops!(4, Vec4  0 1 2 3);
+vec_impl_basic_ops!(8, Vec8  0 1 2 3 4 5 6 7 );
+vec_impl_basic_ops!(16, Vec16 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15);
+vec_impl_basic_ops!(32, Vec32 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31);
+vec_impl_basic_ops!(64, Vec64 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63);
 vec_impl_basic_ops!(4, Xyzw x y z w);
 vec_impl_basic_ops!(3, Xyz  x y z  );
 vec_impl_basic_ops!(2, Xy   x y    );
@@ -904,36 +965,6 @@ vec_impl_directions_2d!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
 vec_impl_directions_3d!(Vec4 Vec3      Xyzw Xyz   );
 
 vec_impl_rgb_constants!(Rgba Rgb);
-
-
-/// Trait for types that are suitable for representing a color channel value.
-pub trait ColorChannel : Zero {
-    /// The minimum value such that the color is at its maximum.
-    ///
-    /// In pratice, it yields :
-    /// - `T::MAX` for an integer type T;
-    /// - `1` for real number types.
-    fn full() -> Self;
-}
-
-impl ColorChannel for f32 { fn full() -> Self { 1f32 } }
-impl ColorChannel for f64 { fn full() -> Self { 1f64 } }
-impl ColorChannel for u8  { fn full() -> Self { ::core::u8 ::MAX } }
-impl ColorChannel for u16 { fn full() -> Self { ::core::u16::MAX } }
-impl ColorChannel for u32 { fn full() -> Self { ::core::u32::MAX } }
-impl ColorChannel for u64 { fn full() -> Self { ::core::u64::MAX } }
-impl ColorChannel for i8  { fn full() -> Self { ::core::i8 ::MAX } }
-impl ColorChannel for i16 { fn full() -> Self { ::core::i16::MAX } }
-impl ColorChannel for i32 { fn full() -> Self { ::core::i32::MAX } }
-impl ColorChannel for i64 { fn full() -> Self { ::core::i64::MAX } }
-impl ColorChannel for Wrapping<u8 > { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<u16> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<u32> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<u64> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<i8 > { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<i16> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<i32> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
-impl ColorChannel for Wrapping<i64> { fn full() -> Self { Wrapping(ColorChannel::full()) } }
 
 
 #[cfg(test)]
