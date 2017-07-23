@@ -41,35 +41,14 @@ pub fn clamp01<T: Clamp01>(x: T) -> T {
     x.clamped01()
 }
 
-impl PartialMinMax for f32 {}
-impl PartialMinMax for f64 {}
-impl PartialMinMax for i8  {}
-impl PartialMinMax for i16 {}
-impl PartialMinMax for i32 {}
-impl PartialMinMax for i64 {}
-impl PartialMinMax for u8  {}
-impl PartialMinMax for u16 {}
-impl PartialMinMax for u32 {}
-impl PartialMinMax for u64 {}
+macro_rules! impl_clamp {
+    ($($T:ty)+) => {
+        $(
+            impl PartialMinMax for $T {}
+            impl Clamp for $T {}
+            impl Clamp01 for $T {}
+        )+
+    }
+}
 
-impl Clamp for f32 {}
-impl Clamp for f64 {}
-impl Clamp for i8  {}
-impl Clamp for i16 {}
-impl Clamp for i32 {}
-impl Clamp for i64 {}
-impl Clamp for u8  {}
-impl Clamp for u16 {}
-impl Clamp for u32 {}
-impl Clamp for u64 {}
-
-impl Clamp01 for f32 {}
-impl Clamp01 for f64 {}
-impl Clamp01 for i8  {}
-impl Clamp01 for i16 {}
-impl Clamp01 for i32 {}
-impl Clamp01 for i64 {}
-impl Clamp01 for u8  {}
-impl Clamp01 for u16 {}
-impl Clamp01 for u32 {}
-impl Clamp01 for u64 {}
+impl_clamp!(f32 f64 i8 i16 i32 i64 u8 u16 u32 u64 isize usize);

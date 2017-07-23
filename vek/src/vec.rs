@@ -12,11 +12,11 @@ use core::mem;
 use core::ptr;
 use core::borrow::{Borrow, BorrowMut};
 use core::ops::*;
+use core::fmt::{self, Display, Formatter};
 use mat::Mat2;
 use clamp::PartialMinMax;
 use color_component::ColorComponent;
 
-// TODO impl Display for vecs
 // TODO handle the big repr(simd) issue
 
 macro_rules! vec_declare_types {
@@ -124,11 +124,17 @@ macro_rules! vec_declare_types {
 
 
         /// Vector type suited for RGBA color data.
+        ///
+        /// There is no trait bound on `ColorComponent`, but if `T` doesn't implement it, you'll
+        /// miss some goodies.
         #[allow(missing_docs)]
         #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
         #[$attrs]
         pub struct Rgba<T> { pub r:T, pub g:T, pub b:T, pub a:T }
         /// Vector type suited for RGB color data.
+        ///
+        /// There is no trait bound on `ColorComponent`, but if `T` doesn't implement it, you'll
+        /// miss some goodies.
         #[allow(missing_docs)]
         #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
         #[$attrs]
@@ -171,11 +177,66 @@ macro_rules! vec_declare_types {
         #[allow(missing_docs)] pub type Rgb24  = Rgb<u8>;
         #[allow(missing_docs)] pub type TexUv  = Uv<f32>;
         #[allow(missing_docs)] pub type TexUvw = Uvw<f32>;
+
+        /// Displays an `Rgba` value as `rgba(r,g,b,a)`.
+        impl<T: Display> Display for Rgba<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "rgba({}, {}, {}, {})", self.r, self.g, self.b, self.a)
+            }
+        }
+        /// Displays an `Rgb` value as `rgb(r,g,b)`.
+        impl<T: Display> Display for Rgb<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "rgb({}, {}, {})", self.r, self.g, self.b)
+            }
+        }
+        /// Displays an `Xyzw` value as `(x,y,z,w)`.
+        impl<T: Display> Display for Xyzw<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {}, {}, {})", self.x, self.y, self.z, self.w)
+            }
+        }
+        /// Displays an `Xyz` value as `(x,y,z)`.
+        impl<T: Display> Display for Xyz<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {}, {})", self.x, self.y, self.z)
+            }
+        }
+        /// Displays an `Xy` value as `(x,y)`.
+        impl<T: Display> Display for Xy<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {})", self.x, self.y)
+            }
+        }
+        /// Displays an `Uvw` value as `(u,v,w)`.
+        impl<T: Display> Display for Uvw<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {}, {})", self.u, self.v, self.w)
+            }
+        }
+        /// Displays an `Uv` value as `(u,v)`.
+        impl<T: Display> Display for Uv<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {})", self.u, self.v)
+            }
+        }
+        /// Displays an `Extent3` value as `(width,height,depth)`.
+        impl<T: Display> Display for Extent3<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {}, {})", self.w, self.h, self.d)
+            }
+        }
+        /// Displays an `Extent2` value as `(width,height)`.
+        impl<T: Display> Display for Extent2<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "({}, {})", self.w, self.h)
+            }
+        }
     }
 }
 
 macro_rules! vec_impl_vec {
-    ($Vec:ident ($($get:tt)+) ($($namedget:tt)+) $Tuple:ty) => {
+    ($Vec:ident ($fmt:expr) ($($get:tt)+) ($($namedget:tt)+) $Tuple:ty) => {
         #[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
         #[allow(missing_docs)]
         impl<T> $Vec<T> {
@@ -196,51 +257,25 @@ macro_rules! vec_impl_vec {
                 $Vec($(t.$get),+)
             }
         }
+        impl<T: Display> Display for $Vec<T> {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, $fmt, $(self.$get),+)
+            }
+        }
     }
 }
 
-pub mod repr_simd {
-    vec_declare_types!(#[repr(packed,simd)]);
-    vec_impl_vec!(Vec2 (0 1) (x y) (T,T));
-    vec_impl_vec!(Vec3 (0 1 2) (x y z) (T,T,T));
-    vec_impl_vec!(Vec4 (0 1 2 3) (x y z w) (T,T,T,T));
-    vec_impl_vec!(Vec8 (0 1 2 3 4 5 6 7) (m0 m1 m2 m3 m4 m5 m6 m7) (T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec16 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec32 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec64 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31 m32 m33 m34 m35 m36 m37 m38 m39 m40 m41 m42 m43 m44 m45 m46 m47 m48 m49 m50 m51 m52 m53 m54 m55 m56 m57 m58 m59 m60 m61 m62 m63) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+macro_rules! vec_impl_all_vecs {
+    () => {
+        vec_impl_vec!(Vec2  ("({}, {})") (0 1) (x y) (T,T));
+        vec_impl_vec!(Vec3  ("({}, {}, {})") (0 1 2) (x y z) (T,T,T));
+        vec_impl_vec!(Vec4  ("({}, {}, {}, {})") (0 1 2 3) (x y z w) (T,T,T,T));
+        vec_impl_vec!(Vec8  ("({}, {}, {}, {}, {}, {}, {}, {})") (0 1 2 3 4 5 6 7) (m0 m1 m2 m3 m4 m5 m6 m7) (T,T,T,T,T,T,T,T));
+        vec_impl_vec!(Vec16 ("({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})") (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+        vec_impl_vec!(Vec32 ("({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})") (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+        vec_impl_vec!(Vec64 ("({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})") (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31 m32 m33 m34 m35 m36 m37 m38 m39 m40 m41 m42 m43 m44 m45 m46 m47 m48 m49 m50 m51 m52 m53 m54 m55 m56 m57 m58 m59 m60 m61 m62 m63) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
+    }
 }
-pub mod repr_c {
-    vec_declare_types!(#[repr(packed,C)]);
-    vec_impl_vec!(Vec2 (0 1) (x y) (T,T));
-    vec_impl_vec!(Vec3 (0 1 2) (x y z) (T,T,T));
-    vec_impl_vec!(Vec4 (0 1 2 3) (x y z w) (T,T,T,T));
-    vec_impl_vec!(Vec8 (0 1 2 3 4 5 6 7) (m0 m1 m2 m3 m4 m5 m6 m7) (T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec16 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec32 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
-    vec_impl_vec!(Vec64 (0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63) (m0 m1 m2 m3 m4 m5 m6 m7 m8 m9 m10 m11 m12 m13 m14 m15 m16 m17 m18 m19 m20 m21 m22 m23 m24 m25 m26 m27 m28 m29 m30 m31 m32 m33 m34 m35 m36 m37 m38 m39 m40 m41 m42 m43 m44 m45 m46 m47 m48 m49 m50 m51 m52 m53 m54 m55 m56 m57 m58 m59 m60 m61 m62 m63) (T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T));
-}
-
-pub use repr_simd::*;
-
-/*
-type CVec2<T>    = repr_c::Vec2<T>;
-type CVec3<T>    = repr_c::Vec3<T>;
-type CVec4<T>    = repr_c::Vec4<T>;
-type CVec8<T>    = repr_c::Vec8<T>;
-type CVec16<T>   = repr_c::Vec16<T>;
-type CVec32<T>   = repr_c::Vec32<T>;
-type CVec64<T>   = repr_c::Vec64<T>;
-type CXyzw<T>    = repr_c::Xyzw<T>;
-type CXyz<T>     = repr_c::Xyz<T>;
-type CXy<T>      = repr_c::Xy<T>;
-type CRgba<T>    = repr_c::Rgba<T>;
-type CRgb<T>     = repr_c::Rgb<T>;
-type CUvw<T>     = repr_c::Uvw<T>;
-type CUv<T>      = repr_c::Uv<T>;
-type CExtent2<T> = repr_c::Extent2<T>;
-type CExtent3<T> = repr_c::Extent3<T>;
-*/
-
 
 macro_rules! vec_impl_upgrade_tuple2 {
     ($($Self:ident)+) => { 
@@ -317,7 +352,7 @@ macro_rules! vec_impl_into_tuple4 {
 
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-// Moving iterator, only safe is based on this module's assumptions.
+/// Moving iterator for vectors, only safe if based on this module's assumptions.
 pub struct IntoIter<T, V: AsRef<[T]>> { v: V, i: usize, _booh: PhantomData<T> }
 
 impl<T, V: AsRef<[T]>> IntoIter<T,V> {
@@ -399,7 +434,7 @@ macro_rules! vec_impl_basic_ops {
                 !self.is_any_negative()
             }
 
-            pub fn cast<D,F>(self, f: F) -> $Type<D> where F: Fn(T) -> D {
+            pub fn convert<D,F>(self, f: F) -> $Type<D> where F: Fn(T) -> D {
                 let mut out: $Type<D> = unsafe { mem::uninitialized() };
                 $(out.$get = f(self.$get);)+
                 out
@@ -576,6 +611,8 @@ macro_rules! vec_impl_basic_ops {
                 &self.as_slice()[i]
             }
         }
+        // TODO: impl mul with matrices
+        // TODO: impl ops with references
     }
 }
 
@@ -847,135 +884,180 @@ macro_rules! vec_impl_rgb_constants {
     }
 }
 
-// TODO blend() and invert()
+macro_rules! vec_complete_mod {
+    () => {
+        // TODO blend() and invert()
 
-// TODO impl these also for repr_c
-impl<T: ColorComponent> Rgba<T> {
-    pub fn new_opaque(r: T, g: T, b: T) -> Self {
-        Self::new(r, g, b, T::full())
-    }
-    pub fn new_transparent(r: T, g: T, b: T) -> Self {
-        Self::new(r, g, b, T::zero())
-    }
-    pub fn opaque<V: Into<Rgb<T>>>(color: V) -> Self {
-        let Rgb { r, g, b } = color.into();
-        Self::new_opaque(r, g, b)
-    }
-    pub fn transparent<V: Into<Rgb<T>>>(color: V) -> Self {
-        let Rgb { r, g, b } = color.into();
-        Self::new_transparent(r, g, b)
+        impl<T: ColorComponent> Rgba<T> {
+            pub fn new_opaque(r: T, g: T, b: T) -> Self {
+                Self::new(r, g, b, T::full())
+            }
+            pub fn new_transparent(r: T, g: T, b: T) -> Self {
+                Self::new(r, g, b, T::zero())
+            }
+            pub fn opaque<V: Into<Rgb<T>>>(color: V) -> Self {
+                let Rgb { r, g, b } = color.into();
+                Self::new_opaque(r, g, b)
+            }
+            pub fn transparent<V: Into<Rgb<T>>>(color: V) -> Self {
+                let Rgb { r, g, b } = color.into();
+                Self::new_transparent(r, g, b)
+            }
+        }
+        impl<T> Rgba<T> {
+            pub fn translucent<V: Into<Rgb<T>>>(color: V, opacity: T) -> Self {
+                let Rgb { r, g, b } = color.into();
+                Self::new(r, g, b, opacity)
+            }
+        }
+
+
+        // NOTE: Traits for type that convert _exactly_ into the given type.
+        // Implement only if neither "shortening" nor "extension" takes place during conversion.
+        pub trait Exactly2<T>: Into<Vec2<T>> + From<Vec2<T>> {}
+        pub trait Exactly3<T>: Into<Vec3<T>> + From<Vec3<T>> {}
+        pub trait Exactly4<T>: Into<Vec4<T>> + From<Vec4<T>> {}
+
+        impl<T> Exactly2<T> for Vec2<T> {}
+        impl<T> Exactly2<T> for Xy<T> {}
+        impl<T> Exactly2<T> for Uv<T> {}
+        impl<T> Exactly2<T> for Extent2<T> {}
+        impl<T> Exactly3<T> for Vec3<T> {}
+        impl<T> Exactly3<T> for Xyz<T> {}
+        impl<T> Exactly3<T> for Uvw<T> {}
+        impl<T> Exactly3<T> for Rgb<T> {}
+        impl<T> Exactly3<T> for Extent3<T> {}
+        impl<T> Exactly4<T> for Vec4<T> {}
+        impl<T> Exactly4<T> for Xyzw<T> {}
+        impl<T> Exactly4<T> for Rgba<T> {}
+
+
+        vec_impl_new!(Xyzw x y z w);
+        vec_impl_new!(Xyz  x y z  );
+        vec_impl_new!(Xy   x y    );
+        vec_impl_new!(Uvw  u v w  );
+        vec_impl_new!(Uv   u v    );
+        vec_impl_new!(Rgba r g b a);
+        vec_impl_new!(Rgb  r g b  );
+        vec_impl_new!(Extent3 w h d);
+        vec_impl_new!(Extent2 w h  );
+
+        vec_impl_basic_ops!(2, Vec2  0 1    );
+        vec_impl_basic_ops!(3, Vec3  0 1 2  );
+        vec_impl_basic_ops!(4, Vec4  0 1 2 3);
+        vec_impl_basic_ops!(8, Vec8  0 1 2 3 4 5 6 7 );
+        vec_impl_basic_ops!(16, Vec16 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15);
+        vec_impl_basic_ops!(32, Vec32 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31);
+        vec_impl_basic_ops!(64, Vec64 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63);
+        vec_impl_basic_ops!(4, Xyzw x y z w);
+        vec_impl_basic_ops!(3, Xyz  x y z  );
+        vec_impl_basic_ops!(2, Xy   x y    );
+        vec_impl_basic_ops!(3, Uvw  u v w  );
+        vec_impl_basic_ops!(2, Uv   u v    );
+        vec_impl_basic_ops!(4, Rgba r g b a);
+        vec_impl_basic_ops!(3, Rgb  r g b  );
+        vec_impl_basic_ops!(3, Extent3 w h d);
+        vec_impl_basic_ops!(2, Extent2 w h  );
+
+
+        vec_impl_upgrade_tuple2!(Vec4 Vec3 Xyzw Xyz Rgba Rgb Uvw Extent3);
+        vec_impl_upgrade_tuple3!(Vec4 Xyzw Rgba);
+        vec_impl_into_tuple4!(Xyzw Rgba);
+        vec_impl_into_tuple3!(Xyz Rgb Uvw Extent3);
+        vec_impl_into_tuple2!(Xy Uv Extent2);
+
+
+        vec_impl_from_same_dim!((Vec2    into_vec2    to_vec2    as_vec2    as_mut_vec2   ) from Xy Uv Extent2);
+        vec_impl_from_same_dim!((Vec3    into_vec3    to_vec3    as_vec3    as_mut_vec3   ) from Xyz Uvw Rgb Extent3);
+        vec_impl_from_same_dim!((Vec4    into_vec4    to_vec4    as_vec4    as_mut_vec4   ) from Xyzw Rgba);
+        vec_impl_from_same_dim!((Xyzw    into_xyzw    to_xyzw    as_xyzw    as_mut_xyzw   ) from Vec4 Rgba);
+        vec_impl_from_same_dim!((Xyz     into_xyz     to_xyz     as_xyz     as_mut_xyz    ) from Vec3 Rgb Uvw Extent3);
+        vec_impl_from_same_dim!((Xy      into_xy      to_xy      as_xy      as_mut_xy     ) from Vec2 Uv Extent2);
+        vec_impl_from_same_dim!((Uvw     into_uvw     to_uvw     as_uvw     as_mut_uvw    ) from Vec3 Xyz Rgb Extent3);
+        vec_impl_from_same_dim!((Uv      into_uv      to_uv      as_uv      as_mut_uv     ) from Vec2 Xy Extent2);
+        vec_impl_from_same_dim!((Rgba    into_rgba    to_rgba    as_rgba    as_mut_rgba   ) from Vec4 Xyzw);
+        vec_impl_from_same_dim!((Rgb     into_rgb     to_rgb     as_rgb     as_mut_rgb    ) from Vec3 Xyz Uvw Extent3);
+        vec_impl_from_same_dim!((Extent3 into_extent3 to_extent3 as_extent3 as_mut_extent3) from Vec3 Xyz Uvw Rgb);
+        vec_impl_from_same_dim!((Extent2 into_extent2 to_extent2 as_extent2 as_mut_extent2) from Vec2 Xy Uv);
+
+        // Lots of fun
+        //($down_dim:expr, ($Down:ident $into_down:ident $to_down:ident $as_down:ident $as_mut_down:ident) for $(($Up:ident $into_up:ident $to_up:ident))+) => {
+        vec_impl_upgrade!((Vec3    into_vec3    to_vec3    as_vec3    as_mut_vec3   ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
+        vec_impl_upgrade!((Xyz     into_xyz     to_xyz     as_xyz     as_mut_xyz    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
+        vec_impl_upgrade!((Rgb     into_rgb     to_rgb     as_rgb     as_mut_rgb    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
+        vec_impl_upgrade!((Uvw     into_uvw     to_uvw     as_uvw     as_mut_uvw    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
+        vec_impl_upgrade!((Extent3 into_extent3 to_extent3 as_extent3 as_mut_extent3) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
+        vec_impl_upgrade!((Vec2    into_vec2    to_vec2    as_vec2    as_mut_vec2   ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
+        vec_impl_upgrade!((Xy      into_xy      to_xy      as_xy      as_mut_xy     ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
+        vec_impl_upgrade!((Uv      into_uv      to_uv      as_uv      as_mut_uv     ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
+        vec_impl_upgrade!((Extent2 into_extent2 to_extent2 as_extent2 as_mut_extent2) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
+
+        vec_impl_spatial_ops!(Exactly4, Vec4 Xyzw);
+        vec_impl_spatial_ops!(Exactly3, Vec3 Xyz Extent3);
+        vec_impl_spatial_ops!(Exactly2, Vec2 Xy Extent2);
+        vec_impl_distance!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
+        vec_impl_cross!(Vec3 Xyz Extent3);
+        vec_impl_rotate2d!(Vec2 Xy Extent2);
+        vec_impl_point_or_direction!(Vec4 Xyzw);
+        vec_impl_directions_2d!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
+        vec_impl_directions_3d!(Vec4 Vec3      Xyzw Xyz   );
+
+        vec_impl_rgb_constants!(Rgba Rgb);
     }
 }
-impl<T> Rgba<T> {
-    pub fn translucent<V: Into<Rgb<T>>>(color: V, opacity: T) -> Self {
-        let Rgb { r, g, b } = color.into();
-        Self::new(r, g, b, opacity)
-    }
+
+
+pub mod repr_simd {
+    use super::*;
+    vec_declare_types!(#[repr(packed,simd)]);
+    vec_impl_all_vecs!();
+    vec_complete_mod!();
+}
+pub mod repr_c {
+    use super::*;
+    vec_declare_types!(#[repr(packed,C)]);
+    vec_impl_all_vecs!();
+    vec_complete_mod!();
 }
 
+pub use self::repr_simd::*;
 
-// NOTE: Traits for type that convert _exactly_ into the given type.
-// Implement only if neither "shortening" nor "extension" takes place during conversion.
-pub trait Exactly2<T>: Into<Vec2<T>> + From<Vec2<T>> {}
-pub trait Exactly3<T>: Into<Vec3<T>> + From<Vec3<T>> {}
-pub trait Exactly4<T>: Into<Vec4<T>> + From<Vec4<T>> {}
-
-impl<T> Exactly2<T> for Vec2<T> {}
-impl<T> Exactly2<T> for Xy<T> {}
-impl<T> Exactly2<T> for Uv<T> {}
-impl<T> Exactly2<T> for Extent2<T> {}
-impl<T> Exactly3<T> for Vec3<T> {}
-impl<T> Exactly3<T> for Xyz<T> {}
-impl<T> Exactly3<T> for Uvw<T> {}
-impl<T> Exactly3<T> for Rgb<T> {}
-impl<T> Exactly3<T> for Extent3<T> {}
-impl<T> Exactly4<T> for Vec4<T> {}
-impl<T> Exactly4<T> for Xyzw<T> {}
-impl<T> Exactly4<T> for Rgba<T> {}
-
-
-vec_impl_new!(Xyzw x y z w);
-vec_impl_new!(Xyz  x y z  );
-vec_impl_new!(Xy   x y    );
-vec_impl_new!(Uvw  u v w  );
-vec_impl_new!(Uv   u v    );
-vec_impl_new!(Rgba r g b a);
-vec_impl_new!(Rgb  r g b  );
-vec_impl_new!(Extent3 w h d);
-vec_impl_new!(Extent2 w h  );
-
-vec_impl_basic_ops!(2, Vec2  0 1    );
-vec_impl_basic_ops!(3, Vec3  0 1 2  );
-vec_impl_basic_ops!(4, Vec4  0 1 2 3);
-vec_impl_basic_ops!(8, Vec8  0 1 2 3 4 5 6 7 );
-vec_impl_basic_ops!(16, Vec16 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15);
-vec_impl_basic_ops!(32, Vec32 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31);
-vec_impl_basic_ops!(64, Vec64 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63);
-vec_impl_basic_ops!(4, Xyzw x y z w);
-vec_impl_basic_ops!(3, Xyz  x y z  );
-vec_impl_basic_ops!(2, Xy   x y    );
-vec_impl_basic_ops!(3, Uvw  u v w  );
-vec_impl_basic_ops!(2, Uv   u v    );
-vec_impl_basic_ops!(4, Rgba r g b a);
-vec_impl_basic_ops!(3, Rgb  r g b  );
-vec_impl_basic_ops!(3, Extent3 w h d);
-vec_impl_basic_ops!(2, Extent2 w h  );
-
-
-vec_impl_upgrade_tuple2!(Vec4 Vec3 Xyzw Xyz Rgba Rgb Uvw Extent3);
-vec_impl_upgrade_tuple3!(Vec4 Xyzw Rgba);
-vec_impl_into_tuple4!(Xyzw Rgba);
-vec_impl_into_tuple3!(Xyz Rgb Uvw Extent3);
-vec_impl_into_tuple2!(Xy Uv Extent2);
-
-
-vec_impl_from_same_dim!((Vec2    into_vec2    to_vec2    as_vec2    as_mut_vec2   ) from Xy Uv Extent2);
-vec_impl_from_same_dim!((Vec3    into_vec3    to_vec3    as_vec3    as_mut_vec3   ) from Xyz Uvw Rgb Extent3);
-vec_impl_from_same_dim!((Vec4    into_vec4    to_vec4    as_vec4    as_mut_vec4   ) from Xyzw Rgba);
-vec_impl_from_same_dim!((Xyzw    into_xyzw    to_xyzw    as_xyzw    as_mut_xyzw   ) from Vec4 Rgba);
-vec_impl_from_same_dim!((Xyz     into_xyz     to_xyz     as_xyz     as_mut_xyz    ) from Vec3 Rgb Uvw Extent3);
-vec_impl_from_same_dim!((Xy      into_xy      to_xy      as_xy      as_mut_xy     ) from Vec2 Uv Extent2);
-vec_impl_from_same_dim!((Uvw     into_uvw     to_uvw     as_uvw     as_mut_uvw    ) from Vec3 Xyz Rgb Extent3);
-vec_impl_from_same_dim!((Uv      into_uv      to_uv      as_uv      as_mut_uv     ) from Vec2 Xy Extent2);
-vec_impl_from_same_dim!((Rgba    into_rgba    to_rgba    as_rgba    as_mut_rgba   ) from Vec4 Xyzw);
-vec_impl_from_same_dim!((Rgb     into_rgb     to_rgb     as_rgb     as_mut_rgb    ) from Vec3 Xyz Uvw Extent3);
-vec_impl_from_same_dim!((Extent3 into_extent3 to_extent3 as_extent3 as_mut_extent3) from Vec3 Xyz Uvw Rgb);
-vec_impl_from_same_dim!((Extent2 into_extent2 to_extent2 as_extent2 as_mut_extent2) from Vec2 Xy Uv);
-
-// Lots of fun
-//($down_dim:expr, ($Down:ident $into_down:ident $to_down:ident $as_down:ident $as_mut_down:ident) for $(($Up:ident $into_up:ident $to_up:ident))+) => {
-vec_impl_upgrade!((Vec3    into_vec3    to_vec3    as_vec3    as_mut_vec3   ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
-vec_impl_upgrade!((Xyz     into_xyz     to_xyz     as_xyz     as_mut_xyz    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
-vec_impl_upgrade!((Rgb     into_rgb     to_rgb     as_rgb     as_mut_rgb    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
-vec_impl_upgrade!((Uvw     into_uvw     to_uvw     as_uvw     as_mut_uvw    ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
-vec_impl_upgrade!((Extent3 into_extent3 to_extent3 as_extent3 as_mut_extent3) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) );
-vec_impl_upgrade!((Vec2    into_vec2    to_vec2    as_vec2    as_mut_vec2   ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
-vec_impl_upgrade!((Xy      into_xy      to_xy      as_xy      as_mut_xy     ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
-vec_impl_upgrade!((Uv      into_uv      to_uv      as_uv      as_mut_uv     ) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
-vec_impl_upgrade!((Extent2 into_extent2 to_extent2 as_extent2 as_mut_extent2) for (Vec4 into_vec4 to_vec4) (Xyzw into_xyzw to_xyzw) (Rgba into_rgba to_rgba) (Vec3 into_vec3 to_vec3) (Xyz into_xyz to_xyz) (Rgb into_rgb to_rgb) (Uvw into_uvw to_uvw) (Extent3 into_extent3 to_extent3));
-
-vec_impl_spatial_ops!(Exactly4, Vec4 Xyzw);
-vec_impl_spatial_ops!(Exactly3, Vec3 Xyz Extent3);
-vec_impl_spatial_ops!(Exactly2, Vec2 Xy Extent2);
-vec_impl_distance!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
-vec_impl_cross!(Vec3 Xyz Extent3);
-vec_impl_rotate2d!(Vec2 Xy Extent2);
-vec_impl_point_or_direction!(Vec4 Xyzw);
-vec_impl_directions_2d!(Vec4 Vec3 Vec2 Xyzw Xyz Xy);
-vec_impl_directions_3d!(Vec4 Vec3      Xyzw Xyz   );
-
-vec_impl_rgb_constants!(Rgba Rgb);
+#[allow(dead_code)]
+pub(crate) mod repr_c_aliases {
+    use super::repr_c;
+    pub type CVec2<T>    = repr_c::Vec2<T>;
+    pub type CVec3<T>    = repr_c::Vec3<T>;
+    pub type CVec4<T>    = repr_c::Vec4<T>;
+    pub type CVec8<T>    = repr_c::Vec8<T>;
+    pub type CVec16<T>   = repr_c::Vec16<T>;
+    pub type CVec32<T>   = repr_c::Vec32<T>;
+    pub type CVec64<T>   = repr_c::Vec64<T>;
+    pub type CXyzw<T>    = repr_c::Xyzw<T>;
+    pub type CXyz<T>     = repr_c::Xyz<T>;
+    pub type CXy<T>      = repr_c::Xy<T>;
+    pub type CRgba<T>    = repr_c::Rgba<T>;
+    pub type CRgb<T>     = repr_c::Rgb<T>;
+    pub type CUvw<T>     = repr_c::Uvw<T>;
+    pub type CUv<T>      = repr_c::Uv<T>;
+    pub type CExtent2<T> = repr_c::Extent2<T>;
+    pub type CExtent3<T> = repr_c::Extent3<T>;
+}
 
 
 #[cfg(test)]
 mod test {
     use super::*;
 
-    fn accept<V: Into<Vec2<u32>>>(_: V) {}
+    fn accept_into_vec2_u32<V: Into<Vec2<u32>>>(_: V) {}
+    fn accept_asref_vec2_u32<V: AsRef<Vec2<u32>>>(_: V) {}
 
     #[test]
     fn foo() {
-        accept(Vec4(0,0,0,0));
-        accept((0,0,0,0));
+        accept_into_vec2_u32(Vec4(0,0,0,0));
+        accept_asref_vec2_u32(Vec4(0,0,0,0));
+        accept_into_vec2_u32((0,0));
+        // These purposefully won't compile TODO explain why
+        // accept_asref_vec2_u32((0,0,0,0));
+        // accept_into_vec2_u32((0,0,0,0));
     }
 }

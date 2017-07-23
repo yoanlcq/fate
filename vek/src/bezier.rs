@@ -4,10 +4,7 @@ extern crate num_traits;
 
 use self::num_traits::Float;
 use core::ops::*;
-
-use vec::{Vec3, Vec4, Xy, Xyz};
-use mat::{Mat3, Mat4};
-use geom::{Line2, Line3};
+use vec::repr_c_aliases::*;
 
 // TODO into_iter, iter_mut, etc (for concisely applying the same xform to all points)
 // TODO AABBs from beziers
@@ -69,7 +66,7 @@ macro_rules! bezier_impl_quadratic {
                 let one = T::one();
                 let two = one+one;
                 Mat3 {
-                    rows: Vec3(
+                    rows: CVec3::new(
                         Vec3( one,  zero, zero),
                         Vec3(-two,  two, zero),
                         Vec3( one, -two, one),
@@ -140,7 +137,7 @@ macro_rules! bezier_impl_cubic {
                 let three = one+one+one;
                 let six = three + three;
                 Mat4 {
-                    rows: Vec4(
+                    rows: CVec4::new(
                         Vec4( one,  zero,  zero, zero),
                         Vec4(-three,  three,  zero, zero),
                         Vec4( three, -six,  three, zero),
@@ -186,7 +183,25 @@ macro_rules! bezier_impl_cubic {
     }
 }
 
-bezier_impl_quadratic!(QuadraticBezier2 Xy Line2);
-bezier_impl_quadratic!(QuadraticBezier3 Xyz Line3);
-bezier_impl_cubic!(CubicBezier2 Xy Line2);
-bezier_impl_cubic!(CubicBezier3 Xyz Line3);
+pub mod repr_simd {
+    use super::*;
+    use vec::repr_simd::{Vec3, Vec4, Xy, Xyz};
+    use mat::repr_simd::{Mat3, Mat4};
+    use geom::repr_simd::{Line2, Line3};
+    bezier_impl_quadratic!(QuadraticBezier2 Xy Line2);
+    bezier_impl_quadratic!(QuadraticBezier3 Xyz Line3);
+    bezier_impl_cubic!(CubicBezier2 Xy Line2);
+    bezier_impl_cubic!(CubicBezier3 Xyz Line3);
+}
+pub mod repr_c {
+    use super::*;
+    use  vec::repr_c::{Vec3, Vec4, Xy, Xyz};
+    use  mat::repr_c::{Mat3, Mat4};
+    use geom::repr_c::{Line2, Line3};
+    bezier_impl_quadratic!(QuadraticBezier2 Xy Line2);
+    bezier_impl_quadratic!(QuadraticBezier3 Xyz Line3);
+    bezier_impl_cubic!(CubicBezier2 Xy Line2);
+    bezier_impl_cubic!(CubicBezier3 Xyz Line3);
+}
+
+pub use self::repr_simd::*;

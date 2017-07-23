@@ -6,7 +6,7 @@ use core::ops::{Range, Sub};
 use clamp::Clamp01;
 use lerp::Lerp;
 
-/// A convenience structure for storing a linear progression from a value to another.
+/// A convenience structure for storing a progression from one value to another.
 #[derive(Debug, Default, Clone, Copy, Hash)]
 pub struct Tween<T, Progress=f32> {
     /// The value when progress gets close to 0.

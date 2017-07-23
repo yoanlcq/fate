@@ -40,7 +40,9 @@ impl WrapInteger for i8  {}
 impl WrapInteger for i16 {}
 impl WrapInteger for i32 {}
 impl WrapInteger for i64 {}
+impl WrapInteger for isize {}
 impl WrapInteger for u8  {}
 impl WrapInteger for u16 {}
 impl WrapInteger for u32 {}
 impl WrapInteger for u64 {}
+impl WrapInteger for usize {}
