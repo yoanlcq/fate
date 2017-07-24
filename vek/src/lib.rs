@@ -4,6 +4,7 @@
 //!
 //! DO NOT USE (yet). This is very much a work-in progress, breaking changes happen all the time on a whim.
 
+// TODO index vectors by range
 // TODO tests
 // TODO benchmarks
 // TODO doc
