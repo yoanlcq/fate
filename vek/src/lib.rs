@@ -17,9 +17,18 @@
 //   - cross()
 
 // TODO tests (+tests on fixed-point numbers and bignums)
+// TODO investigate splitting into multiple crates
+// TODO seriously investigate (and benchmark) column-major vs row-major order benefits
+// TODO have a story for using on non-Nightly channels
+// TODO: Implement correctness check for FrustumPlanes (i.e left <= right, etc)
+// TODO index vectors by range
+// TODO angle between two vectors
+// TODO put must_use where relevant (seems to work on functions)
+// TODO tests
 // TODO benchmarks
 // TODO doc
 // TODO provide efficient functions for AoS and SoA
+// TODO serde
 
 
 #![doc(html_root_url = "https://docs.rs/vek/0.1.0")]
@@ -29,6 +38,7 @@
 #![feature(test)]
 #![feature(repr_simd)]
 //#![feature(i128, i128_type)]
+#![feature(repr_align, attr_literals)]
 
 extern crate test;
 

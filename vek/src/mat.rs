@@ -46,7 +46,9 @@ macro_rules! mat_impl {
             ///
             /// You can safely assume that this convention won't change and that
             /// its public `rows` member will not be renamed.
+			// TODO: repr(align(16)) is good on x86. Investigate for other platforms.
             #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+			#[repr(align(16))]
             pub struct $Mat<T> { pub rows: $Col<$Row<T>> }
 
             /// The default matrix is the identity matrix.
