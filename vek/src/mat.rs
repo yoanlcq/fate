@@ -43,7 +43,9 @@ macro_rules! mat_impl {
         pub mod $mat {
             use super::*;
 
+			// TODO: repr(align(16)) is good on x86. Investigate for other platforms.
             #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+			#[repr(align(16))]
             pub struct $Mat<T> { pub rows: $Row<$Col<T>> }
 
             impl<T: Zero + One> Default for $Mat<T> {
