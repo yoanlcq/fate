@@ -4,6 +4,7 @@
 //!
 //! DO NOT USE (yet). This is very much a work-in progress, breaking changes happen all the time on a whim.
 
+// TODO seriously investigate (and benchmark) column-major vs row-major order benefits
 // TODO have a story for using on non-Nightly channels
 // TODO: Implement correctness check for FrustumPlanes (i.e left <= right, etc)
 // TODO index vectors by range
@@ -13,6 +14,7 @@
 // TODO benchmarks
 // TODO doc
 // TODO provide efficient functions for AoS and SoA
+// TODO serde
 
 
 #![doc(html_root_url = "https://docs.rs/vek/0.1.0")]
@@ -21,6 +23,7 @@
 #![doc(test(attr(deny(warnings))))]
 #![feature(test)]
 #![feature(repr_simd)]
+#![feature(repr_align, attr_literals)]
 
 extern crate test;
 
