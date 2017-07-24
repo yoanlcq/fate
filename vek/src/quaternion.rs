@@ -21,8 +21,6 @@ macro_rules! quaternion_complete_mod {
             }
         }
 
-        // TODO replace length() by magnitude() ???
-
         impl<T> Quaternion<T> {
             pub fn new(x: T, y: T, z: T, w: T) -> Self {
                 Self { x, y, z, w }

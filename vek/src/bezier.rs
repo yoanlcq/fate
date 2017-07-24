@@ -6,11 +6,11 @@ use self::num_traits::Float;
 use core::ops::*;
 use vec::repr_c_aliases::*;
 
-// TODO into_iter, iter_mut, etc (for concisely applying the same xform to all points)
-// TODO AABBs from beziers
-// TODO OOBBs from beziers
-// TODO "Tracing a curve at fixed distance intervals"
-// TODO project a point on a curve using e.g binary search after a coarse linear search
+// WISH: into_iter, iter_mut, etc (for concisely applying the same xform to all points)
+// WISH: AABBs from beziers
+// WISH: OOBBs from beziers
+// WISH: "Tracing a curve at fixed distance intervals"
+// WISH: project a point on a curve using e.g binary search after a coarse linear search
 
 macro_rules! bezier_impl_any {
     ($Bezier:ident $Point:ident) => {
@@ -18,7 +18,7 @@ macro_rules! bezier_impl_any {
             pub fn normalized_tangent(self, t: T) -> $Point<T> where T: Float {
                 self.evaluate_derivative(t).normalized()
             }
-	        // TODO: add some kind of bias to the calculation ?
+            // WISH: better length approximation estimationsi (e.g see https://math.stackexchange.com/a/61796)
             /// Approximates the curve's length by subdividing it into step_count+1 straight lines.
             pub fn approx_length(self, step_count: u32) -> T
                 where T: Float + AddAssign
@@ -33,6 +33,7 @@ macro_rules! bezier_impl_any {
                 }
 	            length
             }
+
         }
     }
 }
@@ -57,10 +58,11 @@ macro_rules! bezier_impl_quadratic {
             pub fn from_line(line: $Line<T>) -> Self {
                 $QuadraticBezier(line.a, line.a, line.b)
             }
-		    // XXX not sure about the name
             /// Returns the constant matrix M such that,
             /// given `T = [1, t*t, t*t*t]` and `P` the vector of control points,
             /// `dot(T * M, P)` evalutes the Bezier curve at 't'.
+            ///
+            /// This function name is arguably dubious.
 	        pub fn matrix() -> Mat3<T> {
                 let zero = T::zero();
                 let one = T::one();
@@ -73,7 +75,8 @@ macro_rules! bezier_impl_quadratic {
                     )
                 }
             }
-            // TODO: reuse computations somehow (i.e impl split_first() and split_second() separately)
+            // NOTE that some computations may be reused, but the compiler can
+            // reason about these. Clarity wins here IMO.
             pub fn split(self, t: T) -> (Self, Self) {
                 let l = T::one();
                 let two = l+l;
@@ -127,10 +130,11 @@ macro_rules! bezier_impl_cubic {
             pub fn from_line(line: $Line<T>) -> Self {
                 $CubicBezier(line.a, line.a, line.b, line.b)
             }
-            // XXX not sure about the name
             /// Returns the constant matrix M such that,
             /// given `T = [1, t*t, t*t*t, t*t*t*t]` and `P` the vector of control points,
             /// `dot(T * M, P)` evalutes the Bezier curve at 't'.
+            ///
+            /// This function name is arguably dubious.
 	        pub fn matrix() -> Mat4<T> {
                 let zero = T::zero();
                 let one = T::one();
@@ -145,7 +149,8 @@ macro_rules! bezier_impl_cubic {
                     )
                 }
             }
-            // TODO: reuse computations somehow (i.e impl split_first() and split_second() separately)
+            // NOTE that some computations may be reused, but the compiler can
+            // reason about these. Clarity wins here IMO.
             pub fn split(self, t: T) -> (Self, Self) {
                 let l = T::one();
                 let two = l+l;
@@ -164,7 +169,7 @@ macro_rules! bezier_impl_cubic {
                 );
                 (first, second)
             }
-            // TODO impl circle with either 2 curves or 4 curves
+            // WISH: CubicBezier::circle(radius)
             // pub fn circle(radius: T, curve_count: u32) ->
         }
         

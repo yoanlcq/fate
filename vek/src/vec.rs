@@ -17,8 +17,6 @@ use mat::Mat2;
 use clamp::PartialMinMax;
 use color_component::ColorComponent;
 
-// TODO handle the big repr(simd) issue
-
 macro_rules! vec_declare_types {
     (#[$attrs:meta]) => {
         /// A two-components generic vector type.
@@ -611,8 +609,8 @@ macro_rules! vec_impl_basic_ops {
                 &self.as_slice()[i]
             }
         }
-        // TODO: impl mul with matrices
-        // TODO: impl ops with references
+        // WISH: impl mul with matrices
+        // WISH: impl ops with references
     }
 }
 
@@ -875,10 +873,10 @@ macro_rules! vec_impl_rgb_constants {
                 pub fn min_color_component(self) -> T {
                     T::partial_min(T::partial_min(self.r, self.g), self.b)
                 }
-                // TODO: impl grayscale(self) -> T fast, precisely, and preventing integer overflow.
+                // WISH: impl grayscale(self) -> T fast, precisely, and preventing integer overflow.
                 // Once it's done, implement into_gray(self) -> Self, which preserves opacity if any.
                 
-                // TODO: impl from_html_hex(s: &str) or something like that
+                // WISH: impl from_html_hex(s: &str) or something like that
             }
         )+
     }
@@ -886,7 +884,7 @@ macro_rules! vec_impl_rgb_constants {
 
 macro_rules! vec_complete_mod {
     () => {
-        // TODO blend() and invert()
+        // WISH: blend() and invert()
 
         impl<T: ColorComponent> Rgba<T> {
             pub fn new_opaque(r: T, g: T, b: T) -> Self {
@@ -1056,7 +1054,7 @@ mod test {
         accept_into_vec2_u32(Vec4(0,0,0,0));
         accept_asref_vec2_u32(Vec4(0,0,0,0));
         accept_into_vec2_u32((0,0));
-        // These purposefully won't compile TODO explain why
+        // These purposefully won't compile right now.
         // accept_asref_vec2_u32((0,0,0,0));
         // accept_into_vec2_u32((0,0,0,0));
     }

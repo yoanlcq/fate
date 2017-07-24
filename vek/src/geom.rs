@@ -1,14 +1,17 @@
-// TODO add useful impls to this module (inclusing basic conversions from rect to vec pairs)
+// WISH add useful impls to this module (inclusing basic conversions from rect to vec pairs)
 
 // NOTE: in this module, the type parameters <P,E> usually stand for Position and Extent.
 
+extern crate num_traits;
+
+use self::num_traits::{/*Float, Zero*/FloatConst, One};
 use core::mem;
 use core::ops::*;
-
+//use clamp::partial_max;
 
 macro_rules! geom_complete_mod {
     ($mod:ident) => {
-        use mat::$mod::Mat2;
+        // use mat::$mod::Mat2;
         use vec::$mod::*;
 
         #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -58,10 +61,43 @@ macro_rules! geom_complete_mod {
         }
 
         impl<P,E> Disk<P,E> {
-            pub fn area(self) -> E { unimplemented!() }
-            pub fn diameter(self) -> E where E: Copy + Add<Output=E> { self.radius + self.radius }
-            pub fn collision(self, _other: Self) -> Xy<P> { unimplemented!() }
-            pub fn collision_with_point(self, _p: Xy<P>) -> Xy<P> { unimplemented!() }
+            pub fn area(self) -> E where E: Clone + FloatConst + Mul<Output=E> { 
+                let r = || self.radius.clone(); 
+                E::PI()*r()*r()
+            }
+            pub fn diameter(self) -> E where E: Clone + Add<Output=E> { 
+                self.radius.clone() + self.radius.clone()
+            }
+            /*
+            /// Returns the magnitude of the direction vector that can push or pull
+            /// the other disk such that they both collide exactly.
+            ///
+            /// A negative value indicates that both disks collide by this amount.  
+            /// Otherwise, it's the distance such that they would collide.
+            pub fn disk_distance_magnitude(self, other: Self) -> Xy<P> 
+                where E: Sub<Output=E>, P: Float
+            {
+                Xy::distance(self.center, other.center) - self.radius - other.radius
+            }
+            /// How much this disk penetrates another.
+            pub fn disk_penetration_vector(self, other: Self) -> Xy<P>
+                where P: Clone, E: Clone + Zero
+            {
+                let len = self.clone().disk_collision_magnitude(other.clone());
+                (self.center - other.center) * partial_max(E::zero(), len)
+            }
+            pub fn disk_distance_vector(self, other: Self) -> Xy<P>
+                where P: Clone + Sub<Output=P>, E: Clone 
+            {
+                let len = self.clone().disk_collision_magnitude(other.clone());
+                (self.center - other.center) * len
+            }
+            /// Returns the direction vector such that moving `p` by it pushes it
+            /// exactly outside of the disk.
+            pub fn point_distance_magnitude(self, p: Xy<P>) -> Xy<P> {
+                Xy::distance(self.center, p) - self.radius
+            }
+            */
         }
 
         #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -70,11 +106,24 @@ macro_rules! geom_complete_mod {
             pub radius: E,
         }
         impl<P,E> Sphere<P,E> {
-            pub fn surface_area(self) -> E { unimplemented!() } // 4*pi*r*r
-            pub fn volume(self) -> E { unimplemented!() } // pi*r*r*r*4/3
-            pub fn diameter(self) -> E where E: Copy + Add<Output=E> { self.radius + self.radius }
+            pub fn surface_area(self) -> E where E: Clone + One + FloatConst + Add<Output=E> + Mul<Output=E> {
+                let four = E::one() + E::one() + E::one() + E::one();
+                let r = || self.radius.clone();
+                four*E::PI()*r()*r()
+            }
+            pub fn volume(self) -> E where E: Clone + One + FloatConst + Add<Output=E> + Mul<Output=E> + Div<Output=E> {
+                let four = E::one() + E::one() + E::one() + E::one();
+                let three = E::one() + E::one() + E::one();
+                let r = || self.radius.clone();
+                (four/three)*E::PI()*r()*r()*r()
+            }
+            pub fn diameter(self) -> E where E: Clone + Add<Output=E> {
+                self.radius.clone() + self.radius.clone()
+            }
+            /*
             pub fn collision(self, _other: Self) -> Xyz<P> { unimplemented!() }
             pub fn collision_with_point(self, _p: Xyz<P>) -> Xyz<P> { unimplemented!() }
+            */
         }
 
         #[derive(Debug, Default, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -127,6 +176,7 @@ macro_rules! geom_complete_mod {
                 out.extent   = self.extent  .convert(ef);
                 out
             }
+            /*
             pub fn collision(self, _other: Self) -> Xy<P> {
                 unimplemented!()    
             }
@@ -139,6 +189,7 @@ macro_rules! geom_complete_mod {
             pub fn split(self, _from_topleft: Extent2<E>) -> Mat2<Self> {
                 unimplemented!()
             }
+            */
         }
 
         impl<P,E> From<(Xy<P>, Extent2<E>)> for Rect<P,E> {
@@ -147,6 +198,17 @@ macro_rules! geom_complete_mod {
                 let extent = t.1;
                 Self { position, extent }
             }
+        }
+
+        // NOTE: Don't implement Default
+        #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        pub struct FrustumPlanes<T> {
+            pub left: T,
+            pub right: T,
+            pub bottom: T,
+            pub top: T,
+            pub near: T,
+            pub far: T,
         }
     }
 }

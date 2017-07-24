@@ -3,7 +3,7 @@
 //! over the conversion behavior.
 
 
-// TODO would be good to be able to directly Lerp on Rgb<T: ColorChannel> though
+// WISH: would be good to be able to directly Lerp on Rgb<T: ColorChannel> though
 
 extern crate num_traits;
 
@@ -12,8 +12,6 @@ use core::ops::*;
 use vec::repr_simd::*;
 use vec::repr_c_aliases::*;
 use clamp::{Clamp01, clamp01};
-
-// TODO split into two traits, Lerp and LerpUnclamped
 
 pub trait Lerp<Progress=f32>: Sized + Add<Output=Self> + Mul<Progress, Output=Self>
 {
@@ -48,7 +46,7 @@ macro_rules! lerp_impl_for_vecs {
     ($($Vec:ident)+) => {
         $(
             impl<T: Clone + Clamp01 + Sub<Output=T>> Lerp<     T > for $Vec <T> {}
-            // TODO: Extend Clamp to vectors somehow
+            // WISH: Extend Clamp to vectors somehow
             // impl<T: Clone + Clamp01 + Sub<Output=T>> Lerp<$Vec<T>> for $Vec <T> {}
         )+
     }

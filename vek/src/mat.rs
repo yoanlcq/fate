@@ -19,17 +19,7 @@ use core::mem;
 use core::ptr;
 use geom;
 
-// TODO: move FrustumPlanes to geom module ??
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct FrustumPlanes<T> {
-    pub left: T,
-    pub right: T,
-    pub bottom: T,
-    pub top: T,
-    pub near: T,
-    pub far: T,
-}
-pub type Ortho<T> = FrustumPlanes<T>;
+pub type Ortho<T> = geom::repr_simd::FrustumPlanes<T>;
 pub type Viewport = geom::repr_simd::Rect<u32, u32>;
 
 macro_rules! mat_impl {
@@ -46,7 +36,7 @@ macro_rules! mat_impl {
             ///
             /// You can safely assume that this convention won't change and that
             /// its public `rows` member will not be renamed.
-			// TODO: repr(align(16)) is good on x86. Investigate for other platforms.
+			// WISH: repr(align(16)) is good on x86. Investigate for other platforms.
             #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Ord, PartialOrd)]
 			#[repr(align(16))]
             pub struct $Mat<T> { pub rows: $Col<$Row<T>> }
@@ -75,7 +65,8 @@ macro_rules! mat_impl {
                     out
                 }
                 /*
-                pub fn broadcast_major_diagonal(val: T) { // TODO
+                 * WISH: all of these matrix functions
+                pub fn broadcast_major_diagonal(val: T) {
                     
                 }
                 pub fn pow(self, n: i32) {}
@@ -190,7 +181,7 @@ macro_rules! mat_impl {
                     }
                 }
             }
-            // TODO implement vec*mat. Not used often, but does exist.
+            // WISH: implement vec*mat. Not used often, but does exist.
 
             impl<T> MulAssign for $Mat<T>
                 where T: Clone + Zero + Add<Output=T> + Mul<Output=T>
