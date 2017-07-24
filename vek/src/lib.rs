@@ -4,6 +4,7 @@
 //!
 //! DO NOT USE (yet). This is very much a work-in progress, breaking changes happen all the time on a whim.
 
+// TODO have a story for using on non-Nightly channels
 // TODO: Implement correctness check for FrustumPlanes (i.e left <= right, etc)
 // TODO index vectors by range
 // TODO angle between two vectors
