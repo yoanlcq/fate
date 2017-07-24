@@ -5,6 +5,7 @@
 //! DO NOT USE (yet). This is very much a work-in progress, breaking changes happen all the time on a whim.
 
 // TODO index vectors by range
+// TODO put must_use where relevant (seems to work on functions)
 // TODO tests
 // TODO benchmarks
 // TODO doc
