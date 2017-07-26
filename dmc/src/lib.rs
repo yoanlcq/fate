@@ -2,6 +2,8 @@
 //! 
 //! This is an attempt at an SDL2 rewrite in Rust. The end goal is to get
 //! rid of the dependency on SDL2's DLL for Rust apps.
+//!
+//! TODO be able to provide WM_QUERYENDSESSION and WM_ENDSESSION events (Win32)- See [Shutting Down](https://msdn.microsoft.com/en-us/library/windows/desktop/aa376881(v=vs.85).aspx)
 
 #![doc(html_root_url = "https://docs.rs/dmc/0.1.0")]
 //#![feature(test)]
