@@ -13,13 +13,12 @@ version = "0.1.0" # remember to update html_root_url
 
 [dependencies.vek]
 optional = false
-path = "./vek"
-version = "0.1.0"
+git = "https://github.com/yoanlcq/vek"
+
 
 [dependencies.dmc]
 optional = false
-path = "./dmc"
-version = "0.1.0"
+git = "https://github.com/yoanlcq/dmc"
 
 
 [features]
