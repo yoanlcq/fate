@@ -6,17 +6,23 @@
 //#![deny(missing_docs)]
 #![doc(test(attr(deny(warnings))))]
 #![feature(test)]
-#![feature(inclusive_range, inclusive_range_syntax)]
-#![feature(i128_type)]
-#![feature(link_llvm_intrinsics)]
-//#![feature(repr_simd)]
+
 
 extern crate test;
+#[macro_use]
+extern crate bitflags;
 extern crate vek;
 
 pub use vek::*;
 
-pub mod intrin;
-pub use intrin::*;
-pub mod marker;
-pub use marker::*;
+mod main_loop_try;
+pub mod thread_mask;
+pub use thread_mask::ThreadMask;
+pub mod global;
+pub use global::Global;
+pub mod system;
+pub use system::System;
+
+pub fn foo() {
+    main_loop_try::main_try()
+}

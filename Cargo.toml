@@ -10,15 +10,5 @@ name = "fate"
 version = "0.1.0" # remember to update html_root_url
 
 [dependencies]
-
-[dependencies.vek]
-optional = false
-git = "https://github.com/yoanlcq/vek"
-
-
-[dependencies.dmc]
-optional = false
-git = "https://github.com/yoanlcq/dmc"
-
-
-[features]
+vek = "~0.9.3"
+bitflags = "~1.0.3"
