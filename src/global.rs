@@ -1,67 +1,131 @@
 use std::thread;
-use std::sync::{RwLock, Arc};
-use std::collections::HashMap;
+use std::any::Any;
+use std::sync::{Mutex, Arc};
+use std::collections::{HashMap, VecDeque};
 use std::borrow::Cow;
+use std::ops::Deref;
+use std::time::Duration;
 use thread_mask::ThreadMask;
-use system::System;
+use system::{System};
 
-type CowStr = Cow<'static, str>;
+pub(crate) type CowStr = Cow<'static, str>;
+pub(crate) type SystemBox = Box<System + Send>;
 
-#[derive(Default)]
-pub struct Global {
-    pub threads: RwLock<HashMap<CowStr, thread::JoinHandle<()>>>,
+pub struct G(Arc<SharedG>);
+
+pub struct SharedG {
+    threads: Mutex<HashMap<CowStr, thread::JoinHandle<()>>>,
+    pub(crate) systems: Mutex<HashMap<CowStr, SystemBox>>, // NOTE: Always a Box so these can be added and removed at runtime.
+    pub(crate) messages: Mutex<VecDeque<Box<Any + Send>>>,
+    fps_ceil: Mutex<Option<f64>>,
+    tick_dt: Mutex<Duration>,
+    frame_time_ceil: Mutex<Duration>,
 }
 
-impl Global {
-    pub fn new() -> Self {
-        Self {
-            threads: RwLock::new(HashMap::new()),
+impl Drop for SharedG {
+    fn drop(&mut self) {
+        // Join threads
+        let mut t = self.threads.lock().unwrap();
+        for (i, t) in t.drain() {
+            t.join().unwrap();
+            println!("Main: Thread {}: Joined", i);
         }
     }
-/*
-    // Spawn threads    
-    let g = Arc::new(g);
-    for i in 1..6 {
-        g.threads.write().unwrap().push({
-            let g = g.clone();
-            println!("Main: Thread {}: Spawning", i);
+}
+
+impl Deref for G {
+    type Target = SharedG;
+    fn deref(&self) -> &SharedG {
+        &self.0
+    }
+}
+
+impl G {
+    pub fn new() -> Self {
+        G(Arc::new(SharedG::new()))
+    }
+    pub fn spawn_threads<T: IntoIterator<Item=(CowStr, ThreadMask)>>(&self, entries: T) {
+        for (key, mask) in entries {
+            self.spawn_thread(key, mask);
+        }
+    }
+    pub fn spawn_thread<T: Into<CowStr>>(&self, key: T, mask: ThreadMask) {
+        let key = key.into();
+        self.threads.lock().unwrap().insert(key.clone(), {
+            println!("Main: Spawning thread `{}`", key);
+            let g = G(self.0.clone());
             thread::Builder::new()
-                .name(format!("Thread {}", i))
-                .spawn(move || g.thread_proc(i))
+                .name(key.clone().into())
+                .spawn(move || g.thread_proc(mask, key.into()))
                 .unwrap()
         });
     }
-    g.thread_proc(0); // Process main thread
-
-    // Join threads
-    let mut t = g.threads.write().unwrap();
-    for (i, t) in t.drain(..).enumerate() {
-        t.join().unwrap();
-        println!("Main: Thread {}: Joined", i+1);
-    }
-    */
-
-    fn thread_proc(&self) {
-        unimplemented!()
-    }
-
-    pub fn spawn_threads<T: Into<CowStr>>(&self, entries: &[(T, ThreadMask)]) {
-        for entry in entries {
-            let cowstr = entry.0.into();
-            self.threads.write().unwrap().insert(cowstr, {
-                println!("Main: Spawning thread `{}`", cowstr);
-                thread::Builder::new()
-                    .name(cowstr.into())
-                    .spawn(move || self.thread_proc())
-                    .unwrap()
-            });
+    fn thread_proc(self, my_mask: ThreadMask, my_name: CowStr) {
+        for (key, sys) in self.systems.lock().unwrap().iter() {
+            if sys.thread_mask().intersects(my_mask) {
+                println!("Thread `{}`: Processing `{}`", my_name, key);
+                let _ = sys.quit(&self); // FIXME: Remove. Just ensure we can pass self
+            }
         }
     }
-    pub fn register_systems(&self, systems: &[&System]) {
-        unimplemented!()
+}
+
+impl SharedG {
+    fn new() -> Self {
+        Self {
+            threads: Default::default(),
+            systems: Default::default(),
+            messages: Default::default(),
+            fps_ceil: Mutex::new(Some(124.)),
+            tick_dt: Mutex::new(Duration::from_millis(16)),
+            frame_time_ceil: Mutex::new(Duration::from_millis(512)),
+        }
     }
-    pub fn run(&mut self) { // Takes mut because this should only be called once and in one place.
-        unimplemented!()
+    pub fn set_fps_ceil(&self, fps_ceil: Option<f64>) {
+        *self.fps_ceil.lock().unwrap() = fps_ceil;
+    }
+    pub fn fps_ceil(&self) -> Option<f64> {
+        *self.fps_ceil.lock().unwrap()
+    }
+    pub fn set_tick_dt(&self, d: Duration) {
+        *self.tick_dt.lock().unwrap() = d;
+    }
+    pub fn tick_dt(&self) -> Duration {
+        *self.tick_dt.lock().unwrap()
+    }
+    pub fn set_frame_time_ceil(&self, d: Duration) {
+        *self.frame_time_ceil.lock().unwrap() = d;
+    }
+    pub fn frame_time_ceil(&self) -> Duration {
+        *self.frame_time_ceil.lock().unwrap()
+    }
+
+    pub fn set_thread_mask(&self, key: &str, mask: ThreadMask) {
+        if let Some(thread) = self.threads.lock().unwrap().get(key) {
+            unimplemented!{}; //TODO: TLS ?
+        }
+    }
+    pub fn join_thread(&self, key: &str) {
+        if let Some(thread) = self.threads.lock().unwrap().remove(key) {
+            thread.join().unwrap();
+        }
+    }
+    // FIXME: This can be called from anywhere. Do not lock the systems; lock a dedicated queue
+    // instead and wait until next frame
+    pub fn register_system(&self, key: CowStr, system: SystemBox) {
+        self.systems.lock().unwrap().insert(key.into(), system);
+    }
+    // FIXME: This can be called from anywhere. Do not lock the systems; lock a dedicated queue
+    // instead and wait until next frame
+    pub fn register_systems<T: IntoIterator<Item=(CowStr, SystemBox)>>(&self, systems: T) {
+        for (key, sys) in systems.into_iter() {
+            self.register_system(key, sys);
+        }
+    }
+    // FIXME: This can be called from anywhere. Do not lock the systems; lock a dedicated queue
+    // instead and wait until next frame
+    pub fn unregister_system(&self, key: &str) {
+        self.systems.lock().unwrap().remove(key);
     }
 }
 

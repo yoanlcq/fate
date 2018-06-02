@@ -12,3 +12,4 @@ version = "0.1.0" # remember to update html_root_url
 [dependencies]
 vek = "~0.9.3"
 bitflags = "~1.0.3"
+log = "~0.4.1"

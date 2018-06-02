@@ -1,6 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 use std::time::{Duration, Instant};
 use duration_ext::DurationExt;
+use system::{Tick, Draw};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct TimeManager {
@@ -26,6 +27,24 @@ pub struct FpsStats {
     pub interval: Duration,
 }
 
+#[derive(Debug)]
+pub struct Ticks<'a> {
+    time: &'a mut TimeManager,
+}
+
+impl<'a> Iterator for Ticks<'a> {
+    type Item = Tick;
+    fn next(&mut self) -> Option<Tick> {
+        if self.time.accumulator < self.time.dt {
+            None
+        } else {
+            let tick = Tick { t: self.time.t, dt: self.time.dt };
+            self.time.t += self.time.dt;
+            self.time.accumulator -= self.time.dt;
+            Some(tick)
+        }
+    }
+}
 
 impl TimeManager {
     pub fn with_fixed_dt_and_frame_time_ceil(dt: Duration, frame_time_ceil: Duration) -> Self {
@@ -39,6 +58,15 @@ impl TimeManager {
             fps_ceil: None,
         }
     }
+    pub fn set_fps_ceil(&mut self, ceil: Option<f64>) {
+        self.fps_ceil = ceil;
+    }
+    pub fn set_frame_time_ceil(&mut self, d: Duration) {
+        self.frame_time_ceil = d;
+    }
+    pub fn set_tick_dt(&mut self, d: Duration) {
+        self.dt = d;
+    }
     pub fn begin_main_loop_iteration(&mut self) {
         let new_time = Instant::now();
         self.frame_time = new_time - self.current_time;
@@ -49,15 +77,13 @@ impl TimeManager {
             self.frame_time
         };
     }
-    pub fn pump_physics_steps<F>(&mut self, mut f: F) where F: FnMut(Duration, Duration) {
-        while self.accumulator >= self.dt {
-            f(self.t, self.dt);
-            self.t += self.dt;
-            self.accumulator -= self.dt;
-        }
+    pub fn ticks(&mut self) -> Ticks {
+        Ticks { time: self }
     }
-    pub fn gfx_lerp_factor(&self) -> f64 {
-        self.accumulator.to_f64_seconds() / self.dt.to_f64_seconds()
+    pub fn draw(&self) -> Draw {
+        Draw {
+            progress_within_tick: self.accumulator.to_f64_seconds() / self.dt.to_f64_seconds(),
+        }
     }
     pub fn end_main_loop_iteration(&mut self) {
         if let Some(fps_ceil) = self.fps_ceil {
