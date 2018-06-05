@@ -22,18 +22,22 @@ extern crate vek;
 
 pub use vek::*;
 
-mod main_loop_try;
-pub mod thread_mask;
-pub use thread_mask::ThreadMask;
-mod time;
 pub mod duration_ext;
+pub mod fps;
 pub mod main_loop;
-pub use main_loop::run;
+/*
 pub mod global;
 pub use global::G;
 pub mod system;
 pub use system::System;
+pub mod thread_mask;
+pub use thread_mask::ThreadMask;
+*/
+
+mod main_loop_trivial;
+mod main_loop_sequential;
 
 pub fn make_it_look_like_main_loop_try_is_used() {
-    main_loop_try::main_try()
+    main_loop_trivial::main();
+    main_loop_sequential::main();
 }

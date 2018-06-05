@@ -1,145 +1,150 @@
-use std::time::Duration;
-use std::iter;
-use std::mem;
-use system::{MainSystem, Tick, Draw, Quit};
-use time::TimeManager;
-use global::G;
+use std::time::{Duration, Instant};
+use std::thread;
+use duration_ext::DurationExt;
 
-// Notes:
-// + If the task is completed it can get the result,
-//   and if not it can safely remove the task from the
-//   queue and go ahead and perform that task itself.
-// + Pipelining
-
-// Main thread-specific stuff; Everything that isn't `Send` (e.g platform context) goes here.
-struct Main<'a> {
-    m: &'a mut MainSystem,
-    g: G,
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct Tick {
+    pub t: Duration,
+    pub dt: Duration,
+}
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Draw {
+    pub progress_within_tick: f64,
 }
 
-impl<'a> Main<'a> {
-    fn new(m: &'a mut MainSystem, g: G) -> Self {
-        Self { m, g }
-    }
-    pub fn fps_ceil(&mut self) -> Option<f64> {
-        self.g.fps_ceil()
-    }
-    pub fn tick_dt(&mut self) -> Duration {
-        self.g.tick_dt()
-    }
-    pub fn frame_time_ceil(&mut self) -> Duration {
-        self.g.frame_time_ceil()
-    }
+// Most of these take `&mut self` because there's always only one owner; That's the point.
+pub trait MainSystem {
+    fn quit(&self) -> bool;
 
-    pub fn should_quit(&mut self) -> bool {
-        let mut dont_quit = 0;
-        let mut should_quit = 0;
+    fn fps_ceil(&self) -> Option<f64>;
+    fn tick_dt(&self) -> Duration;
+    fn frame_time_ceil(&self) -> Duration;
 
-        let systems = self.g.systems.lock().unwrap();
-        let main_vote = self.m.quit(&self.g);
-        let sys_votes = systems.iter().map(|(key, sys)| sys.quit(&self.g));
+    fn begin_main_loop_iteration(&mut self);
+    fn end_main_loop_iteration  (&mut self);
 
-        for vote in iter::once(main_vote).chain(sys_votes) {
-            match vote {
-                Quit::ForceQuit => return true,
-                Quit::ShouldQuit => should_quit += 1,
-                Quit::DontQuit => dont_quit += 1,
-                Quit::DontCare => (),
-            };
-        }
-        should_quit > 0 && dont_quit == 0
-    }
-    pub fn pump_events(&mut self) {
-        loop {
-            if let Some(event) = self.m.poll_event(&self.g) {
-                for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-                    sys.event(&self.g, event);
-                }
-            } else {
-                break;
-            }
-            self.pump_messages();
-        }
-        self.pump_messages();
-    }
-    fn pump_messages(&mut self) {
-        // Handling messages can cause new messages to be emitted
-        while !self.g.messages.lock().unwrap().is_empty() {
-            // replace() here allows us not to borrow the message queue while iterating,
-            // which allows systems to push messages to the queue while already handling messages.
-            for msg in mem::replace(&mut *self.g.messages.lock().unwrap(), Default::default()) {
-                for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-                    sys.event(&self.g, &msg);
-                }
-            }
-        }
-    }
-    pub fn begin_main_loop_iteration(&mut self) {
-        self.m.begin_main_loop_iteration(&self.g);
-        for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-            sys.begin_main_loop_iteration(&self.g);
-        }
-    }
-    pub fn end_main_loop_iteration(&mut self) {
-        for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-            sys.end_main_loop_iteration(&self.g);
-        }
-        self.m.end_main_loop_iteration(&self.g);
-    }
-    pub fn tick(&mut self, tick: &Tick) {
-        self.m.before_tick(&self.g, tick);
-        for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-            sys.tick(&self.g, tick);
-        }
-        self.m.after_tick(&self.g, tick);
-    }
-    pub fn draw(&mut self, draw: &Draw) {
-        self.m.before_draw(&self.g, draw);
-        for (key, sys) in self.g.systems.lock().unwrap().iter_mut() {
-            sys.draw(&self.g, draw);
-        }
-        self.m.after_draw(&self.g, draw);
-    }
-}
-
-fn can_process_task(tasks: &[Task], me: ThreadContext) -> Option<TaskID> {
-    // TODO: Which task should this thread pick up? This is yours to implement!
+    fn pump_events(&mut self);
+    fn tick(&mut self, tick: &Tick);
+    fn draw(&mut self, draw: &Draw);
 }
 
 
-pub fn run(main_sys: &mut MainSystem, g: G) {
-    let mut m = Main::new(main_sys, g);
-    if m.should_quit() {
+pub fn run(m: &mut MainSystem) {
+    if m.quit() {
         return;
     }
-    let mut time = TimeManager::with_fixed_dt_and_frame_time_ceil(
+    let mut t = TimeManager::with_fixed_dt_and_frame_time_ceil(
         m.tick_dt(),
         m.frame_time_ceil(),
     );
 
     'main: loop {
-        time.set_fps_ceil(m.fps_ceil());
-        time.set_tick_dt(m.tick_dt());
-        time.set_frame_time_ceil(m.frame_time_ceil());
-        time.begin_main_loop_iteration();
-        m   .begin_main_loop_iteration();
+        t.set_fps_ceil(m.fps_ceil());
+        t.set_tick_dt(m.tick_dt());
+        t.set_frame_time_ceil(m.frame_time_ceil());
 
-        if m.should_quit() { break 'main; }
+        t.begin_main_loop_iteration();
+        m.begin_main_loop_iteration();
+
+        if m.quit() { break 'main; }
         m.pump_events();
-        for tick in time.ticks() {
-            if m.should_quit() { break 'main; }
+        for tick in t.ticks() {
+            if m.quit() { break 'main; }
             m.tick(&tick);
-            if m.should_quit() { break 'main; }
+            if m.quit() { break 'main; }
             m.pump_events();
         }
 
-        if m.should_quit() { break 'main; }
-        m.draw(&time.draw());
-        if m.should_quit() { break 'main; }
+        if m.quit() { break 'main; }
+        m.draw(&t.draw());
+        if m.quit() { break 'main; }
 
-        m   .end_main_loop_iteration();
-        if m.should_quit() { break 'main; }
-        time.end_main_loop_iteration();
+        m.end_main_loop_iteration();
+        if m.quit() { break 'main; }
+        t.end_main_loop_iteration();
+    }
+}
+
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct TimeManager {
+    pub t: Duration,
+    pub dt: Duration,
+    pub current_time: Instant,
+    pub accumulator: Duration,
+    pub frame_time_ceil: Duration,
+    pub frame_time: Duration,
+    pub fps_ceil: Option<f64>,
+}
+
+#[derive(Debug)]
+struct Ticks<'a> {
+    time: &'a mut TimeManager,
+}
+
+impl<'a> Iterator for Ticks<'a> {
+    type Item = Tick;
+    fn next(&mut self) -> Option<Tick> {
+        if self.time.accumulator < self.time.dt {
+            None
+        } else {
+            let tick = Tick { t: self.time.t, dt: self.time.dt };
+            self.time.t += self.time.dt;
+            self.time.accumulator -= self.time.dt;
+            Some(tick)
+        }
+    }
+}
+
+impl TimeManager {
+    pub fn with_fixed_dt_and_frame_time_ceil(dt: Duration, frame_time_ceil: Duration) -> Self {
+        Self {
+            t: Duration::default(),
+            dt,
+            current_time: Instant::now(),
+            accumulator: Duration::default(),
+            frame_time_ceil,
+            frame_time: Duration::default(),
+            fps_ceil: None,
+        }
+    }
+    pub fn set_fps_ceil(&mut self, ceil: Option<f64>) {
+        self.fps_ceil = ceil;
+    }
+    pub fn set_frame_time_ceil(&mut self, d: Duration) {
+        self.frame_time_ceil = d;
+    }
+    pub fn set_tick_dt(&mut self, d: Duration) {
+        self.dt = d;
+    }
+    pub fn begin_main_loop_iteration(&mut self) {
+        let new_time = Instant::now();
+        self.frame_time = new_time - self.current_time;
+        self.current_time = new_time;
+        self.accumulator += if self.frame_time > self.frame_time_ceil {
+            self.frame_time_ceil
+        } else {
+            self.frame_time
+        };
+    }
+    pub fn ticks(&mut self) -> Ticks {
+        Ticks { time: self }
+    }
+    pub fn draw(&self) -> Draw {
+        Draw {
+            progress_within_tick: self.accumulator.to_f64_seconds() / self.dt.to_f64_seconds(),
+        }
+    }
+    pub fn end_main_loop_iteration(&mut self) {
+        if let Some(fps_ceil) = self.fps_ceil {
+            let a_frame = Duration::from_f64_seconds(1. / fps_ceil);
+            let ftime = Instant::now() - self.current_time;
+            trace!("Time: frame_time={}, max_frame_time={}", ftime.to_f64_seconds(), a_frame.to_f64_seconds());
+            if ftime < a_frame {
+                trace!("Time: Sleeping for {} seconds", (a_frame - ftime).to_f64_seconds());
+                thread::sleep(a_frame - ftime);
+            }
+        }
     }
 }
 
