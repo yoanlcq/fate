@@ -50,26 +50,42 @@ impl !Sync for Game {}
 
 impl Game {
     pub fn new() -> Self {
-        let mut shared = SharedGame::default();
+        let shared = SharedGame::default();
         let mut systems = Vec::new();
         systems.push(Box::new(ExampleSystem) as Box<System>);
         systems.push(Box::new(ExampleSystem));
-        Self { shared: RefCell::new(shared), systems }
+        Self { shared: RefCell::new(shared), systems, }
     }
 }
 impl MainSystem for Game {
-    fn quit(&self) -> bool { false }
+    fn quit(&self) -> bool {
+        let mut should_quit = 0;
+        let mut dont_quit = 0;
+        for sys in self.systems.iter() {
+            match sys.quit() {
+                Quit::ForceQuit => return true,
+                Quit::ShouldQuit => should_quit += 1,
+                Quit::DontQuit => dont_quit += 1,
+                Quit::DontCare => (),
+            };
+        }
+        should_quit > 0 && dont_quit == 0
+    }
 
-    fn fps_ceil(&self) -> Option<f64> { None }
+    fn fps_ceil(&self) -> Option<f64> { None } // TODO: FpsLimiter
     fn tick_dt(&self) -> Duration { Duration::from_millis(16) }
     fn frame_time_ceil(&self) -> Duration { Duration::from_millis(250) }
 
     fn begin_main_loop_iteration(&mut self) {}
     fn end_main_loop_iteration  (&mut self) {}
 
-    fn pump_events(&mut self) {}
-    fn tick(&mut self, _tick: &Tick) {}
-    fn draw(&mut self, draw: &Draw) {
+    fn pump_events(&mut self) {} // TODO: Dispatch event (like e.g Sdl2EventHandler), + custom messages
+    fn tick(&mut self, tick: &Tick) {
+        for sys in self.systems.iter_mut() {
+            sys.tick(&mut self.shared.borrow_mut(), tick); // TODO: physics swap buffers trick
+        }
+    }
+    fn draw(&mut self, draw: &Draw) { // TODO: Custom "draw" delta time sampler
         // glClear()...
         for sys in self.systems.iter_mut() {
             sys.draw(&mut self.shared.borrow_mut(), draw);
