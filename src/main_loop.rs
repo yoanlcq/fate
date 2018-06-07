@@ -4,12 +4,11 @@ use duration_ext::DurationExt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Tick {
-    pub t: Duration,
     pub dt: Duration,
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Draw {
-    pub progress_within_tick: f64,
+    pub tick_progress: f64,
 }
 
 // Most of these take `&mut self` because there's always only one owner; That's the point.
@@ -68,7 +67,6 @@ pub fn run(m: &mut MainSystem) {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct TimeManager {
-    pub t: Duration,
     pub dt: Duration,
     pub current_time: Instant,
     pub accumulator: Duration,
@@ -88,8 +86,7 @@ impl<'a> Iterator for Ticks<'a> {
         if self.time.accumulator < self.time.dt {
             None
         } else {
-            let tick = Tick { t: self.time.t, dt: self.time.dt };
-            self.time.t += self.time.dt;
+            let tick = Tick { dt: self.time.dt };
             self.time.accumulator -= self.time.dt;
             Some(tick)
         }
@@ -99,7 +96,6 @@ impl<'a> Iterator for Ticks<'a> {
 impl TimeManager {
     pub fn with_fixed_dt_and_frame_time_ceil(dt: Duration, frame_time_ceil: Duration) -> Self {
         Self {
-            t: Duration::default(),
             dt,
             current_time: Instant::now(),
             accumulator: Duration::default(),
@@ -132,7 +128,7 @@ impl TimeManager {
     }
     pub fn draw(&self) -> Draw {
         Draw {
-            progress_within_tick: self.accumulator.to_f64_seconds() / self.dt.to_f64_seconds(),
+            tick_progress: self.accumulator.to_f64_seconds() / self.dt.to_f64_seconds(),
         }
     }
     pub fn end_main_loop_iteration(&mut self) {

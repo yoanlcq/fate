@@ -1,6 +1,7 @@
 use std::any::Any;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use main_loop::{self, MainSystem, Tick, Draw};
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -17,9 +18,40 @@ impl Default for Quit {
     }
 }
 
+#[derive(Debug)]
+struct FrameTimeManager {
+    previous_frame_times: VecDeque<Duration>,
+    current_frame_start: Option<Instant>,
+    max_len: usize, // TODO: Init this
+    current_average_frame_time: Option<Duration>,
+}
+
+impl FrameTimeManager {
+    pub fn begin_main_loop_iteration(&mut self) {
+        self.current_frame_start = Some(Instant::now());
+    }
+    pub fn end_main_loop_iteration  (&mut self) {
+        self.previous_frame_times.push_back(self.current_frame_start.unwrap().elapsed());
+        while self.previous_frame_times.len() > self.max_len {
+            self.previous_frame_times.pop_front();
+        }
+        // Recompute average
+        let mut avg = Duration::default();
+        for d in self.previous_frame_times.iter() {
+            avg += *d;
+        }
+        avg /= self.previous_frame_times.len() as u32;
+        self.current_average_frame_time = Some(avg);
+    }
+    pub fn dt(&self) -> Option<Duration> {
+        self.current_average_frame_time
+    }
+}
+
 #[derive(Default)]
 struct SharedGame {
-    some_shared_data: (),
+    t: Duration, // Total physics time since the game started (accumulation of per-tick delta times)
+    frame_time_manager: FrameTimeManager,
 }
 pub type G = SharedGame;
 
@@ -76,16 +108,22 @@ impl MainSystem for Game {
     fn tick_dt(&self) -> Duration { Duration::from_millis(16) }
     fn frame_time_ceil(&self) -> Duration { Duration::from_millis(250) }
 
-    fn begin_main_loop_iteration(&mut self) {}
-    fn end_main_loop_iteration  (&mut self) {}
+    fn begin_main_loop_iteration(&mut self) {
+        self.shared.borrow_mut().frame_time_manager.begin_main_loop_iteration();
+    }
+    fn end_main_loop_iteration  (&mut self) {
+        self.shared.borrow_mut().frame_time_manager.end_main_loop_iteration();
+    }
 
     fn pump_events(&mut self) {} // TODO: Dispatch event (like e.g Sdl2EventHandler), + custom messages
     fn tick(&mut self, tick: &Tick) {
+        let mut shared = self.shared.borrow_mut();
+        shared.t += tick.dt;
         for sys in self.systems.iter_mut() {
-            sys.tick(&mut self.shared.borrow_mut(), tick); // TODO: physics swap buffers trick
+            sys.tick(&mut shared, tick); // TODO: physics swap buffers trick
         }
     }
-    fn draw(&mut self, draw: &Draw) { // TODO: Custom "draw" delta time sampler
+    fn draw(&mut self, draw: &Draw) {
         // glClear()...
         for sys in self.systems.iter_mut() {
             sys.draw(&mut self.shared.borrow_mut(), draw);
