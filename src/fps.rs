@@ -29,7 +29,7 @@ impl FpsCounter {
     }
     pub fn try_sampling_fps(&mut self) -> Option<FpsStats> {
         debug_assert_ne!(self.interval, Duration::default(), "Sampling over an empty interval will yield incorrect results!");
-        if Instant::now().duration_since(self.last_time) < self.interval {
+        if self.last_time.elapsed() < self.interval {
             return None;
         }
         let fps_stats = FpsStats {
