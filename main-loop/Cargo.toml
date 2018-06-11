@@ -1,0 +1,14 @@
+[package]
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "Cross-platform, game-agnostic main loop."
+documentation = "https://docs.rs/fate"
+keywords = ["cross-platform"]
+categories = [ "game-engines", "multimedia", "rendering" ]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/yoanlcq/fate"
+name = "fate-main-loop"
+version = "0.1.0" # remember to update html_root_url
+
+[dependencies]
+log = "~0.4.2"
+fate-lab = { path = "../lab" }

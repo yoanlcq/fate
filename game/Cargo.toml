@@ -1,0 +1,8 @@
+[package]
+name = "fate-test-game"
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+
+[dependencies]
+log = "~0.4.2"
+fate = { path = "../fate" }

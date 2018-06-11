@@ -1,0 +1,15 @@
+[package]
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "(placeholder) Fight And Travel (Game) Engine. A rewrite from C, focused on games which need to move fast in huge worlds, and fighting mechanics."
+documentation = "https://docs.rs/fate"
+keywords = ["cross-platform"]
+categories = [ "game-engines", "multimedia", "rendering" ]
+license = "MIT/Apache-2.0"
+repository = "https://github.com/yoanlcq/fate"
+name = "fate"
+version = "0.1.0" # remember to update html_root_url
+
+[dependencies]
+vek = "~0.9.3"
+fate-main-loop = { path = "../main-loop" }
+fate-lab = { path = "../lab" }

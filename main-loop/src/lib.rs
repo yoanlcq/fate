@@ -1,6 +1,10 @@
+extern crate fate_lab as lab;
+#[macro_use]
+extern crate log;
+
 use std::time::{Duration, Instant};
 use std::thread;
-use duration_ext::DurationExt;
+use lab::duration_ext::DurationExt;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Tick {
