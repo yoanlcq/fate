@@ -1,12 +1,16 @@
 extern crate fate;
 #[macro_use]
 extern crate log;
+extern crate env_logger;
+extern crate backtrace;
 
 use std::time::{Duration, Instant};
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use fate::main_loop::{self, MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
+
+mod early;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum Quit {
@@ -279,7 +283,10 @@ impl MainSystem for Game {
     }
 }
 
-pub fn main() {
+fn main() {
+    early::setup_log();
+    early::setup_panic_hook();
+    early::setup_env();
     main_loop::run(&mut Game::new())
 }
 

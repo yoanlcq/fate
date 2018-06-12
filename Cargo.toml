@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "lab",
+    "font",
     "main-loop",
     "fate",
     "game",

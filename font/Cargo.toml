@@ -1,0 +1,8 @@
+[package]
+name = "fate-font"
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+
+[dependencies]
+vek = { version = "~0.9" }
+freetype-sys = "~0.6"
