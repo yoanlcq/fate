@@ -1,26 +1,24 @@
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::error::Error;
-use std::ffi::CString;
-use std::ptr;
+use std::rc::Rc;
+use std::ffi::CStr;
 use std::mem;
+use std::ptr;
 use std::slice;
-use std::mem::ManuallyDrop;
-use vek::{Vec2, Extent2, Aabr};
-use freetype_sys::*;
+use std::os::raw::*;
+use vek::{Vec2, Extent2};
+use imgref::{ImgVec, ImgRef};
+use freetype_sys::{self, *};
 
 macro_rules! ft_error_codes {
     ($($variant:ident)+) => {
         #[repr(i32)]
         #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
         pub enum Error {
-            $($variant = freetype_sys::$variant),+
+            $(#[allow(warnings)] $variant = freetype_sys::$variant),+
         }
         impl Error {
             pub fn try_from_i32(i: i32) -> Option<Self> {
                 match i {
-                    freetype_sys::$variant => Some(Error::$variant),
+                    $(freetype_sys::$variant => Some(Error::$variant),)+
                     _ => None,
                 }
             }
@@ -123,10 +121,24 @@ ft_error_codes!{
 
 fn ft_result(status: i32) -> Result<(), Error> {
     if status == FT_Err_Ok {
-        Ok()
+        Ok(())
     } else {
         Err(Error::try_from_i32(status).unwrap_or(Error::FT_Err_Max))
     }
+}
+
+fn i32_from_26_6(ft_pos: FT_Pos) -> i32 {
+    (ft_pos >> 6) as _
+}
+fn f64_from_26_6(ft_pos: FT_Pos) -> f64 {
+    let dec = i32_from_26_6(ft_pos);
+    let frac = ft_pos & 0b111111;
+    dec as f64 + (frac as f64 / 0b111111 as f64)
+}
+fn f64_from_16_16(i: FT_Pos) -> f64 {
+    let dec = i >> 16;
+    let frac = i & 0xffff;
+    dec as f64 + (frac as f64 / 0xffff as f64)
 }
 
 
@@ -135,25 +147,44 @@ struct FreeType {
     ft_library: FT_Library,
 }
 
-// Docs say "Each thread should have its own FT_Library".
-impl !Send for Freetype {}
-
 impl Drop for FreeType {
     fn drop(&mut self) {
         unsafe {
-            FT_Done_FreeType(self.0);
+            FT_Done_FreeType(self.ft_library);
         }
     }
 }
 
 #[derive(Debug)]
 pub struct FontLoader {
-    ft: Arc<Freetype>,
+    ft: Rc<FreeType>,
+}
+
+impl FontLoader {
+    pub fn new() -> Result<Self, Error> {
+        let mut ft_library: FT_Library = unsafe { mem::uninitialized() };
+        ft_result(unsafe { FT_Init_FreeType(&mut ft_library) })?;
+        Ok(Self { ft: Rc::new(FreeType { ft_library })})
+    }
+
+    pub fn create_font(&self, mem: &[u8], desired_height: u32) -> Result<Font, Error> {
+        unsafe {
+            let mut ft_face: FT_Face = mem::uninitialized();
+            ft_result(FT_New_Memory_Face(self.ft.ft_library, mem.as_ptr(), mem.len() as _, 0, &mut ft_face))?;
+            let (w, h) = (0, desired_height);
+            ft_result(FT_Set_Pixel_Sizes(ft_face, w, h))?;
+            let font = Font {
+                ft: Rc::clone(&self.ft),
+                ft_face,
+            };
+            Ok(font)
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Font {
-    ft: Arc<FreeType>,
+    ft: Rc<FreeType>,
     ft_face: FT_Face,
 }
 
@@ -165,167 +196,185 @@ impl Drop for Font {
     }
 }
 
-
-impl FontLoader {
-    pub fn new() -> Result<Self, Error> {
-        let mut ft_library: FT_Library = unsafe { mem::uninitialized() };
-        ft_result(unsafe { FT_Init_FreeType(&mut ft_library) })?;
-        Ok(Self { ft: Arc::new(FreeType { ft_library })})
+impl Font {
+    fn ft_face(&self) -> &FT_FaceRec {
+        unsafe { &*self.ft_face }
     }
-
-    pub fn create_font(&self, mem: &[u8], desired_height: u32) -> Result<Font, String> {
-        let mut ft_face: FT_Face = unsafe { mem::uninitialized() };
-        ft_result(FT_New_Memory_Face(self.ft.ft_library, mem.as_ptr(), mem.len(), 0, &mut ft_face))?;
+    fn ft_face_flags(&self) -> c_long {
+        self.ft_face().face_flags
+    }
+    fn ft_size_metrics(&self) -> &FT_Size_Metrics {
+        unsafe { &(*self.ft_face().size).metrics }
+    }
+    // These are not mutually exclusive
+    pub fn is_outline_font(&self) -> bool {
+        (self.ft_face_flags() & FT_FACE_FLAG_SCALABLE) != 0
+    }
+    pub fn is_bitmap_font(&self) -> bool {
+        (self.ft_face_flags() & FT_FACE_FLAG_FIXED_SIZES) != 0
+    }
+    pub fn is_fixed_width(&self) -> bool {
+        (self.ft_face_flags() & FT_FACE_FLAG_FIXED_WIDTH) != 0
+    }
+    pub fn has_kerning(&self) -> bool {
+        (self.ft_face_flags() & FT_FACE_FLAG_KERNING) != 0
+    }
+    pub fn family_name(&self) -> String {
+        let ascii = self.ft_face().family_name;
+        assert!(!ascii.is_null());
         unsafe {
-            let (w, h) = (0, desired_height);
-            ft_result(FT_Set_Pixel_Sizes(ft_face, w, h))?;
+            CStr::from_ptr(ascii).to_string_lossy().into()
         }
-        let font = Font {
-            ft: Arc::clone(&self.ft),
-            ft_face,
-        };
-        Ok(font)
+    }
+    pub fn style_name(&self) -> Option<String> {
+        let ascii = self.ft_face().style_name;
+        if ascii.is_null() {
+            None
+        } else {
+            unsafe {
+                Some(CStr::from_ptr(ascii).to_string_lossy().into())
+            }
+        }
+    }
+    pub fn pixels_per_em(&self) -> Extent2<u16> {
+        let m = self.ft_size_metrics();
+        Extent2::new(m.x_ppem, m.y_ppem)
+    }
+    // The values below are 26.6, but already rounded to integer values as the FreeType2 docs claim.
+    pub fn ascender_px(&self) -> i32 {
+        i32_from_26_6(self.ft_size_metrics().ascender)
+    }
+    pub fn descender_px(&self) -> i32 {
+        i32_from_26_6(self.ft_size_metrics().descender)
+    }
+    pub fn height_px(&self) -> u32 {
+        let h = i32_from_26_6(self.ft_size_metrics().height);
+        assert!(h >= 0);
+        h as u32
+    }
+    pub fn max_horizontal_advance_px(&self) -> i32 {
+        i32_from_26_6(self.ft_size_metrics().max_advance)
+    }
+    pub fn glyph(&self, c: char) -> GlyphLoader {
+        GlyphLoader {
+            font: self,
+            c,
+            pedantic: false,
+            render_u8_monochrome_bitmap: false,
+        }
     }
 }
 
-// NOTE: We store a lot of them, so I prefer to use 16-bit integers here.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct Glyph {
-    // NOTE: Y axis goes downwards!
-    pub bounds: Aabr<u16>,
-    // Horizontal position relative to the cursor, in pixels.
-    // Vertical position relative to the baseline, in pixels.
-    pub offset: Vec2<i16>,
-    // How far to move the cursor for the next character.
-    pub advance: Vec2<i16>,
-    pub bitmap: Option<Image>,
-}
 
 #[derive(Debug)]
 pub struct GlyphLoader<'a> {
     font: &'a Font,
     c: char,
     pedantic: bool,
-    render: bool,
-
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq)]
-pub struct FontMetrics {
-    ft_size_metrics: FT_Size_Metrics_
+    render_u8_monochrome_bitmap: bool,
 }
 
-fn u32_from_26_6(ft_pos: FT_Pos) -> u32 {
-    ft_pos >> 6
-}
-fn f64_from_26_6(ft_pos: FT_Pos) -> f64 {
-    let dec = u32_from_26_6(ft_pos);
-    let frac = ft_pos & 0b111111;
-    dec as f64 + (frac as f64 / 0b111111 as f64)
-}
-
-impl FontMetrics {
-    pub fn pixels_per_em(&self) -> Extent2<u16> {
-        Extent2::new(self.ft_size_metrics.x_ppem, self.ft_size_metrics.y_ppem)
-    }
-    // The values below are 26.6, but already rounded to integer values as the FreeType2 docs claim.
-    pub fn ascender_px(&self) -> u32 {
-        u32_from_26_6(self.ft_size_metrics.ascender)
-    }
-    pub fn descender_px(&self) -> u32 {
-        u32_from_26_6(self.ft_size_metrics.descender)
-    }
-    pub fn height_px(&self) -> u32 {
-        u32_from_26_6(self.ft_size_metrics.height)
-    }
-    pub fn max_horizontal_advance_px(&self) -> u32 {
-        u32_from_26_6(self.ft_size_metrics.max_advance)
-    }
-}
-
-
-impl Font {
-    pub fn glyph(&self, c: char) -> GlyphLoader {
-        GlyphLoader {
-            font: self,
-            c,
-            pedantic: false,
-            render: false,
-        }
-    }
-    pub fn metrics(&self) -> FontMetrics {
-        let metrics = unsafe { &(*(*self.ft_face).size).metrics };
-        FontMetrics {
-            height_px: metrics.height / 64,
-        }
-    }
-    // These are not mutually exclusive
-    pub fn is_outline_font(&self) -> bool {
-        (self.ft_face.face_flags & FT_FACE_FLAG_SCALABLE) != 0
-    }
-    pub fn is_bitmap_font(&self) -> bool {
-        (self.ft_face.face_flags & FT_FACE_FLAG_FIXED_SIZES) != 0
-    }
-    pub fn is_fixed_width(&self) -> bool {
-        (self.ft_face.face_flags & FT_FACE_FLAG_FIXED_WIDTH) != 0
-    }
-    pub fn has_kerning(&self) -> bool {
-        (self.ft_face.face_flags & FT_FACE_FLAG_KERNING) != 0
-    }
-    // TODO: family_name
-}
-
-impl GlyphLoader {
+impl<'a> GlyphLoader<'a> {
     pub fn pedantic(mut self) -> Self { self.pedantic = true; self }
-    pub fn render(mut self) -> Self { self.render = true; self }
+    pub fn render_u8_monochrome_bitmap(mut self) -> Self { self.render_u8_monochrome_bitmap = true; self }
     pub fn load(self) -> Result<Glyph, Error> { 
+        let Self {
+            font, c, pedantic, render_u8_monochrome_bitmap,
+        } = self;
+
         let mut flags = FT_LOAD_DEFAULT;
-        if self.pedantic {
+        if pedantic {
             flags |= FT_LOAD_PEDANTIC;
         }
-        if unsafe { FT_Load_Char(self.ft_face, c as u64, flags) } != 0 {
-            return Err(format!("Could not load character '{}'", c)); // FIXME: FreeType error code!
-        }
-        let glyph_slot = unsafe { &*(*self.ft_face).glyph };
-        let &FT_GlyphSlotRec_ {
-            library: _, face: _, next: _, reserved: _, generic: _,
-            metrics, linearHoriAdvance, linearVertAdvance, advance,
-            format,
-            bitmap, bitmap_left, bitmap_top,
-            outline,
-            num_subglyphs: _, subglyphs: _,
-            control_data: _, control_len: _,
-            lsb_delta: _, rsb_delta: _,
-            other: _,
-            internal: _,
-        } = glyph_slot;
+        ft_result(unsafe { FT_Load_Char(font.ft_face, c as u64, flags) })?;
+        let mut ft_glyph_slot = unsafe { ptr::read(&*(*font.ft_face).glyph) };
 
-        if self.render {
+        let u8_monochrome_bitmap = if !render_u8_monochrome_bitmap {
+            None
+        } else {
             // FT_RENDER_MODE_MONO   => 1-bit bitmaps
             // FT_RENDER_MODE_NORMAL => 8-bit anti-aliased
             // FT_RENDER_MODE_LCD    => Horizontal RGB and BGR
             // FT_RENDER_MODE_LCD_V  => Vertical RGB and BGR
-            FT_Render_Glyph(glyph_slot, FT_RENDER_MODE_NORMAL);
-        }
-        match format {
-            FT_GLYPH_FORMAT_BITMAP => {
-                let bmp = &g.bitmap;
-                let bmp = unsafe {
-                    slice::from_raw_parts(bmp.buffer, (bmp.rows*bmp.pitch) as usize)
-                };
-                let bmp = bmp.to_vec();
-                bitmap_left;
-                bitmap_top;
-            },
-            FT_GLYPH_FORMAT_OUTLINE => {
-                outline;
-            },
-            FT_GLYPH_FORMAT_COMPOSITE => {
-                num_subglyphs;
-                subglyphs;
-            },
-            FT_GLYPH_FORMAT_PLOTTER => (),
-            FT_GLYPH_FORMAT_NONE => (),
-            _ => (),
+            ft_result(unsafe { FT_Render_Glyph(&mut ft_glyph_slot, FT_RENDER_MODE_NORMAL) })?;
+            let bmp = &ft_glyph_slot.bitmap;
+            let buf = unsafe {
+                slice::from_raw_parts(bmp.buffer, (bmp.rows*bmp.pitch) as usize)
+            };
+            Some(ImgVec::new_stride(buf.to_vec(), bmp.width as _, bmp.rows as _, bmp.pitch as _))
         };
+
+        Ok(Glyph {
+            ft_glyph_slot,
+            u8_monochrome_bitmap,
+        })
+    }
+}
+
+
+// FIXME: destructure dumb FT_GlyphSlotRec so we can derive stuff
+// #[derive(Debug, Hash, PartialEq, Eq)]
+pub struct Glyph {
+    ft_glyph_slot: FT_GlyphSlotRec,
+    u8_monochrome_bitmap: Option<ImgVec<u8>>,
+}
+
+impl Glyph {
+    fn g(&self) -> &FT_GlyphSlotRec {
+        &self.ft_glyph_slot
+    }
+    fn m(&self) -> &FT_Glyph_Metrics {
+        &self.g().metrics
+    }
+    pub fn format(&self) -> GlyphFormat { GlyphFormat::from_ft_format(self.g().format).unwrap() }
+
+    pub fn size(&self) -> Extent2<f64> { Extent2::new(self.m().width, self.m().height).map(f64_from_26_6) }
+    pub fn horizontal_bearing(&self) -> Vec2<f64> { Vec2::new(self.m().horiBearingX, self.m().horiBearingY).map(f64_from_26_6) }
+    pub fn horizontal_advance(&self) -> f64 { f64_from_26_6(self.m().horiAdvance) }
+    pub fn vertical_bearing(&self) -> Vec2<f64> { Vec2::new(self.m().vertBearingX, self.m().vertBearingY).map(f64_from_26_6) }
+    pub fn vertical_advance(&self) -> f64 { f64_from_26_6(self.m().vertAdvance) }
+
+    pub fn linear_advance(&self) -> Vec2<f64> { Vec2::new(self.g().linearHoriAdvance, self.g().linearVertAdvance).map(f64_from_16_16) }
+    pub fn advance(&self) -> Vec2<f64> { Vec2::new(self.g().advance.x, self.g().advance.y).map(f64_from_26_6) }
+
+    pub fn u8_monochrome_bitmap(&self) -> Option<ImgRef<u8>> { self.u8_monochrome_bitmap.as_ref().map(ImgVec::as_ref) }
+    /// The bitmap's left and top bearing expressed in integer pixels. The top bearing is the distance from the baseline to the top-most glyph scanline, upwards y coordinates being positive.
+    pub fn bitmap_bearing(&self) -> Vec2<i32> { Vec2::new(self.g().bitmap_left, self.g().bitmap_top) }
+
+    pub fn outline(&self) -> Option<Outline> { unimplemented!{} }
+    pub fn subglyphs(&self) -> Option<Vec<SubGlyph>> { unimplemented!{} /* self.subglyphs, self.num_subglyphs */ }
+}
+
+#[derive(Debug)]
+pub struct Outline; // FIXME
+#[derive(Debug)]
+pub struct SubGlyph; // FIXME
+
+
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum GlyphFormat {
+    /// The glyph image is a composite of several other images. This format is only used with FT_LOAD_NO_RECURSE, and is used to report compound glyphs (like accented characters).
+    Composite = FT_GLYPH_FORMAT_COMPOSITE,
+
+    /// The glyph image is a bitmap, and can be described as an FT_Bitmap. You generally need to access the ‘bitmap’ field of the FT_GlyphSlotRec structure to read it.
+    Bitmap = FT_GLYPH_FORMAT_BITMAP,
+
+    /// The glyph image is a vectorial outline made of line segments and Bezier arcs; it can be described as an FT_Outline; you generally want to access the ‘outline’ field of the FT_GlyphSlotRec structure to read it.
+    Outline = FT_GLYPH_FORMAT_OUTLINE,
+
+    /// The glyph image is a vectorial path with no inside and outside contours. Some Type 1 fonts, like those in the Hershey family, contain glyphs in this format. These are described as FT_Outline, but FreeType isn't currently capable of rendering them correctly.
+    Plotter = FT_GLYPH_FORMAT_PLOTTER,
+}
+
+impl GlyphFormat {
+    fn from_ft_format(ft_format: u32) -> Option<Self> {
+        match ft_format {
+            freetype_sys::FT_GLYPH_FORMAT_COMPOSITE => Some(GlyphFormat::Composite),
+            freetype_sys::FT_GLYPH_FORMAT_BITMAP    => Some(GlyphFormat::Bitmap),
+            freetype_sys::FT_GLYPH_FORMAT_OUTLINE   => Some(GlyphFormat::Outline),
+            freetype_sys::FT_GLYPH_FORMAT_PLOTTER   => Some(GlyphFormat::Plotter),
+            _ => None
+        }
     }
 }
