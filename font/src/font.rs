@@ -140,6 +140,11 @@ fn f64_from_16_16(i: FT_Pos) -> f64 {
     let frac = i & 0xffff;
     dec as f64 + (frac as f64 / 0xffff as f64)
 }
+fn f64_to_26_6(x: f64) -> FT_Pos {
+    let dec = x as i32;
+    let frac = ((x - dec as f64) * 0b111111 as f64) as i32;
+    (dec << 6 | frac) as _
+}
 
 
 #[derive(Debug)]
@@ -342,14 +347,136 @@ impl Glyph {
     pub fn bitmap_bearing(&self) -> Vec2<i32> { Vec2::new(self.g().bitmap_left, self.g().bitmap_top) }
 
     pub fn outline(&self) -> Option<Outline> { unimplemented!{} }
-    pub fn subglyphs(&self) -> Option<Vec<SubGlyph>> { unimplemented!{} /* self.subglyphs, self.num_subglyphs */ }
 }
 
 #[derive(Debug)]
-pub struct Outline; // FIXME
-#[derive(Debug)]
-pub struct SubGlyph; // FIXME
+pub struct Outline {
+    ft_outline: FT_Outline,
+}
 
+impl Drop for Outline {
+    fn drop(&mut self) {
+        let &FT_Outline {
+            n_contours, n_points,
+            points, tags, contours,
+            flags,
+        } = &self.ft_outline;
+        drop(Box::from_raw(points)) // FIXME: ptr to slice, not T
+    }
+}
+
+impl Outline {
+    pub(crate) fn new(ft_outline: &FT_Outline) -> Self {
+        let &FT_Outline {
+            n_contours, n_points,
+            points, tags, contours,
+            flags,
+        } = ft_outline;
+        let foo = Box::new(slice).into_raw()
+        Self {
+            ft_outline: FT_Outline {
+                n_contours, n_points, flags,
+                points, tags, contours,
+            }
+        }
+    }
+    pub fn translate(&mut self, t: Vec<f64>) {
+        let t = t.map(f64_to_26_6);
+        unsafe {
+            FT_Outline_Translate(self.ft_outline, t.x, t.y);
+        }
+    }
+    pub fn transform_2x2(&mut self, m: Mat2<f64>) {
+        let m = m.map(f64_to_26_6);
+        let m = FT_Matrix {
+            xx: m[(0, 0)],
+            xy: m[(0, 1)],
+            yx: m[(1, 0)],
+            yy: m[(1, 1)],
+        };
+        unsafe {
+            FT_Outline_Transform(self.ft_outline, &m);
+        }
+    }
+    pub fn embolden(&mut self, strength: Vec<f64>) {
+        let strength = strength.map(f64_to_26_6);
+        unsafe {
+            FT_Outline_EmboldenXY(self.ft_outline, strength.x, strength.y);
+        }
+    }
+    pub fn ctrl_box(&self) -> Aabr<f64> {
+        unsafe {
+            let mut ft_bbox = mem::uninitialized();
+            FT_Outline_get_CBox(self.ft_outline, &mut ft_bbox);
+            aabr_from_ft_bbox(ft_bbox)
+        }
+    }
+    pub fn bounding_box(&self) -> Aabr<f64> {
+        unsafe {
+            let mut ft_bbox = mem::uninitialized();
+            FT_Outline_get_BBox(self.ft_outline, &mut ft_bbox);
+            aabr_from_ft_bbox(ft_bbox)
+        }
+    }
+    pub fn fill_rule(&self) -> Option<OutlineFillRules> {
+        match unsafe { FT_Outline_Get_Orientation(self.ft_outline) } {
+            freetype_sys::FT_ORIENTATION_FILL_RIGHT => Some(OutlineFill::ClockwiseContours),
+            freetype_sys::FT_ORIENTATION_FILL_RIGHT => Some(OutlineFill::CounterClockwiseContours),
+            freetype_sys::FT_ORIENTATION_NONE => None,
+            _ => unreachable!(),
+        }
+    }
+    pub fn decompose(&self, decomposer: &mut OutlineDecomposer) {
+        unsafe fn move_to(to: *const FT_Vector, user: *mut c_void) {
+            let decomposer = &mut *(user as *mut OutlineDecomposer);
+            decomposer.move_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+        }
+        unsafe fn line_to(to: *const FT_Vector, user: *mut c_void) {
+            let decomposer = &mut *(user as *mut OutlineDecomposer);
+            decomposer.line_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+        }
+        unsafe fn conic_to(ctrl: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) {
+            let decomposer = &mut *(user as *mut OutlineDecomposer);
+            let ctrl = Vec2::new((*ctrl).x, (*ctrl).y).map(f64_from_26_6);
+            let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
+            decomposer.conic_to(ctrl, end);
+        }
+        unsafe fn cubic_to(ctrl0: *const FT_Vector, ctrl1: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) {
+            let decomposer = &mut *(user as *mut OutlineDecomposer);
+            let ctrl0 = Vec2::new((*ctrl0).x, (*ctrl0).y).map(f64_from_26_6);
+            let ctrl1 = Vec2::new((*ctrl1).x, (*ctrl1).y).map(f64_from_26_6);
+            let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
+            decomposer.cubic_to(ctrl0, ctrl1, end);
+        }
+        let ft_outline_funcs = FT_Outline_Funcs { move_to, line_to, conic_to, cubic_to };
+        unsafe {
+            FT_Outline_Decompose(self.ft_outline, &ft_outline_funcs, decomposer);
+        }
+    }
+}
+
+pub trait OutlineDecomposer {
+    fn move_to(&mut self, to: Vec2<f64>);
+    fn line_to(&mut self, to: Vec2<f64>);
+    fn conic_to(&mut self, ctrl: Vec2<f64>, end: Vec2<f64>);
+    fn cubic_to(&mut self, ctrl0: Vec2<f64>, ctrl1: Vec2<f64>, end: Vec2<f64>);
+}
+
+
+#[repr(i32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum OutlineFillRules {
+    ClockwiseContours = FT_ORIENTATION_FILL_RIGHT,
+    CounterClockwiseContours = FT_ORIENTATION_FILL_LEFT,
+}
+
+fn aabr_from_ft_bbox(ft_bbox: FT_BBox) -> Aabr<f64> {
+    let FT_BBox { xMin, xMax, yMin, yMax } = ft_bbox;
+    Aabr {
+        min: Vec2::new(xMin, xMax),
+        max: Vec2::new(yMin, yMax),
+    }.map(f64_from_26_6)
+}
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
