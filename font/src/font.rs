@@ -1,10 +1,11 @@
 use std::rc::Rc;
 use std::ffi::CStr;
+use std::path::Path;
 use std::mem;
 use std::ptr;
 use std::slice;
-use std::os::raw::*;
-use vek::{Vec2, Extent2};
+use libc::{c_void, c_char, c_short, c_int, c_long};
+use vek::{Vec2, Extent2, Mat2, Aabr};
 use imgref::{ImgVec, ImgRef};
 use freetype_sys::{self, *};
 
@@ -23,7 +24,7 @@ macro_rules! ft_error_codes {
                 }
             }
         }
-    }
+    };
 }
 ft_error_codes!{
     FT_Err_Array_Too_Large	
@@ -146,6 +147,17 @@ fn f64_to_26_6(x: f64) -> FT_Pos {
     (dec << 6 | frac) as _
 }
 
+fn nullable_ascii_to_string(ascii: *const c_char) -> Option<String> {
+    if ascii.is_null() {
+        None
+    } else {
+        unsafe {
+            Some(CStr::from_ptr(ascii).to_string_lossy().into())
+        }
+    }
+}
+
+
 
 #[derive(Debug)]
 struct FreeType {
@@ -171,18 +183,27 @@ impl FontLoader {
         ft_result(unsafe { FT_Init_FreeType(&mut ft_library) })?;
         Ok(Self { ft: Rc::new(FreeType { ft_library })})
     }
-
-    pub fn create_font(&self, mem: &[u8], desired_height: u32) -> Result<Font, Error> {
+    pub fn load_font<P: AsRef<Path>>(&self, path: P) -> Result<Font, Error> {
+        // We ought to use FT_New_Face which would read the file for us, but
+        // it unconditionally takes a char* path (which is bad on Windows because Path is
+        // wide-encoded).
+        // Come on, we can afford to load a whole file in memory; if this becomes a problem,
+        // we'll have to consider providing an interface to FT_Stream objects, which
+        // looks too annoying to do for what it's worth.
+        let io_result = ::std::fs::read(path.as_ref());
+        let mem = io_result.map_err(|_| Error::FT_Err_Cannot_Open_Stream)?;
+        self.load_font_from_memory(mem)
+    }
+    pub fn load_font_from_memory(&self, mem: Vec<u8>) -> Result<Font, Error> {
         unsafe {
             let mut ft_face: FT_Face = mem::uninitialized();
-            ft_result(FT_New_Memory_Face(self.ft.ft_library, mem.as_ptr(), mem.len() as _, 0, &mut ft_face))?;
-            let (w, h) = (0, desired_height);
-            ft_result(FT_Set_Pixel_Sizes(ft_face, w, h))?;
-            let font = Font {
+            let face_index = 0;
+            ft_result(FT_New_Memory_Face(self.ft.ft_library, mem.as_ptr(), mem.len() as _, face_index, &mut ft_face))?;
+            Ok(Font {
                 ft: Rc::clone(&self.ft),
                 ft_face,
-            };
-            Ok(font)
+                mem,
+            })
         }
     }
 }
@@ -191,6 +212,7 @@ impl FontLoader {
 pub struct Font {
     ft: Rc<FreeType>,
     ft_face: FT_Face,
+    mem: Vec<u8>,
 }
 
 impl Drop for Font {
@@ -211,11 +233,18 @@ impl Font {
     fn ft_size_metrics(&self) -> &FT_Size_Metrics {
         unsafe { &(*self.ft_face().size).metrics }
     }
+    pub fn set_size_px(&mut self, size: Extent2<u32>) -> Result<(), Error> {
+        ft_result(unsafe { FT_Set_Pixel_Sizes(self.ft_face, size.w, size.h) })
+    }
+    pub fn set_size_pt(&mut self, size: Extent2<f64>, dpi: Vec2<u32>) -> Result<(), Error> {
+        let Extent2 { w, h } = size.map(f64_to_26_6);
+        ft_result(unsafe { FT_Set_Char_Size(self.ft_face, w, h, dpi.x, dpi.y) })
+    }
     // These are not mutually exclusive
-    pub fn is_outline_font(&self) -> bool {
+    pub fn has_outline_glyphs(&self) -> bool {
         (self.ft_face_flags() & FT_FACE_FLAG_SCALABLE) != 0
     }
-    pub fn is_bitmap_font(&self) -> bool {
+    pub fn has_bitmap_strikes(&self) -> bool {
         (self.ft_face_flags() & FT_FACE_FLAG_FIXED_SIZES) != 0
     }
     pub fn is_fixed_width(&self) -> bool {
@@ -224,22 +253,12 @@ impl Font {
     pub fn has_kerning(&self) -> bool {
         (self.ft_face_flags() & FT_FACE_FLAG_KERNING) != 0
     }
-    pub fn family_name(&self) -> String {
-        let ascii = self.ft_face().family_name;
-        assert!(!ascii.is_null());
-        unsafe {
-            CStr::from_ptr(ascii).to_string_lossy().into()
-        }
+
+    pub fn family_name(&self) -> Option<String> {
+        nullable_ascii_to_string(self.ft_face().family_name)
     }
     pub fn style_name(&self) -> Option<String> {
-        let ascii = self.ft_face().style_name;
-        if ascii.is_null() {
-            None
-        } else {
-            unsafe {
-                Some(CStr::from_ptr(ascii).to_string_lossy().into())
-            }
-        }
+        nullable_ascii_to_string(self.ft_face().style_name)
     }
     pub fn pixels_per_em(&self) -> Extent2<u16> {
         let m = self.ft_size_metrics();
@@ -292,7 +311,11 @@ impl<'a> GlyphLoader<'a> {
             flags |= FT_LOAD_PEDANTIC;
         }
         ft_result(unsafe { FT_Load_Char(font.ft_face, c as u64, flags) })?;
-        let mut ft_glyph_slot = unsafe { ptr::read(&*(*font.ft_face).glyph) };
+
+        // The glyph slot is "owned" by the face.
+        // Forcefully cloning it via ptr::read() is safe as long as we don't
+        // touch its pointer members. For instance we keep our own copy of the bitmap.
+        let mut ft_glyph_slot = unsafe { ptr::read((*font.ft_face).glyph) };
 
         let u8_monochrome_bitmap = if !render_u8_monochrome_bitmap {
             None
@@ -316,9 +339,7 @@ impl<'a> GlyphLoader<'a> {
     }
 }
 
-
-// FIXME: destructure dumb FT_GlyphSlotRec so we can derive stuff
-// #[derive(Debug, Hash, PartialEq, Eq)]
+//#[derive(Debug, Hash, PartialEq, Eq)] // FIXME: Curse you ImgVec!
 pub struct Glyph {
     ft_glyph_slot: FT_GlyphSlotRec,
     u8_monochrome_bitmap: Option<ImgVec<u8>>,
@@ -331,59 +352,93 @@ impl Glyph {
     fn m(&self) -> &FT_Glyph_Metrics {
         &self.g().metrics
     }
-    pub fn format(&self) -> GlyphFormat { GlyphFormat::from_ft_format(self.g().format).unwrap() }
 
-    pub fn size(&self) -> Extent2<f64> { Extent2::new(self.m().width, self.m().height).map(f64_from_26_6) }
-    pub fn horizontal_bearing(&self) -> Vec2<f64> { Vec2::new(self.m().horiBearingX, self.m().horiBearingY).map(f64_from_26_6) }
-    pub fn horizontal_advance(&self) -> f64 { f64_from_26_6(self.m().horiAdvance) }
-    pub fn vertical_bearing(&self) -> Vec2<f64> { Vec2::new(self.m().vertBearingX, self.m().vertBearingY).map(f64_from_26_6) }
-    pub fn vertical_advance(&self) -> f64 { f64_from_26_6(self.m().vertAdvance) }
+    pub fn format(&self) -> GlyphFormat {
+        GlyphFormat::from_ft_format(self.g().format).unwrap()
+    }
 
-    pub fn linear_advance(&self) -> Vec2<f64> { Vec2::new(self.g().linearHoriAdvance, self.g().linearVertAdvance).map(f64_from_16_16) }
-    pub fn advance(&self) -> Vec2<f64> { Vec2::new(self.g().advance.x, self.g().advance.y).map(f64_from_26_6) }
+    // Caution: These are in pixels unless FT_LOAD_NO_SCALE was specified when loading the face,
+    // in which case the FT_Size_Metrics members are expressed in font units instead.
+    pub fn size_px(&self) -> Extent2<f64> {
+        Extent2::new(self.m().width, self.m().height).map(f64_from_26_6)
+    }
+    pub fn horizontal_bearing_px(&self) -> Vec2<f64> {
+        Vec2::new(self.m().horiBearingX, self.m().horiBearingY).map(f64_from_26_6)
+    }
+    pub fn horizontal_advance_px(&self) -> f64 {
+        f64_from_26_6(self.m().horiAdvance)
+    }
+    pub fn vertical_bearing_px(&self) -> Vec2<f64> {
+        Vec2::new(self.m().vertBearingX, self.m().vertBearingY).map(f64_from_26_6)
+    }
+    pub fn vertical_advance_px(&self) -> f64 {
+        f64_from_26_6(self.m().vertAdvance)
+    }
 
-    pub fn u8_monochrome_bitmap(&self) -> Option<ImgRef<u8>> { self.u8_monochrome_bitmap.as_ref().map(ImgVec::as_ref) }
+    pub fn unhinted_advance_px(&self) -> Vec2<f64> {
+        Vec2::new(self.g().linearHoriAdvance, self.g().linearVertAdvance).map(f64_from_16_16)
+    }
+    pub fn advance_px(&self) -> Vec2<f64> {
+        Vec2::new(self.g().advance.x, self.g().advance.y).map(f64_from_26_6)
+    }
+
+    pub fn u8_monochrome_bitmap(&self) -> Option<ImgRef<u8>> {
+        self.u8_monochrome_bitmap.as_ref().map(ImgVec::as_ref)
+    }
     /// The bitmap's left and top bearing expressed in integer pixels. The top bearing is the distance from the baseline to the top-most glyph scanline, upwards y coordinates being positive.
-    pub fn bitmap_bearing(&self) -> Vec2<i32> { Vec2::new(self.g().bitmap_left, self.g().bitmap_top) }
+    pub fn bitmap_bearing(&self) -> Vec2<i32> {
+        Vec2::new(self.g().bitmap_left, self.g().bitmap_top)
+    }
 
-    pub fn outline(&self) -> Option<Outline> { unimplemented!{} }
+    pub fn outline(&self) -> Option<Outline> {
+        if self.format() == GlyphFormat::Outline {
+            Some(Outline::new(&self.g().outline))
+        } else {
+            None
+        }
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub struct Outline {
     ft_outline: FT_Outline,
-}
-
-impl Drop for Outline {
-    fn drop(&mut self) {
-        let &FT_Outline {
-            n_contours, n_points,
-            points, tags, contours,
-            flags,
-        } = &self.ft_outline;
-        drop(Box::from_raw(points)) // FIXME: ptr to slice, not T
-    }
+    points_vec: Vec<FT_Vector>,
+    tags_vec: Vec<c_char>,
+    contours_vec: Vec<c_short>,
 }
 
 impl Outline {
     pub(crate) fn new(ft_outline: &FT_Outline) -> Self {
-        let &FT_Outline {
-            n_contours, n_points,
-            points, tags, contours,
-            flags,
-        } = ft_outline;
-        let foo = Box::new(slice).into_raw()
-        Self {
-            ft_outline: FT_Outline {
-                n_contours, n_points, flags,
+        // We could use FT_Outline_New, Ft_Outline_Copy and FT_Outline_Done
+        // to duplicate that ft_outline, but we would need a ref to the FT_Library,
+        // which we don't have.
+        // Let's clone it ourselves!
+        unsafe {
+            let &FT_Outline {
+                n_contours, n_points,
                 points, tags, contours,
+                flags,
+            } = ft_outline;
+            let mut points_vec   = slice::from_raw_parts(points  , n_points   as _).to_vec();
+            let mut tags_vec     = slice::from_raw_parts(tags    , n_points   as _).to_vec();
+            let mut contours_vec = slice::from_raw_parts(contours, n_contours as _).to_vec();
+            Self {
+                ft_outline: FT_Outline {
+                    n_contours, n_points, flags,
+                    points: points_vec.as_mut_ptr(),
+                    tags: tags_vec.as_mut_ptr(),
+                    contours: contours_vec.as_mut_ptr(),
+                },
+                points_vec,
+                tags_vec,
+                contours_vec,
             }
         }
     }
-    pub fn translate(&mut self, t: Vec<f64>) {
+    pub fn translate(&mut self, t: Vec2<f64>) {
         let t = t.map(f64_to_26_6);
         unsafe {
-            FT_Outline_Translate(self.ft_outline, t.x, t.y);
+            FT_Outline_Translate(&self.ft_outline, t.x, t.y);
         }
     }
     pub fn transform_2x2(&mut self, m: Mat2<f64>) {
@@ -395,62 +450,81 @@ impl Outline {
             yy: m[(1, 1)],
         };
         unsafe {
-            FT_Outline_Transform(self.ft_outline, &m);
+            FT_Outline_Transform(&self.ft_outline, &m);
         }
     }
-    pub fn embolden(&mut self, strength: Vec<f64>) {
-        let strength = strength.map(f64_to_26_6);
+    pub fn embolden(&mut self, strength: Vec2<f64>) {
+        let Vec2 { x, y } = strength.map(f64_to_26_6);
         unsafe {
-            FT_Outline_EmboldenXY(self.ft_outline, strength.x, strength.y);
+            FT_Outline_EmboldenXY(&mut self.ft_outline, x, y);
         }
     }
     pub fn ctrl_box(&self) -> Aabr<f64> {
         unsafe {
             let mut ft_bbox = mem::uninitialized();
-            FT_Outline_get_CBox(self.ft_outline, &mut ft_bbox);
+            FT_Outline_Get_CBox(&self.ft_outline, &mut ft_bbox);
             aabr_from_ft_bbox(ft_bbox)
         }
     }
     pub fn bounding_box(&self) -> Aabr<f64> {
         unsafe {
             let mut ft_bbox = mem::uninitialized();
-            FT_Outline_get_BBox(self.ft_outline, &mut ft_bbox);
+            FT_Outline_Get_BBox(&self.ft_outline as *const _ as *mut _, &mut ft_bbox);
             aabr_from_ft_bbox(ft_bbox)
         }
     }
     pub fn fill_rule(&self) -> Option<OutlineFillRules> {
-        match unsafe { FT_Outline_Get_Orientation(self.ft_outline) } {
-            freetype_sys::FT_ORIENTATION_FILL_RIGHT => Some(OutlineFill::ClockwiseContours),
-            freetype_sys::FT_ORIENTATION_FILL_RIGHT => Some(OutlineFill::CounterClockwiseContours),
+        let orientation = unsafe {
+            FT_Outline_Get_Orientation(&self.ft_outline as *const _ as *mut _)
+        };
+        match orientation {
+            freetype_sys::FT_ORIENTATION_FILL_RIGHT => Some(OutlineFillRules::FillClockwiseContours),
+            freetype_sys::FT_ORIENTATION_FILL_LEFT  => Some(OutlineFillRules::FillCounterClockwiseContours),
             freetype_sys::FT_ORIENTATION_NONE => None,
             _ => unreachable!(),
         }
     }
-    pub fn decompose(&self, decomposer: &mut OutlineDecomposer) {
-        unsafe fn move_to(to: *const FT_Vector, user: *mut c_void) {
-            let decomposer = &mut *(user as *mut OutlineDecomposer);
-            decomposer.move_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+    pub fn decompose(&self, mut decomposer: &mut OutlineDecomposer) {
+        extern fn move_to(to: *const FT_Vector, user: *mut c_void) -> c_int {
+            unsafe {
+                let decomposer = &mut *(user as *mut &mut OutlineDecomposer);
+                decomposer.move_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+            }
+            0
         }
-        unsafe fn line_to(to: *const FT_Vector, user: *mut c_void) {
-            let decomposer = &mut *(user as *mut OutlineDecomposer);
-            decomposer.line_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+        extern fn line_to(to: *const FT_Vector, user: *mut c_void) -> c_int {
+            unsafe {
+                let decomposer = &mut *(user as *mut &mut OutlineDecomposer);
+                decomposer.line_to(Vec2::new((*to).x, (*to).y).map(f64_from_26_6));
+            }
+            0
         }
-        unsafe fn conic_to(ctrl: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) {
-            let decomposer = &mut *(user as *mut OutlineDecomposer);
-            let ctrl = Vec2::new((*ctrl).x, (*ctrl).y).map(f64_from_26_6);
-            let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
-            decomposer.conic_to(ctrl, end);
+        extern fn conic_to(ctrl: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) -> c_int {
+            unsafe {
+                let decomposer = &mut *(user as *mut &mut OutlineDecomposer);
+                let ctrl = Vec2::new((*ctrl).x, (*ctrl).y).map(f64_from_26_6);
+                let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
+                decomposer.conic_to(ctrl, end);
+            }
+            0
         }
-        unsafe fn cubic_to(ctrl0: *const FT_Vector, ctrl1: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) {
-            let decomposer = &mut *(user as *mut OutlineDecomposer);
-            let ctrl0 = Vec2::new((*ctrl0).x, (*ctrl0).y).map(f64_from_26_6);
-            let ctrl1 = Vec2::new((*ctrl1).x, (*ctrl1).y).map(f64_from_26_6);
-            let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
-            decomposer.cubic_to(ctrl0, ctrl1, end);
+        extern fn cubic_to(ctrl0: *const FT_Vector, ctrl1: *const FT_Vector, end: *const FT_Vector, user: *mut c_void) -> c_int {
+            unsafe {
+                let decomposer = &mut *(user as *mut &mut OutlineDecomposer);
+                let ctrl0 = Vec2::new((*ctrl0).x, (*ctrl0).y).map(f64_from_26_6);
+                let ctrl1 = Vec2::new((*ctrl1).x, (*ctrl1).y).map(f64_from_26_6);
+                let end = Vec2::new((*end).x, (*end).y).map(f64_from_26_6);
+                decomposer.cubic_to(ctrl0, ctrl1, end);
+            }
+            0
         }
-        let ft_outline_funcs = FT_Outline_Funcs { move_to, line_to, conic_to, cubic_to };
+        let ft_outline_funcs = FT_Outline_Funcs {
+            move_to, line_to, conic_to, cubic_to,
+            shift: 0,
+            delta: 0,
+        };
         unsafe {
-            FT_Outline_Decompose(self.ft_outline, &ft_outline_funcs, decomposer);
+            FT_Outline_Decompose(&self.ft_outline as *const _ as *mut _, &ft_outline_funcs, &mut decomposer as *mut &mut _ as _);
         }
     }
 }
@@ -463,18 +537,19 @@ pub trait OutlineDecomposer {
 }
 
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum OutlineFillRules {
-    ClockwiseContours = FT_ORIENTATION_FILL_RIGHT,
-    CounterClockwiseContours = FT_ORIENTATION_FILL_LEFT,
+    FillClockwiseContours = FT_ORIENTATION_FILL_RIGHT,
+    FillCounterClockwiseContours = FT_ORIENTATION_FILL_LEFT,
 }
 
 fn aabr_from_ft_bbox(ft_bbox: FT_BBox) -> Aabr<f64> {
+    #[allow(non_snake_case)]
     let FT_BBox { xMin, xMax, yMin, yMax } = ft_bbox;
     Aabr {
-        min: Vec2::new(xMin, xMax),
-        max: Vec2::new(yMin, yMax),
+        min: Vec2::new(xMin, yMin),
+        max: Vec2::new(xMax, yMax),
     }.map(f64_from_26_6)
 }
 
