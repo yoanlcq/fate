@@ -3,31 +3,34 @@ use gl;
 use gl::types::*;
 
 pub fn gl_version_string() -> String {
-    unsafe {
-        CStr::from_ptr(gl::GetString(gl::VERSION) as _).to_string_lossy().into()
-    }
+    string(gl::VERSION)
 }
 pub fn gl_renderer_string() -> String {
-    unsafe {
-        CStr::from_ptr(gl::GetString(gl::RENDERER) as _).to_string_lossy().into()
-    }
+    string(gl::RENDERER)
 }
 pub fn gl_vendor_string() -> String {
-    unsafe {
-        CStr::from_ptr(gl::GetString(gl::VENDOR) as _).to_string_lossy().into()
-    }
+    string(gl::VENDOR)
 }
 pub fn glsl_version_string() -> String {
-    unsafe {
-        CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as _).to_string_lossy().into()
-    }
+    string(gl::SHADING_LANGUAGE_VERSION)
 }
 pub fn gl_extensions_string() -> String {
+    string(gl::EXTENSIONS)
+}
+pub fn string(x: GLenum) -> String {
     unsafe {
-        CStr::from_ptr(gl::GetString(gl::EXTENSIONS) as _).to_string_lossy().into()
+        let p = gl::GetString(x);
+        assert!(!p.is_null());
+        CStr::from_ptr(p as _).to_string_lossy().into()
     }
 }
-
+pub fn string_i(x: GLenum, i: GLuint) -> String {
+    unsafe {
+        let p = gl::GetStringi(x, i);
+        assert!(!p.is_null());
+        CStr::from_ptr(p as _).to_string_lossy().into()
+    }
+}
 pub fn integer(x: GLenum) -> GLint {
     let mut i = 0;
     unsafe {

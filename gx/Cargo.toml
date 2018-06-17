@@ -1,0 +1,8 @@
+[package]
+name = "fate-gx"
+description = "GX is a wrapper around reasonably modern OpenGL."
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+
+[dependencies]
+gl = "0.10.0"
