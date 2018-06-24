@@ -201,6 +201,13 @@ impl System for ParticleSystemsManager {
 // TODO: Retrieve a specific system at runtime
 // Solved: It depends. Finding by key is annoying; Why not directly typing g.my_sys ? We know our game.
 
+fn gl_debug_message_callback(msg: &gx::DebugMessage) {
+    match ::std::ffi::CString::new(msg.text) {
+        Ok(cstr) => debug!("GL: {}", cstr.to_string_lossy()),
+        Err(e) => debug!("GL (UTF-8 error): {}", e),
+    };
+}
+
 
 struct Game {
     dmc: dmc::Context,
@@ -248,8 +255,8 @@ impl Game {
             forward_compatible: true,
             robust_access: None,
         };
-        info!("GL pixel format settings: {:#?}", gl_pixel_format_settings);
-        info!("GL context settings: {:#?}", gl_context_settings);
+        info!("Using GL pixel format settings: {:#?}", gl_pixel_format_settings);
+        info!("Using GL context settings: {:#?}", gl_context_settings);
         let dmc = dmc::Context::new().unwrap();
         let window = dmc.create_window(&dmc::WindowSettings {
             high_dpi: false,
@@ -265,8 +272,11 @@ impl Game {
             trace!("GL: {}: {}", if f.is_null() { "Failed" } else { "Loaded" }, s);
             f
         });
+        info!("OpenGL context summary:\n{}", gx::ContextSummary::new());
         gx::boot_gl();
-        info!("{:#?}", gx::ContextSummary::new());
+        gx::set_debug_message_callback(Some(gl_debug_message_callback));
+        gx::log_debug_message("OpenGL debug logging is enabled.");
+
         window.set_size(Extent2::new(800, 600)).unwrap();
         window.set_title("Test Game").unwrap();
         window.show().unwrap();
