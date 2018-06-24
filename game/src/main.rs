@@ -266,6 +266,7 @@ impl Game {
             f
         });
         gx::boot_gl();
+        info!("{:#?}", gx::ContextSummary::new());
         window.set_size(Extent2::new(800, 600)).unwrap();
         window.set_title("Test Game").unwrap();
         window.show().unwrap();
