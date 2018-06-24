@@ -1,4 +1,6 @@
 extern crate fate;
+extern crate fate_gx as gx;
+extern crate dmc;
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -9,6 +11,9 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use fate::main_loop::{self, MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
+use fate::vek;
+use vek::{Vec2, Extent2};
+use gx::gl;
 
 mod early;
 
@@ -94,12 +99,11 @@ impl SharedGame {
 mod event {
     use super::*;
 
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Event {
         Quit,
-        MouseMotion(u32, u32),
+        MouseMotion(i32, i32),
         CanvasResized(u32, u32),
-        MouseButtonDown(u32),
-        MouseButtonUp(u32),
         // Imagine, many other different kinds of event
     }
 
@@ -109,8 +113,6 @@ mod event {
                 Event::Quit => sys.on_quit(g),
                 Event::MouseMotion(x, y) => sys.on_mouse_motion(g, (x, y)),
                 Event::CanvasResized(w, h) => sys.on_canvas_resized(g, (w, h)),
-                Event::MouseButtonUp(btn) => sys.on_mouse_button(g, btn, false),
-                Event::MouseButtonDown(btn) => sys.on_mouse_button(g, btn, true),
             }
         }
     }
@@ -138,7 +140,7 @@ trait System {
 
     // events
     fn on_quit(&mut self, _g: &mut G) {}
-    fn on_mouse_motion(&mut self, _g: &mut G, _pos: (u32, u32)) {}
+    fn on_mouse_motion(&mut self, _g: &mut G, _pos: (i32, i32)) {}
     fn on_mouse_button(&mut self, _g: &mut G, _btn: u32, _is_down: bool) {}
     fn on_canvas_resized(&mut self, _g: &mut G, _size: (u32, u32)) {}
 }
@@ -150,12 +152,18 @@ struct ExampleSystem;
 impl System for ExampleSystem {}
 
 #[derive(Debug, Default)]
+struct Quitter(Quit);
+impl System for Quitter {
+    fn quit(&self) -> Quit { self.0 }
+    fn on_quit(&mut self, _: &mut G) { self.0 = Quit::ShouldQuit; }
+}
+
+#[derive(Debug, Default)]
 struct ParticleSystemsState {
     pub positions: Vec<(f32, f32)>,
 }
 impl ParticleSystemsState {
     pub fn replace_by_lerp(&mut self, a: &Self, b: &Self, t: f32) {
-        unimplemented!()
     }
 }
 struct ParticleSystemsManager {
@@ -193,7 +201,11 @@ impl System for ParticleSystemsManager {
 // TODO: Retrieve a specific system at runtime
 // Solved: It depends. Finding by key is annoying; Why not directly typing g.my_sys ? We know our game.
 
+
 struct Game {
+    dmc: dmc::Context,
+    window: dmc::Window,
+    gl_context: dmc::gl::GLContext,
     shared: RefCell<SharedGame>,
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
@@ -205,17 +217,78 @@ impl Game {
         let shared = SharedGame::new();
         let mut systems = Vec::new();
         systems.push(Box::new(ExampleSystem) as Box<System>);
-        systems.push(Box::new(ExampleSystem));
+        systems.push(Box::new(Quitter::default()));
         systems.push(Box::new(ParticleSystemsManager::new()));
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
             desired_fps_ceil: 64.,
             enable_fixing_broken_vsync: true,
         };
-        Self { shared: RefCell::new(shared), systems, fps_manager, fps_ceil: None, }
+        let gl_pixel_format_settings = dmc::gl::GLPixelFormatSettings {
+            msaa: dmc::gl::GLMsaa { buffer_count: 1, sample_count: 4 },
+            depth_bits: 24,
+            stencil_bits: 8,
+            double_buffer: true,
+            stereo: false,
+            red_bits: 8,
+            green_bits: 8,
+            blue_bits: 8,
+            alpha_bits: 8,
+            accum_red_bits: 0,
+            accum_blue_bits: 0,
+            accum_green_bits: 0,
+            accum_alpha_bits: 0,
+            aux_buffers: 0,
+            transparent: false,
+        };
+        let gl_context_settings = dmc::gl::GLContextSettings {
+            version: dmc::gl::GLVersion::new_desktop(4, 5),
+            profile: dmc::gl::GLProfile::Core,
+            debug: true,
+            forward_compatible: true,
+            robust_access: None,
+        };
+        info!("GL pixel format settings: {:#?}", gl_pixel_format_settings);
+        info!("GL context settings: {:#?}", gl_context_settings);
+        let dmc = dmc::Context::new().unwrap();
+        let window = dmc.create_window(&dmc::WindowSettings {
+            high_dpi: false,
+            opengl: Some(&dmc::gl::GLDefaultPixelFormatChooser::from(&gl_pixel_format_settings)),
+        }).unwrap();
+        let gl_context = window.create_gl_context(&gl_context_settings).unwrap();
+        window.make_gl_context_current(Some(&gl_context)).unwrap();
+        if let Err(_) = window.gl_set_swap_interval(dmc::gl::GLSwapInterval::LateSwapTearing) {
+            let _ = window.gl_set_swap_interval(dmc::gl::GLSwapInterval::VSync);
+        }
+        gl::load_with(|s| {
+            let f = gl_context.proc_address(s);
+            trace!("GL: {}: {}", if f.is_null() { "Failed" } else { "Loaded" }, s);
+            f
+        });
+        gx::boot_gl();
+        window.set_size(Extent2::new(800, 600)).unwrap();
+        window.set_title("Test Game").unwrap();
+        window.show().unwrap();
+
+        Self {
+            dmc,
+            window,
+            gl_context,
+            shared: RefCell::new(shared),
+            systems,
+            fps_manager,
+            fps_ceil: None,
+        }
     }
     pub fn poll_event(&mut self) -> Option<Event> {
-        unimplemented!()
+        use dmc::Event as DmcEvent;
+        match self.dmc.poll_event()? {
+            DmcEvent::Quit => Some(Event::Quit),
+            DmcEvent::WindowCloseRequested { .. } => Some(Event::Quit),
+            DmcEvent::MouseMotion { position: Vec2 { x, y }, .. } => Some(Event::MouseMotion(x as _, y as _)),
+            DmcEvent::WindowResized { size: Extent2 { w, h }, .. } => Some(Event::CanvasResized(w, h)),
+            _ => None,
+        }
     }
     pub fn pump_messages(&mut self) {
         while let Some(msg) = self.shared.borrow_mut().pending_messages.pop_front() {
@@ -256,7 +329,9 @@ impl MainSystem for Game {
         }
         self.shared.borrow_mut().frame_time_manager.end_main_loop_iteration();
         let fps_stats = self.fps_manager.end_main_loop_iteration(&mut self.fps_ceil);
-        println!("{:?}", fps_stats);
+        if let Some(fps_stats) = fps_stats {
+            println!("{}", fps_stats);
+        }
     }
     fn pump_events(&mut self) {
         self.pump_messages();
@@ -275,11 +350,14 @@ impl MainSystem for Game {
         }
     }
     fn draw(&mut self, draw: &Draw) {
-        // glClear()...
+        unsafe {
+            gl::ClearColor(1., 0., 1., 1.);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
         for sys in self.systems.iter_mut() {
             sys.draw(&mut self.shared.borrow_mut(), draw);
         }
-        // swap buffers...
+        self.window.gl_swap_buffers().unwrap();
     }
 }
 

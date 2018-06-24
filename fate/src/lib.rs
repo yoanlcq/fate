@@ -3,4 +3,4 @@
 
 pub extern crate fate_main_loop as main_loop;
 pub extern crate fate_lab as lab;
-extern crate vek; pub use vek::*;
+pub extern crate vek;
