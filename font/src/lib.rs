@@ -1,5 +1,5 @@
 extern crate vek;
-extern crate freetype as freetype_;
+extern crate freetype_sys as freetype;
 extern crate imgref;
 extern crate libc;
 
@@ -9,10 +9,10 @@ use std::path::Path;
 use std::mem;
 use std::ptr;
 use std::slice;
-use std::os::raw::{c_void, c_char, c_short, c_int, c_long};
+use libc::{c_void, c_char, c_short, c_int, c_long};
 use vek::{Vec2, Extent2, Mat2, Aabr};
 use imgref::{ImgVec, ImgRef};
-use freetype_::freetype::{self, *};
+use freetype::*;
 
 macro_rules! ft_error_codes {
     ($($variant:ident)+) => {
@@ -314,7 +314,7 @@ impl<'a> GlyphLoader<'a> {
         if pedantic {
             flags |= FT_LOAD_PEDANTIC;
         }
-        ft_result(unsafe { FT_Load_Char(font.ft_face, c as u64, flags as _) })?;
+        ft_result(unsafe { FT_Load_Char(font.ft_face, c as _, flags as _) })?;
 
         // The glyph slot is "owned" by the face.
         // Forcefully cloning it via ptr::read() is safe as long as we don't
@@ -328,7 +328,7 @@ impl<'a> GlyphLoader<'a> {
             // FT_RENDER_MODE_NORMAL => 8-bit anti-aliased
             // FT_RENDER_MODE_LCD    => Horizontal RGB and BGR
             // FT_RENDER_MODE_LCD_V  => Vertical RGB and BGR
-            ft_result(unsafe { FT_Render_Glyph(&mut ft_glyph_slot, FT_Render_Mode::FT_RENDER_MODE_NORMAL as _) })?;
+            ft_result(unsafe { FT_Render_Glyph(&mut ft_glyph_slot, /*FT_Render_Mode::*/FT_RENDER_MODE_NORMAL as _) })?;
             let bmp = &ft_glyph_slot.bitmap;
             let buf = unsafe {
                 slice::from_raw_parts(bmp.buffer, bmp.rows as usize * bmp.pitch as usize)
@@ -484,9 +484,10 @@ impl Outline {
             FT_Outline_Get_Orientation(&self.ft_outline as *const _ as *mut _)
         };
         match orientation {
-            FT_Orientation::FT_ORIENTATION_TRUETYPE => Some(OutlineFillRules::FillClockwiseContours),
-            FT_Orientation::FT_ORIENTATION_POSTSCRIPT  => Some(OutlineFillRules::FillCounterClockwiseContours),
-            FT_Orientation::FT_ORIENTATION_NONE => None,
+            freetype::FT_ORIENTATION_TRUETYPE => Some(OutlineFillRules::FillClockwiseContours),
+            freetype::FT_ORIENTATION_POSTSCRIPT  => Some(OutlineFillRules::FillCounterClockwiseContours),
+            freetype::FT_ORIENTATION_NONE => None,
+            _ => unreachable!(),
         }
     }
     pub fn decompose(&self, mut decomposer: &mut OutlineDecomposer) {
@@ -524,10 +525,10 @@ impl Outline {
             0
         }
         let ft_outline_funcs = FT_Outline_Funcs {
-            move_to: Some(move_to),
-            line_to: Some(line_to),
-            conic_to: Some(conic_to),
-            cubic_to: Some(cubic_to),
+            move_to,
+            line_to,
+            conic_to,
+            cubic_to,
             shift: 0,
             delta: 0,
         };
@@ -578,10 +579,10 @@ pub enum GlyphFormat {
 impl GlyphFormat {
     fn from_ft_glyph_format(ft_glyph_format: FT_Glyph_Format) -> Option<Self> {
         match ft_glyph_format {
-            FT_Glyph_Format::FT_GLYPH_FORMAT_COMPOSITE => Some(GlyphFormat::Composite),
-            FT_Glyph_Format::FT_GLYPH_FORMAT_BITMAP    => Some(GlyphFormat::Bitmap),
-            FT_Glyph_Format::FT_GLYPH_FORMAT_OUTLINE   => Some(GlyphFormat::Outline),
-            FT_Glyph_Format::FT_GLYPH_FORMAT_PLOTTER   => Some(GlyphFormat::Plotter),
+            freetype::FT_GLYPH_FORMAT_COMPOSITE => Some(GlyphFormat::Composite),
+            freetype::FT_GLYPH_FORMAT_BITMAP    => Some(GlyphFormat::Bitmap),
+            freetype::FT_GLYPH_FORMAT_OUTLINE   => Some(GlyphFormat::Outline),
+            freetype::FT_GLYPH_FORMAT_PLOTTER   => Some(GlyphFormat::Plotter),
             _ => None
         }
     }
