@@ -13,7 +13,7 @@ use fate::main_loop::{self, MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::vek;
 use vek::{Vec2, Extent2};
-use gx::gl;
+use gx::{Object, gl::{self, types::*}};
 
 mod early;
 
@@ -209,10 +209,62 @@ fn gl_debug_message_callback(msg: &gx::DebugMessage) {
 }
 
 
+#[derive(Debug)]
+struct GLDB {
+    pub cube_vbo: gx::Buffer,
+    pub prog: gx::Program,
+}
+
+static VS_SRC: &'static [u8] = b"
+uniform mat4 u_mvp;
+
+attribute vec4 a_position;
+attribute vec4 a_color;
+
+varying vec4 v_color;
+
+void main() {
+    v_color = a_color;
+    gl_Position = u_mvp * a_position;
+}
+";
+static FS_SRC: &'static [u8] = b"
+precision mediump float;
+
+varying vec4 v_color;
+
+void main() {
+    gl_FragColor = v_color;
+}
+";
+
+impl GLDB {
+    pub fn new() -> Self {
+        let vs = gx::VertexShader::try_from_source(VS_SRC).unwrap();
+        let fs = gx::FragmentShader::try_from_source(FS_SRC).unwrap();
+        let prog = gx::Program::try_from_vert_frag(&vs, &fs).unwrap();
+
+        let cube_vbo = gx::Buffer::new();
+        unsafe {
+            gl::BindBuffer(gx::BufferTarget::Array as _, cube_vbo.gl_id());
+            let (size, data) = unimplemented!();
+            gl::BufferData(gx::BufferTarget::Array as _, size, data, gx::BufferUsage::StaticDraw as _);
+            gl::BindBuffer(gx::BufferTarget::Array as _, 0);
+        }
+
+        Self {
+            prog,
+            cube_vbo,
+        }
+    }
+}
+
+
 struct Game {
     dmc: dmc::Context,
     window: dmc::Window,
     gl_context: dmc::gl::GLContext,
+    gl_db: GLDB,
     shared: RefCell<SharedGame>,
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
@@ -249,7 +301,7 @@ impl Game {
             transparent: false,
         };
         let gl_context_settings = dmc::gl::GLContextSettings {
-            version: dmc::gl::GLVersion::new_desktop(4, 5),
+            version: dmc::gl::GLVersion::new_es(2, 0),
             profile: dmc::gl::GLProfile::Core,
             debug: true,
             forward_compatible: true,
@@ -285,6 +337,7 @@ impl Game {
             dmc,
             window,
             gl_context,
+            gl_db: GLDB::new(),
             shared: RefCell::new(shared),
             systems,
             fps_manager,

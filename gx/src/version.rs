@@ -45,8 +45,10 @@ impl GLVersion {
             GLVariant::Desktop
         };
         let mut tokens = version_string.split('.');
-        let major = tokens.next().unwrap().parse().unwrap();
-        let minor = tokens.next().unwrap().parse().unwrap();
+        let token = tokens.next().unwrap();
+        let major = token.parse().expect("Could not parse GL major version");
+        let token = tokens.next().unwrap().split(' ').next().unwrap();
+        let minor = token.parse().expect("Could not parse GL minor version");
         Self::new(variant, major, minor)
     }
     fn at_least(&self, major: GLuint, minor: GLuint) -> bool {
@@ -72,6 +74,7 @@ impl Display for GLVersion {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
     fn gl_version() {
         let versions = [
