@@ -8,11 +8,12 @@ extern crate backtrace;
 
 use std::time::{Duration, Instant};
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::mem;
 use fate::main_loop::{self, MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::vek;
-use vek::{Vec2, Extent2};
+use vek::{Vec2, Extent2, Vec3, Rgba};
 use gx::{Object, gl::{self, types::*}};
 
 mod early;
@@ -80,6 +81,7 @@ struct SharedGame {
     t: Duration, // Total physics time since the game started (accumulation of per-tick delta times)
     frame_time_manager: FrameTimeManager,
     pending_messages: VecDeque<Message>,
+    scene: Scene,
 }
 pub type G = SharedGame;
 
@@ -89,6 +91,7 @@ impl SharedGame {
             t: Duration::default(),
             frame_time_manager: FrameTimeManager::with_max_len(60),
             pending_messages: VecDeque::new(),
+            scene: Scene::new(),
         }
     }
     pub fn push_message(&mut self, msg: Message) {
@@ -208,63 +211,159 @@ fn gl_debug_message_callback(msg: &gx::DebugMessage) {
     };
 }
 
-
-#[derive(Debug)]
-struct GLDB {
-    pub cube_vbo: gx::Buffer,
-    pub prog: gx::Program,
-}
-
 static VS_SRC: &'static [u8] = b"
 uniform mat4 u_mvp;
 
-attribute vec4 a_position;
-attribute vec4 a_color;
+in vec3 a_position;
+in vec4 a_color;
 
-varying vec4 v_color;
+out vec4 v_color;
 
 void main() {
     v_color = a_color;
-    gl_Position = u_mvp * a_position;
+    gl_Position = u_mvp * vec4(a_position, 1.0);
 }
 ";
 static FS_SRC: &'static [u8] = b"
-precision mediump float;
+in vec4 v_color;
 
-varying vec4 v_color;
+out vec4 f_color;
 
 void main() {
-    gl_FragColor = v_color;
+    f_color = v_color;
 }
 ";
 
-impl GLDB {
-    pub fn new() -> Self {
-        let vs = gx::VertexShader::try_from_source(VS_SRC).unwrap();
-        let fs = gx::FragmentShader::try_from_source(FS_SRC).unwrap();
-        let prog = gx::Program::try_from_vert_frag(&vs, &fs).unwrap();
+#[derive(Debug)]
+struct Mesh {
+    pub topology: GLenum,
+    pub vposition: Vec<Vec3<f32>>, // Not optional
+    pub vcolor: Vec<Rgba<f32>>, // Optional. If there's only one element, it is used for all vertices.
+    pub indices: Vec<u16>, // Optional. If empty, it's rendered using glDrawArrays.
+}
 
-        let cube_vbo = gx::Buffer::new();
-        unsafe {
-            gl::BindBuffer(gx::BufferTarget::Array as _, cube_vbo.gl_id());
-            let (size, data) = unimplemented!();
-            gl::BufferData(gx::BufferTarget::Array as _, size, data, gx::BufferUsage::StaticDraw as _);
-            gl::BindBuffer(gx::BufferTarget::Array as _, 0);
-        }
+impl Mesh {
+    pub fn new_cube() -> Self {
+        let vposition: [Vec3<f32>; 14] = [
+            Vec3::new(-1.,  1.,  1.), // Front-top-left
+            Vec3::new( 1.,  1.,  1.), // Front-top-right
+            Vec3::new(-1., -1.,  1.), // Front-bottom-left
+            Vec3::new( 1., -1.,  1.), // Front-bottom-right
+            Vec3::new( 1., -1., -1.), // Back-bottom-right
+            Vec3::new( 1.,  1.,  1.), // Front-top-right
+            Vec3::new( 1.,  1., -1.), // Back-top-right
+            Vec3::new(-1.,  1.,  1.), // Front-top-left
+            Vec3::new(-1.,  1., -1.), // Back-top-left
+            Vec3::new(-1., -1.,  1.), // Front-bottom-left
+            Vec3::new(-1., -1., -1.), // Back-bottom-left
+            Vec3::new( 1., -1., -1.), // Back-bottom-right
+            Vec3::new(-1.,  1., -1.), // Back-top-left
+            Vec3::new( 1.,  1., -1.), // Back-top-right
+        ];
 
         Self {
-            prog,
-            cube_vbo,
+            topology: gl::TRIANGLE_STRIP,
+            vposition: vposition.to_vec(),
+            vcolor: vec![Rgba::red()],
+            indices: vec![],
         }
     }
 }
 
+pub type MeshID = u32;
+
+#[derive(Debug)]
+enum SceneCommand {
+    MeshUpdated { mesh_id: MeshID }
+}
+
+#[derive(Debug)]
+struct Scene {
+    pub meshes: HashMap<MeshID, Mesh>,
+    pub command_queue: VecDeque<SceneCommand>,
+}
+
+impl Scene {
+    pub fn new() -> Self {
+        let cube_mesh_id = 1;
+        let mut meshes = HashMap::new();
+        let mut command_queue = VecDeque::new();
+
+        meshes.insert(cube_mesh_id, Mesh::new_cube());
+        command_queue.push_back(SceneCommand::MeshUpdated { mesh_id: cube_mesh_id });
+
+        Self {
+            meshes,
+            command_queue,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct GLSystem {
+    pub prog: gx::Program,
+    pub mesh_position_buffers: HashMap<MeshID, GLuint>,
+    pub mesh_color_buffers: HashMap<MeshID, GLuint>,
+    pub mesh_index_buffers: HashMap<MeshID, GLuint>,
+}
+
+impl GLSystem {
+    pub fn new() -> Self {
+        let vs = gx::VertexShader::try_from_source(VS_SRC).unwrap();
+        let fs = gx::FragmentShader::try_from_source(FS_SRC).unwrap();
+        let prog = gx::Program::try_from_vert_frag(&vs, &fs).unwrap();
+        Self {
+            prog,
+            mesh_position_buffers: Default::default(),
+            mesh_color_buffers: Default::default(),
+            mesh_index_buffers: Default::default(),
+        }
+    }
+
+    fn render_scene(&mut self, scene: &Scene, d: &Draw) {
+        unimplemented!()
+    }
+    fn pump_scene_commands(&mut self, scene: &mut Scene) {
+        while let Some(cmd) = scene.command_queue.pop_front() {
+            self.handle_scene_command(scene, &cmd);
+        }
+    }
+    fn handle_scene_command(&mut self, scene: &Scene, cmd: &SceneCommand) {
+        match *cmd {
+            SceneCommand::MeshUpdated { mesh_id } => {
+                if let Some(mesh) = scene.meshes.get(&mesh_id) {
+                    let &Mesh {
+                        topology: _,
+                        ref vposition,
+                        ref vcolor,
+                        ref indices,
+                    } = mesh;
+                    unimplemented!(); // TODO: A lot of cases to account for!
+                    let vbo = gx::Buffer::new();
+                    unsafe {
+                        gl::BindBuffer(gx::BufferTarget::Array as _, vbo.gl_id());
+                        gl::BufferData(gx::BufferTarget::Array as _, mem::size_of_val(vposition) as _, vposition.as_ptr() as _, gx::BufferUsage::StaticDraw as _);
+                        gl::BindBuffer(gx::BufferTarget::Array as _, 0);
+                    }
+                    self.mesh_position_buffers.insert(mesh_id, vbo.gl_id());
+                }
+            },
+        }
+    }
+}
+
+impl System for GLSystem {
+    fn draw(&mut self, g: &mut G, d: &Draw) {
+        let scene = &mut g.scene;
+        self.pump_scene_commands(scene);
+        self.render_scene(scene, d);
+    }
+}
 
 struct Game {
     dmc: dmc::Context,
     window: dmc::Window,
     gl_context: dmc::gl::GLContext,
-    gl_db: GLDB,
     shared: RefCell<SharedGame>,
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
@@ -273,16 +372,6 @@ struct Game {
 
 impl Game {
     pub fn new() -> Self {
-        let shared = SharedGame::new();
-        let mut systems = Vec::new();
-        systems.push(Box::new(ExampleSystem) as Box<System>);
-        systems.push(Box::new(Quitter::default()));
-        systems.push(Box::new(ParticleSystemsManager::new()));
-        let fps_manager = FpsManager {
-            fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
-            desired_fps_ceil: 64.,
-            enable_fixing_broken_vsync: true,
-        };
         let gl_pixel_format_settings = dmc::gl::GLPixelFormatSettings {
             msaa: dmc::gl::GLMsaa { buffer_count: 1, sample_count: 4 },
             depth_bits: 24,
@@ -301,7 +390,7 @@ impl Game {
             transparent: false,
         };
         let gl_context_settings = dmc::gl::GLContextSettings {
-            version: dmc::gl::GLVersion::new_es(2, 0),
+            version: dmc::gl::GLVersion::new_desktop(4, 5),
             profile: dmc::gl::GLProfile::Core,
             debug: true,
             forward_compatible: true,
@@ -329,6 +418,18 @@ impl Game {
         gx::set_debug_message_callback(Some(gl_debug_message_callback));
         gx::log_debug_message("OpenGL debug logging is enabled.");
 
+        let shared = SharedGame::new();
+        let mut systems = Vec::new();
+        systems.push(Box::new(ExampleSystem) as Box<System>);
+        systems.push(Box::new(Quitter::default()));
+        systems.push(Box::new(GLSystem::new()));
+        systems.push(Box::new(ParticleSystemsManager::new()));
+        let fps_manager = FpsManager {
+            fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
+            desired_fps_ceil: 64.,
+            enable_fixing_broken_vsync: true,
+        };
+ 
         window.set_size(Extent2::new(800, 600)).unwrap();
         window.set_title("Test Game").unwrap();
         window.show().unwrap();
@@ -337,7 +438,6 @@ impl Game {
             dmc,
             window,
             gl_context,
-            gl_db: GLDB::new(),
             shared: RefCell::new(shared),
             systems,
             fps_manager,
