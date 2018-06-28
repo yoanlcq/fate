@@ -105,7 +105,7 @@ impl GLSystem {
         }
     }
 
-    fn render_scene(&mut self, scene: &Scene, d: &Draw) {
+    fn render_scene(&mut self, scene: &Scene, _: &Draw) {
         unsafe {
             gl::UseProgram(self.prog.gl_id());
         }
@@ -178,7 +178,7 @@ impl GLSystem {
 }
 
 impl System for GLSystem {
-    fn on_canvas_resized(&mut self, g: &mut G, size: (u32, u32)) {
+    fn on_canvas_resized(&mut self, _g: &mut G, size: (u32, u32)) {
         debug!("GL: Setting viewport to (0, 0, {}, {})", size.0, size.1);
         unsafe {
             gl::Viewport(0, 0, size.0 as _, size.1 as _);

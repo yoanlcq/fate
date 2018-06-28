@@ -11,22 +11,22 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new_cube() -> Self {
-        let vposition: [Vec3<f32>; 14] = [
-            Vec3::new(-1.,  1.,  1.), // Front-top-left
-            Vec3::new( 1.,  1.,  1.), // Front-top-right
-            Vec3::new(-1., -1.,  1.), // Front-bottom-left
-            Vec3::new( 1., -1.,  1.), // Front-bottom-right
-            Vec3::new( 1., -1., -1.), // Back-bottom-right
-            Vec3::new( 1.,  1.,  1.), // Front-top-right
-            Vec3::new( 1.,  1., -1.), // Back-top-right
-            Vec3::new(-1.,  1.,  1.), // Front-top-left
-            Vec3::new(-1.,  1., -1.), // Back-top-left
-            Vec3::new(-1., -1.,  1.), // Front-bottom-left
-            Vec3::new(-1., -1., -1.), // Back-bottom-left
-            Vec3::new( 1., -1., -1.), // Back-bottom-right
-            Vec3::new(-1.,  1., -1.), // Back-top-left
-            Vec3::new( 1.,  1., -1.), // Back-top-right
+    fn new_cube_triangle_strip(s: f32) -> Self {
+        let vposition = [
+            Vec3::new(-s,  s,  s), // Front-top-left
+            Vec3::new( s,  s,  s), // Front-top-right
+            Vec3::new(-s, -s,  s), // Front-bottom-left
+            Vec3::new( s, -s,  s), // Front-bottom-right
+            Vec3::new( s, -s, -s), // Back-bottom-right
+            Vec3::new( s,  s,  s), // Front-top-right
+            Vec3::new( s,  s, -s), // Back-top-right
+            Vec3::new(-s,  s,  s), // Front-top-left
+            Vec3::new(-s,  s, -s), // Back-top-left
+            Vec3::new(-s, -s,  s), // Front-bottom-left
+            Vec3::new(-s, -s, -s), // Back-bottom-left
+            Vec3::new( s, -s, -s), // Back-bottom-right
+            Vec3::new(-s,  s, -s), // Back-top-left
+            Vec3::new( s,  s, -s), // Back-top-right
         ];
 
         Self {
@@ -35,6 +35,9 @@ impl Mesh {
             vcolor: vec![Rgba::red()],
             indices: vec![],
         }
+    }
+    pub fn new_cube() -> Self {
+        Self::new_cube_triangle_strip(0.5)
     }
 }
 

@@ -8,7 +8,7 @@ extern crate backtrace;
 
 // TODO list:
 // - Le renderer ne clear pas les SceneCmds. C'est SceneSystem qui le fait, et il tourne avant tout renderer.
-// - Program: set_mat4(b"name\0", &m) (grab all uniforms procedurally into a shader)
+// - Program: set_mat4(b"name\0", &m) -> Result<()> (grab all uniforms procedurally into a shader)
 // - Cameras + move with mouse+arrows;
 // - More stock meshes (e.g cube_smooth, cube, uv_sphere...)
 // - More stock textures (e.g black, white, magenta (debug), checker ....)
@@ -23,15 +23,15 @@ extern crate backtrace;
 // - Load meshes (obj and GLTF)
 // - Instanced rendering
 
-mod early;
-mod quit;
-mod frame_time;
-mod game;
-mod event;
-mod message;
-mod system;
-mod gamegl;
-mod scene;
+pub mod early;
+pub mod quit;
+pub mod frame_time;
+pub mod game;
+pub mod event;
+pub mod message;
+pub mod system;
+pub mod gamegl;
+pub mod scene;
 
 fn main() {
     early::setup_log();

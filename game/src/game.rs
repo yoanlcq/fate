@@ -17,6 +17,7 @@ use gamegl::{GLSystem, gl_debug_message_callback};
 pub struct Game {
     dmc: dmc::Context,
     window: dmc::Window,
+    #[allow(dead_code)]
     gl_context: dmc::gl::GLContext,
     shared: RefCell<SharedGame>,
     systems: Vec<Box<System>>,
@@ -44,6 +45,7 @@ impl SharedGame {
             scene: Scene::new(),
         }
     }
+    #[allow(dead_code)]
     pub fn push_message(&mut self, msg: Message) {
         self.pending_messages.push_back(msg);
     }
