@@ -70,7 +70,47 @@ impl GLColorProgram {
     pub fn gl_id(&self) -> GLuint {
         self.prog.gl_id()
     }
+
+    pub fn attribs(&self) -> Vec<AttribInfo> {
+        let mut count = 0;
+        unsafe {
+            gl::GetProgramiv(self.gl_id(), gl::ACTIVE_ATTRIBUTES, &mut count);
+        }
+        for i in 0..count {
+            let mut name = [0_u8; 256];
+            let mut name_len = 0;
+            let mut var_size = 0;
+            let mut var_type = 0;
+            unsafe {
+                gl::GetActiveAttrib(self.gl_id(), i as _, name.len() as _, &mut name_len, &mut var_size, &mut var_type, name.as_mut_ptr() as _);
+            }
+        }
+        unimplemented!{}
+    }
+
+    pub fn uniforms(&self) -> Vec<UniformInfo> {
+        let mut count = 0;
+        unsafe {
+            gl::GetProgramiv(self.gl_id(), gl::ACTIVE_UNIFORMS, &mut count);
+        }
+        for i in 0..count {
+            let mut name = [0_u8; 256];
+            let mut name_len = 0;
+            let mut var_size = 0;
+            let mut var_type = 0;
+            unsafe {
+                gl::GetActiveUniform(self.gl_id(), i as _, name.len() as _, &mut name_len, &mut var_size, &mut var_type, name.as_mut_ptr() as _);
+            }
+        }
+        unimplemented!{}
+    }
 }
+
+#[derive(Debug)]
+pub struct AttribInfo;
+
+#[derive(Debug)]
+pub struct UniformInfo;
 
 
 fn gx_buffer_data<T>(target: gx::BufferTarget, data: &[T], usage: gx::BufferUsage) {

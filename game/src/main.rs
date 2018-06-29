@@ -7,7 +7,7 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - Le renderer ne clear pas les SceneCmds. C'est SceneSystem qui le fait, et il tourne avant tout renderer.
+// - Passer au Core profile :/
 // - Program: set_mat4(b"name\0", &m) -> Result<()> (grab all uniforms procedurally into a shader)
 // - Cameras + move with mouse+arrows;
 // - More stock meshes (e.g cube_smooth, cube, uv_sphere...)
