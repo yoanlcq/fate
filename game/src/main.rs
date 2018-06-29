@@ -1,6 +1,7 @@
 extern crate fate;
 extern crate fate_gx as gx;
 extern crate dmc;
+extern crate sdl2;
 #[macro_use]
 extern crate log;
 extern crate env_logger;

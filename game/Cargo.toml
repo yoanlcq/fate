@@ -2,11 +2,16 @@
 name = "fate-test-game"
 version = "0.1.0"
 authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+build = "build.rs"
+
+[build-dependencies]
+download_sdl2 = "0.0.3"
 
 [dependencies]
 fate = { path = "../fate" }
 fate-gx = { path = "../gx" }
 dmc = { path = "../../dmc" }
+sdl2 = "~0.31.0"
 log = "~0.4.2"
 env_logger = "0.5.0-rc.1"
 backtrace = "~0.3.5"
