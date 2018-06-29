@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 use gx::gl::{self, types::GLenum};
 use fate::vek::{Vec3, Rgba};
+use system::*;
 
 #[derive(Debug)]
 pub struct Mesh {
@@ -51,22 +52,38 @@ pub enum SceneCommand {
 #[derive(Debug)]
 pub struct Scene {
     pub meshes: HashMap<MeshID, Mesh>,
-    pub command_queue: VecDeque<SceneCommand>,
+    // Later we may also want a tick_commands_queue
+    pub draw_commands_queue: VecDeque<SceneCommand>,
 }
 
 impl Scene {
     pub fn new() -> Self {
         let cube_mesh_id = 1;
         let mut meshes = HashMap::new();
-        let mut command_queue = VecDeque::new();
+        let mut draw_commands_queue = VecDeque::new();
 
         meshes.insert(cube_mesh_id, Mesh::new_cube());
-        command_queue.push_back(SceneCommand::MeshUpdated { mesh_id: cube_mesh_id });
+        draw_commands_queue.push_back(SceneCommand::MeshUpdated { mesh_id: cube_mesh_id });
 
         Self {
             meshes,
-            command_queue,
+            draw_commands_queue,
         }
     }
 }
 
+// Add this system _after_ any renderer.
+#[derive(Debug)]
+pub struct SceneCommandClearerSystem;
+
+impl SceneCommandClearerSystem {
+    pub fn new() -> Self {
+        SceneCommandClearerSystem
+    }
+}
+
+impl System for SceneCommandClearerSystem {
+    fn draw(&mut self, g: &mut G, _: &Draw) {
+        g.scene.draw_commands_queue.clear();
+    }
+}

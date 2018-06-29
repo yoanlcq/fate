@@ -8,7 +8,7 @@ use dmc;
 use gx::{self, gl};
 use frame_time::FrameTimeManager;
 use message::Message;
-use scene::Scene;
+use scene::{Scene, SceneCommandClearerSystem};
 use system::System;
 use quit::{Quit, Quitter};
 use event::Event;
@@ -104,6 +104,7 @@ impl Game {
         let mut systems = Vec::new();
         systems.push(Box::new(Quitter::default()) as Box<System>);
         systems.push(Box::new(GLSystem::new()));
+        systems.push(Box::new(SceneCommandClearerSystem::new()));
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
             desired_fps_ceil: 64.,

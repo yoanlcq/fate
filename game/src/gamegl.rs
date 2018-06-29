@@ -1,6 +1,6 @@
 use std::mem;
 use std::collections::HashMap;
-use fate::vek::{Rgba, Mat4};
+use fate::vek::{Rgba, Mat4, Extent2};
 use gx::{self, Object, gl::{self, types::*}};
 use scene::{Scene, MeshID, Mesh, SceneCommand};
 use system::*;
@@ -89,6 +89,7 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 
 #[derive(Debug)]
 pub struct GLSystem {
+    new_viewport_size: Option<Extent2<u32>>,
     prog: GLColorProgram,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
@@ -98,6 +99,7 @@ pub struct GLSystem {
 impl GLSystem {
     pub fn new() -> Self {
         Self {
+            new_viewport_size: None,
             prog: GLColorProgram::new().unwrap(),
             mesh_position_buffers: Default::default(),
             mesh_color_buffers: Default::default(),
@@ -112,10 +114,6 @@ impl GLSystem {
         for (mesh_id, mesh) in scene.meshes.iter() {
 
             self.prog.set_u_mvp(&Mat4::default());
-
-            if let Some(idx_buffer) = self.mesh_index_buffers.get(mesh_id) {
-                unimplemented!("Index buffers are not supported yet");
-            }
 
             assert!(!mesh.vposition.is_empty());
             let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
@@ -146,14 +144,25 @@ impl GLSystem {
                 },
             }
 
-            unsafe {
-                gl::DrawArrays(mesh.topology, 0, mesh.vposition.len() as _);
+            if let Some(idx_buffer) = self.mesh_index_buffers.get(mesh_id) {
+                if !mesh.indices.is_empty() {
+                    unsafe {
+                        gl::BindBuffer(gx::BufferTarget::ElementArray as _, idx_buffer.gl_id());
+                        assert!(mem::size_of_val(&mesh.indices[0]) == 2); // for gl::UNSIGNED_SHORT
+                        gl::DrawElements(mesh.topology, mesh.indices.len() as _, gl::UNSIGNED_SHORT, 0 as _);
+                        gl::BindBuffer(gx::BufferTarget::ElementArray as _, 0);
+                    }
+                }
+            } else {
+                unsafe {
+                    gl::DrawArrays(mesh.topology, 0, mesh.vposition.len() as _);
+                }
             }
         }
     }
-    fn pump_scene_commands(&mut self, scene: &mut Scene) {
-        while let Some(cmd) = scene.command_queue.pop_front() {
-            self.handle_scene_command(scene, &cmd);
+    fn pump_scene_draw_commands(&mut self, scene: &mut Scene) {
+        for cmd in scene.draw_commands_queue.iter() {
+            self.handle_scene_command(scene, cmd);
         }
     }
     fn handle_scene_command(&mut self, scene: &Scene, cmd: &SceneCommand) {
@@ -179,14 +188,17 @@ impl GLSystem {
 
 impl System for GLSystem {
     fn on_canvas_resized(&mut self, _g: &mut G, size: (u32, u32)) {
-        debug!("GL: Setting viewport to (0, 0, {}, {})", size.0, size.1);
-        unsafe {
-            gl::Viewport(0, 0, size.0 as _, size.1 as _);
-        }
+        self.new_viewport_size = Some(Extent2::new(size.0, size.1));
     }
     fn draw(&mut self, g: &mut G, d: &Draw) {
+        if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
+            debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
+            unsafe {
+                gl::Viewport(0, 0, w as _, h as _);
+            }
+        }
         let scene = &mut g.scene;
-        self.pump_scene_commands(scene);
+        self.pump_scene_draw_commands(scene);
         self.render_scene(scene, d);
     }
 }
