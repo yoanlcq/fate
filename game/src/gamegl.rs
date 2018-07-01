@@ -237,6 +237,12 @@ impl System for GLSystem {
                 gl::Viewport(0, 0, w as _, h as _);
             }
         }
+
+        unsafe {
+            gl::ClearColor(1., 0., 1., 1.);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+        }
+
         let scene = &mut g.scene;
         self.pump_scene_draw_commands(scene);
         self.render_scene(scene, d);
