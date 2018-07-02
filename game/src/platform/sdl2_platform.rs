@@ -19,8 +19,8 @@ impl Sdl2Platform {
         let video_subsystem = sdl2.video().unwrap();
         
         let gl_attr = video_subsystem.gl_attr();
-        gl_attr.set_context_profile(GLProfile::Compatibility);
         gl_attr.set_context_version(4, 5);
+        gl_attr.set_context_profile(GLProfile::Compatibility);
 
         let window = video_subsystem.window(title, w, h)
             .opengl()
@@ -50,7 +50,7 @@ impl Platform for Sdl2Platform {
     fn poll_event(&mut self) -> Option<Event> {
         match self.event_pump.poll_event()? {
             Sdl2Event::Quit {..} => Some(Event::Quit),
-            Sdl2Event::MouseMotion { x, y, .. } => Some(Event::MouseMotion(x, y)),
+            Sdl2Event::MouseMotion { x, y, .. } => Some(Event::MouseMotion(x as _, y as _)),
             Sdl2Event::Window { win_event, .. } => match win_event {
                 WindowEvent::Resized(w, h)
                 | WindowEvent::SizeChanged(w, h) => Some(Event::CanvasResized(w as _, h as _)),

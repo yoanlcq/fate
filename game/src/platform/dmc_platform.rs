@@ -53,6 +53,7 @@ impl DmcPlatform {
         let gl_context = window.create_gl_context(&gl_context_settings).unwrap();
         window.make_gl_context_current(Some(&gl_context)).unwrap();
 
+        // NOTE: Not the cause of slow events
         if let Err(_) = window.gl_set_swap_interval(dmc::gl::GLSwapInterval::LateSwapTearing) {
             let _ = window.gl_set_swap_interval(dmc::gl::GLSwapInterval::VSync);
         }
@@ -74,12 +75,11 @@ impl Platform for DmcPlatform {
         self.gl_context.proc_address(proc)
     }
     fn poll_event(&mut self) -> Option<Event> {
-        use dmc::Event as DmcEvent;
         match self.dmc.poll_event()? {
-            DmcEvent::Quit => Some(Event::Quit),
-            DmcEvent::WindowCloseRequested { .. } => Some(Event::Quit),
-            DmcEvent::MouseMotion { position: Vec2 { x, y }, .. } => Some(Event::MouseMotion(x as _, y as _)),
-            DmcEvent::WindowResized { size: Extent2 { w, h }, .. } => Some(Event::CanvasResized(w, h)),
+            dmc::Event::Quit => Some(Event::Quit),
+            dmc::Event::WindowCloseRequested { .. } => Some(Event::Quit),
+            dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => Some(Event::MouseMotion(x as _, y as _)),
+            dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => Some(Event::CanvasResized(w, h)),
             _ => None,
         }
     }

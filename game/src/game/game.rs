@@ -1,6 +1,7 @@
 use std::time::{Instant, Duration};
 use std::cell::RefCell;
 use std::env;
+use std::collections::VecDeque;
 use fate::main_loop::{MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::lab::duration_ext::DurationExt;
@@ -18,6 +19,7 @@ use gamegl::{GLSystem, gl_debug_message_callback};
 pub struct Game {
     platform: Box<Platform>,
     shared: RefCell<SharedGame>,
+    event_queue: VecDeque<Event>,
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
     fps_ceil: Option<f64>,
@@ -56,6 +58,7 @@ impl Game {
         Self {
             platform,
             shared: RefCell::new(shared),
+            event_queue: VecDeque::with_capacity(2047),
             systems,
             fps_manager,
             fps_ceil: None,
@@ -113,6 +116,9 @@ impl MainSystem for Game {
     fn pump_events(&mut self) {
         self.pump_messages();
         while let Some(ev) = self.poll_event() {
+            self.event_queue.push_back(ev);
+        }
+        while let Some(ev) = self.event_queue.pop_front() {
             for sys in self.systems.iter_mut() {
                 ev.dispatch(sys.as_mut(), &mut self.shared.borrow_mut());
             }

@@ -4,6 +4,7 @@
 // Solved: It depends. Finding by key is annoying; Why not directly typing g.my_sys ? We know our game.
 
 pub use fate::main_loop::{Tick, Draw};
+pub use fate::vek::{Vec2, Extent2};
 pub use quit::Quit;
 pub use game::G;
 pub use message::Message;
@@ -21,9 +22,9 @@ pub trait System {
 
     // events
     fn on_quit(&mut self, _g: &mut G) {}
-    fn on_mouse_motion(&mut self, _g: &mut G, _pos: (i32, i32)) {}
+    fn on_mouse_motion(&mut self, _g: &mut G, _pos: Vec2<f64>) {}
     fn on_mouse_button(&mut self, _g: &mut G, _btn: u32, _is_down: bool) {}
-    fn on_canvas_resized(&mut self, _g: &mut G, _size: (u32, u32)) {}
+    fn on_canvas_resized(&mut self, _g: &mut G, _size: Extent2<u32>) {}
 }
 
 
