@@ -25,9 +25,10 @@ extern crate backtrace;
 // - Instanced rendering
 
 pub mod early;
+pub mod platform;
+pub mod game;
 pub mod quit;
 pub mod frame_time;
-pub mod game;
 pub mod event;
 pub mod message;
 pub mod system;

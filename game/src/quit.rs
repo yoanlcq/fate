@@ -20,4 +20,7 @@ pub struct Quitter(Quit);
 impl System for Quitter {
     fn quit(&self) -> Quit { self.0 }
     fn on_quit(&mut self, _: &mut G) { self.0 = Quit::ShouldQuit; }
+    fn on_mouse_motion(&mut self, _: &mut G, pos: Vec2<f64>) {
+        debug!("Mouse moved to {}", pos);
+    }
 }

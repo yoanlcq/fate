@@ -129,6 +129,7 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 
 #[derive(Debug)]
 pub struct GLSystem {
+    old_viewport_size: Option<Extent2<u32>>,
     new_viewport_size: Option<Extent2<u32>>,
     prog: GLColorProgram,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
@@ -139,6 +140,7 @@ pub struct GLSystem {
 impl GLSystem {
     pub fn new() -> Self {
         Self {
+            old_viewport_size: None,
             new_viewport_size: None,
             prog: GLColorProgram::new().unwrap(),
             mesh_position_buffers: Default::default(),
@@ -227,16 +229,26 @@ impl GLSystem {
 }
 
 impl System for GLSystem {
-    fn on_canvas_resized(&mut self, _g: &mut G, size: (u32, u32)) {
-        self.new_viewport_size = Some(Extent2::new(size.0, size.1));
+    fn on_canvas_resized(&mut self, _g: &mut G, size: Extent2<u32>) {
+        self.old_viewport_size = self.new_viewport_size;
+        self.new_viewport_size = Some(size);
     }
     fn draw(&mut self, g: &mut G, d: &Draw) {
-        if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
-            debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
-            unsafe {
-                gl::Viewport(0, 0, w as _, h as _);
+        //if self.new_viewport_size != self.old_viewport_size {
+            if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
+                self.old_viewport_size = self.new_viewport_size;
+                debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
+                unsafe {
+                    gl::Viewport(0, 0, w as _, h as _);
+                }
             }
+        //}
+
+        unsafe {
+            gl::ClearColor(1., 0., 1., 1.);
+            gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
+
         let scene = &mut g.scene;
         self.pump_scene_draw_commands(scene);
         self.render_scene(scene, d);
