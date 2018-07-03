@@ -74,6 +74,7 @@ impl QueryTarget {
         }
     }
     pub fn counter_bits(&self) -> GLint {
+        assert!(self.is_supported());
         let mut bits = 0;
         unsafe {
             gl::GetQueryiv(*self as _, gl::QUERY_COUNTER_BITS, &mut bits);
@@ -81,11 +82,13 @@ impl QueryTarget {
         bits
     }
     pub fn begin(&self, query: &Query) {
+        assert!(self.is_supported());
         unsafe {
             gl::BeginQuery(*self as _, query.gl_id());
         }
     }
     pub fn end(&self) {
+        assert!(self.is_supported());
         unsafe {
             gl::EndQuery(*self as _);
         }
