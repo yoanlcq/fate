@@ -9,6 +9,8 @@ pub struct UsefulExtensions {
     pub khr_debug: bool,
     pub ati_meminfo: bool,
     pub nvx_gpu_memory_info: bool,
+    pub arb_pipeline_statistics_query: bool,
+    pub arb_timer_query: bool,
 }
 
 pub static mut CACHE: Option<UsefulExtensions> = None;
@@ -28,6 +30,8 @@ impl ExtensionsStore {
             khr_debug: v.gl(4, 3) || self.has("GL_KHR_debug") || self.has("GL_ARB_debug_output") /* ARB falls back to KHR with current gl crate */,
             ati_meminfo: self.has("GL_ATI_meminfo"),
             nvx_gpu_memory_info: self.has("GL_NVX_gpu_memory_info"),
+            arb_pipeline_statistics_query: self.has("ARB_pipeline_statistics_query"),
+            arb_timer_query: v.gl(3, 3) || self.has("ARB_timer_query"),
         }
     }
 }

@@ -23,8 +23,10 @@ pub mod version;
 pub use self::version::*;
 pub mod extensions;
 pub use extensions::*;
+pub mod meminfo;
+pub use meminfo::*;
+pub mod query;
+pub use query::*;
 pub mod boot;
 pub use boot::*;
 
-pub mod meminfo;
-pub use meminfo::*;
