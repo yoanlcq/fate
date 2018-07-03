@@ -1,15 +1,14 @@
-use std::time::{Instant, Duration};
+use std::time::Duration;
 use std::cell::RefCell;
 use std::env;
 use std::collections::VecDeque;
 use fate::main_loop::{MainSystem, Tick, Draw};
 use fate::lab::fps::{FpsManager, FpsCounter};
-use fate::lab::duration_ext::DurationExt;
 use super::SharedGame;
 use gx::{self, gl};
 use scene::SceneCommandClearerSystem;
 use system::System;
-use platform::{Platform, DmcPlatform, Sdl2Platform};
+use platform::{self, Platform, DmcPlatform, Sdl2Platform};
 use quit::{Quit, Quitter};
 use event::Event;
 use gamegl::{GLSystem, gl_debug_message_callback};
@@ -27,9 +26,13 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Self {
+        let platform_settings = platform::Settings::new();
+        info!("Using GL pixel format settings: {:#?}", platform_settings.gl_pixel_format_settings);
+        info!("Using GL context settings: {:#?}", platform_settings.gl_context_settings);
+
         let mut platform = match env::var("platform").as_ref().map(String::as_str) {
-            Ok("sdl2") => Box::new(Sdl2Platform::new(800, 600, "Test Game")) as Box<Platform>,
-            _ => Box::new(DmcPlatform::new(800, 600, "Test Game")) as Box<Platform>,
+            Ok("sdl2") => Box::new(Sdl2Platform::new(&platform_settings)) as Box<Platform>,
+            _ => Box::new(DmcPlatform::new(&platform_settings)) as Box<Platform>,
         };
 
         gl::load_with(|s| {
