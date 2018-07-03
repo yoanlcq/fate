@@ -25,3 +25,6 @@ pub mod extensions;
 pub use extensions::*;
 pub mod boot;
 pub use boot::*;
+
+pub mod meminfo;
+pub use meminfo::*;

@@ -7,7 +7,11 @@ pub struct ExtensionsStore(HashSet<String>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsefulExtensions {
     pub khr_debug: bool,
+    pub ati_meminfo: bool,
+    pub nvx_gpu_memory_info: bool,
 }
+
+pub static mut CACHE: Option<UsefulExtensions> = None;
 
 impl ExtensionsStore {
     pub fn new() -> Self {
@@ -22,6 +26,8 @@ impl ExtensionsStore {
         let v = ::GLVersion::current();
         UsefulExtensions {
             khr_debug: v.gl(4, 3) || self.has("GL_KHR_debug") || self.has("GL_ARB_debug_output") /* ARB falls back to KHR with current gl crate */,
+            ati_meminfo: self.has("GL_ATI_meminfo"),
+            nvx_gpu_memory_info: self.has("GL_NVX_gpu_memory_info"),
         }
     }
 }

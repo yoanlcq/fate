@@ -85,9 +85,9 @@ mod tests {
             ("OpenGL ES 2.0", GLVariant::ES, 2, 0),
             ("OpenGL ES 2.0 Foo", GLVariant::ES, 2, 0),
         ];
-        for (version_string, variant, major, minor) in versions {
+        for (version_string, variant, major, minor) in versions.into_iter().cloned() {
             let from_string = GLVersion::from_gl_version_string(version_string);
-            let expected = GLVersion::new(variant, major, minor);
+            let expected = GLVersion { variant, major, minor };
             assert_eq!(from_string, expected, "'{}' was parsed as '{}', but '{}' was expected", version_string, from_string, expected);
         }
     }
