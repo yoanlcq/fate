@@ -129,23 +129,45 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 
 #[derive(Debug)]
 pub struct GLSystem {
-    old_viewport_size: Option<Extent2<u32>>,
     new_viewport_size: Option<Extent2<u32>>,
     prog: GLColorProgram,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_index_buffers: HashMap<MeshID, gx::Buffer>,
+    pipeline_statistics_arb_queries: HashMap<gx::QueryTarget, gx::Query>,
 }
 
 impl GLSystem {
     pub fn new() -> Self {
+        let pipeline_statistics_arb_targets = [
+            gx::QueryTarget::VerticesSubmittedARB              ,
+            gx::QueryTarget::PrimitivesSubmittedARB            ,
+            gx::QueryTarget::VertexShaderInvocationsARB        ,
+            gx::QueryTarget::TessControlShaderPatchesARB       ,
+            gx::QueryTarget::TessEvaluationShaderInvocationsARB,
+            gx::QueryTarget::GeometryShaderInvocations         ,
+            gx::QueryTarget::GeometryShaderPrimitivesEmittedARB,
+            gx::QueryTarget::FragmentShaderInvocationsARB      ,
+            gx::QueryTarget::ComputeShaderInvocationsARB       ,
+            gx::QueryTarget::ClippingInputPrimitivesARB        ,
+            gx::QueryTarget::ClippingOutputPrimitivesARB       ,
+        ];
+        let pipeline_statistics_arb_queries = if pipeline_statistics_arb_targets[0].is_supported() {
+            debug!("GL: ARB_pipeline_statistics_query is supported.");
+            pipeline_statistics_arb_targets.into_iter()
+                .map(|target| (*target, gx::Query::new()))
+                .collect()
+        } else {
+            debug!("GL: ARB_pipeline_statistics_query is unsupported.");
+            Default::default()
+        };
         Self {
-            old_viewport_size: None,
             new_viewport_size: None,
             prog: GLColorProgram::new().unwrap(),
             mesh_position_buffers: Default::default(),
             mesh_color_buffers: Default::default(),
             mesh_index_buffers: Default::default(),
+            pipeline_statistics_arb_queries,
         }
     }
 
@@ -230,28 +252,37 @@ impl GLSystem {
 
 impl System for GLSystem {
     fn on_canvas_resized(&mut self, _g: &mut G, size: Extent2<u32>) {
-        self.old_viewport_size = self.new_viewport_size;
         self.new_viewport_size = Some(size);
     }
     fn draw(&mut self, g: &mut G, d: &Draw) {
-        //if self.new_viewport_size != self.old_viewport_size {
-            if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
-                self.old_viewport_size = self.new_viewport_size;
-                debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
-                unsafe {
-                    gl::Viewport(0, 0, w as _, h as _);
-                }
+        if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
+            debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
+            unsafe {
+                gl::Viewport(0, 0, w as _, h as _);
             }
-        //}
+        }
 
         unsafe {
             gl::ClearColor(1., 0., 1., 1.);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+        for (target, query) in self.pipeline_statistics_arb_queries.iter() {
+            target.begin(query);
+        }
+
         let scene = &mut g.scene;
         self.pump_scene_draw_commands(scene);
         self.render_scene(scene, d);
+
+        for target in self.pipeline_statistics_arb_queries.keys() {
+            target.end();
+        }
+        // FIXME: No, we don't wanna wait!!
+        for (target, query) in self.pipeline_statistics_arb_queries.iter() {
+            let result = query.wait_result();
+            info!("Pipeline statistics ARB: {:?} = {}", target, result);
+        }
     }
 }
 

@@ -33,11 +33,11 @@ pub struct MemInfo {
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct MemInfoNVX {
-    dedicated_vidmem: GLint,
-    total_available_mem: GLint,
-    current_available_vidmem: GLint,
-    eviction_count: GLint,
-    evicted_mem: GLint,
+    pub dedicated_vidmem_kilobytes: GLint,
+    pub total_available_mem_kilobytes: GLint,
+    pub current_available_vidmem_kilobytes: GLint,
+    pub eviction_count: GLint,
+    pub evicted_mem_kilobytes: GLint,
 }
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
@@ -50,20 +50,22 @@ pub struct MemInfoATI {
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct FreeMemoryATI {
-    pub total: GLint,
-    pub largest_block: GLint,
-    pub total_aux: GLint,
-    pub largest_aux_block: GLint,
+    pub total_kilobytes: GLint,
+    pub largest_block_kilobytes: GLint,
+    pub total_aux_kilobytes: GLint,
+    pub largest_aux_block_kilobytes: GLint,
 }
 
 impl FreeMemoryATI {
-    pub fn current(type_: GLenum) -> Self {
-        assert!(unsafe { ATI_meminfo });
+    pub fn current(type_: GLenum) -> Option<Self> {
+        if !unsafe { ATI_meminfo } {
+            return None;
+        }
         let mut s = Self::default();
         unsafe {
-            gl::GetIntegerv(type_, &mut s.total); // first element
+            gl::GetIntegerv(type_, &mut s.total_kilobytes); // first element
         }
-        s
+        Some(s)
     }
 }
 impl MemInfoATI {
@@ -72,9 +74,9 @@ impl MemInfoATI {
             return None;
         }
         Some(Self {
-            vbo_free_memory: FreeMemoryATI::current(GL_VBO_FREE_MEMORY_ATI),
-            texture_free_memory: FreeMemoryATI::current(GL_TEXTURE_FREE_MEMORY_ATI),
-            renderbuffer_free_memory: FreeMemoryATI::current(GL_RENDERBUFFER_FREE_MEMORY_ATI),
+            vbo_free_memory: FreeMemoryATI::current(GL_VBO_FREE_MEMORY_ATI).unwrap(),
+            texture_free_memory: FreeMemoryATI::current(GL_TEXTURE_FREE_MEMORY_ATI).unwrap(),
+            renderbuffer_free_memory: FreeMemoryATI::current(GL_RENDERBUFFER_FREE_MEMORY_ATI).unwrap(),
         })
     }
 }
@@ -85,11 +87,11 @@ impl MemInfoNVX {
             return None;
         }
         Some(Self {
-            dedicated_vidmem: ::integer(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX),
-            total_available_mem: ::integer(GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX),
-            current_available_vidmem: ::integer(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX),
+            dedicated_vidmem_kilobytes: ::integer(GL_GPU_MEMORY_INFO_DEDICATED_VIDMEM_NVX),
+            total_available_mem_kilobytes: ::integer(GL_GPU_MEMORY_INFO_TOTAL_AVAILABLE_MEMORY_NVX),
+            current_available_vidmem_kilobytes: ::integer(GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX),
             eviction_count: ::integer(GL_GPU_MEMORY_INFO_EVICTION_COUNT_NVX),
-            evicted_mem: ::integer(GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX),
+            evicted_mem_kilobytes: ::integer(GL_GPU_MEMORY_INFO_EVICTED_MEMORY_NVX),
         })
     }
 }
