@@ -1,3 +1,81 @@
+// # Problems
+//
+// ## Physics
+//
+// I want fast ray-casting in the whole scene's geometry.
+// Usages include:
+// - Terrain collision detection;
+// - Collision _prediction_.
+//
+// ## Rendering
+//
+// I don't want to use cascaded shadow maps. Reasons are:
+// - It's kinda slow and wasteful.
+// - It's hard to make it look right (i.e not pixelated, and choose a correct bias, etc);
+// - It looks like a hierarchical data structure, which I don't like.
+//
+// I would like not having to use light maps. Reasons are:
+// - The PBR pipeline more or less does this by itself;
+// - I don't want to deal with static/dynamic duality of lights.
+// - I would like to avoid having to _bake_ stuff.
+// - Light maps are complicated to implement.
+//
+// Goals:
+// - Precise hard shadows;
+// - Nice-looking soft shadows;
+// - In real-time, with world streaming.
+//
+// Domain knowledge:
+// - The world is large, doesn't move, and is super sparse, especially since we're dealing with surfaces, not solids (i.e the interior of a mesh is just air).
+// - A few objects move. 
+// - A few lights move (e.g the Sun, or torches (adding noise to the position every frame)).
+//
+// # Idea
+// - Have a super-low LOD version of the scene's geometry (NB: in which we only need to store vertex positions and normals); it's the one that will be used for ray-casting.
+// - All of the high-LOD scene's triangles are already in GPU memory (large buffer already used by DrawIndirect())
+// - The same is true for the low-LOD scene;
+// - In the usual high-LOD scene rendering step via DrawIndirect(), care to write these in renderbuffers:
+//   - Depth; used for knowing the fragment's 3D world position;
+//   - Normal; used for discarding a ray early if the fragment is already in shadow.
+// - For each fragment, cast a ray from the fragment's 3D world position towards the light source, WITHIN some in-GPU representation of the super-low LOD scene.
+//   The first test is "if dot(fragment_normal, dir_to_light) < 0 { return; }". Indeed, if a fragment is facing away from the light, we know it's already in shadow.
+//   If the ray intersects any triangle before reaching the light, then the fragment is shadowed.
+// - The question is, how to make the intersection test fast enough for rendering every frame?
+//
+// # One solution
+//
+// Throughout the whole thing, I want:
+// - Memory and speed statistics;
+// - Ability to tweak settings in real time and see the impact via stats.
+//
+// Split the scene into "objects". Factors to take into account are: sparsity, moving or not, and level of detail (as in, distance from the camera).
+// An example would be:
+// - The main character; Not sparse, moving, and close to camera.
+// - The nearby large cave entrance: Sparse, not moving, somewhat close to camera.
+// - The surrounding desert: Sparse, not moving, somewhat close to camera.
+// - The canyon in the faraway distance: Sparse, not moving, very far from camera.
+//
+// Each object is assigned a low-res 3D texture, representing a voxel grid.
+// The voxel grid's world-space scale is big enough to contain the object no matter its current animation pose.
+// The voxel grid's resolution should be kinda low, but adjusted depending on the object's sparsity, wanted level of detail, and the look of the bounding box.
+// - Low res => less memory + less cells to traverse, but cells are less likely to be empty.
+// - High res => cells are likely to be empty, but this costs more memory, and traversal has to go though more cells.
+//
+// There's a very few number of such grids (as few as there are "objects"), so we can store all the grids in linear arrays.
+//
+// For a given object, each voxel of its grid stores 0 to N triangles. (TODO: how exactly?)
+//
+// Then, the GPU ray-casting algorithm looks like this:
+// - if dot(fragment_normal, dir_to_light) < 0 { return; }
+// - Find the potentially-intersecting grids (using AABB tests).
+// - Note that AABBs may contain one another. So we have to find the intersection in _each_ grid, and return only the closest.
+//   But if our ray casting is a boolean query (= "is there anything between my origin and the light?"), then we can return as soon as we find any intersection.
+// - For each grid, traverse voxels using 3DDDA.
+// - When traversing a voxel, rasterize by hand the triangles it contains into a 1x1 buffer. If we find something, there's an intersection. Otherwise, we have to keep going.
+//
+// Q: In the large desert scene, if a ray has no intersection, it has to traverse a lot of cells.
+// A: Not if the "objects" are chosen such that as few bounding boxes as needs are selected. There's no bounding box for the air above the sand!
+
 // Design goals:
 // - Memory-efficient (assumes voxels are sparse (very much so));
 // - Fast insertion;
