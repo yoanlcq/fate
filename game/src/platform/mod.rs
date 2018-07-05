@@ -9,6 +9,7 @@ pub mod dmc_platform;
 pub use self::dmc_platform::DmcPlatform;
 
 pub trait Platform {
+    fn canvas_size(&self) -> Extent2<u32>;
     fn show_window(&mut self);
     fn gl_get_proc_address(&self, proc: &str) -> *const c_void;
     fn gl_swap_buffers(&mut self);
@@ -47,7 +48,7 @@ impl Settings {
             },
             gl_context_settings: dmc::gl::GLContextSettings {
                 version: dmc::gl::GLVersion::new_desktop(4, 5),
-                profile: dmc::gl::GLProfile::Compatibility,
+                profile: dmc::gl::GLProfile::Core,
                 debug: true,
                 forward_compatible: true,
                 robust_access: None,

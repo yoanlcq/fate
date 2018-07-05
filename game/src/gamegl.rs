@@ -1,9 +1,23 @@
 use std::mem;
 use std::collections::HashMap;
-use fate::vek::{Rgba, Mat4, Extent2};
+use fate::vek::{Rgba, Mat4, Extent2, Vec3, FrustumPlanes};
 use gx::{self, Object, gl::{self, types::*}};
-use scene::{Scene, MeshID, Mesh, SceneCommand};
+use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, CameraProjectionMode, Camera};
 use system::*;
+
+static mut NB_ERRORS: usize = 0;
+
+pub fn gl_error_hook(e: Option<gx::Error>, s: &str) {
+    match e {
+        Some(e) => {
+            error!("GL error: {:?} ({})", e, s);
+            unsafe { NB_ERRORS += 1; }
+        },
+        None => if unsafe { NB_ERRORS > 0 } {
+            panic!("Encountered {} OpenGL errors.", unsafe { NB_ERRORS });
+        }
+    }
+}
 
 pub fn gl_debug_message_callback(msg: &gx::DebugMessage) {
     match ::std::ffi::CString::new(msg.text) {
@@ -16,7 +30,7 @@ const ATTRIB_POSITION_VEC3F32: GLuint = 0;
 const ATTRIB_COLOR_RGBAF32: GLuint = 1;
 
 static VS_SRC: &'static [u8] = b"
-#version 450
+#version 450 core
 
 uniform mat4 u_mvp;
 
@@ -31,7 +45,7 @@ void main() {
 }
 ";
 static FS_SRC: &'static [u8] = b"
-#version 450
+#version 450 core
 
 in vec4 v_color;
 
@@ -50,6 +64,7 @@ struct GLColorProgram {
 
 impl GLColorProgram {
     pub fn new() -> Result<Self, String> {
+        check_gl!("GLColorProgram: Before any shader");
         let vs = gx::VertexShader::try_from_source(VS_SRC)?;
         let fs = gx::FragmentShader::try_from_source(FS_SRC)?;
         let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
@@ -59,6 +74,7 @@ impl GLColorProgram {
         if u_mvp == -1 {
             return Err(format!("u_mvp is invalid!"));
         }
+        check_gl!("GLColorProgram");
 
         Ok(Self { prog, u_mvp, })
     }
@@ -115,12 +131,12 @@ pub struct UniformInfo;
 
 fn gx_buffer_data<T>(target: gx::BufferTarget, data: &[T], usage: gx::BufferUsage) {
     unsafe {
-        gl::BufferData(target as _, mem::size_of_val(data) as _, data.as_ptr() as _, usage as _);
+        check_gl!(gl::BufferData(target as _, mem::size_of_val(data) as _, data.as_ptr() as _, usage as _));
     }
 }
 fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
     unsafe {
-        gl::BindBuffer(gx::BufferTarget::Array as _, buf.gl_id());
+        check_gl!(gl::BindBuffer(gx::BufferTarget::Array as _, buf.gl_id()));
         gx_buffer_data(gx::BufferTarget::Array, data, usage);
         gl::BindBuffer(gx::BufferTarget::Array as _, 0);
     }
@@ -129,16 +145,17 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 
 #[derive(Debug)]
 pub struct GLSystem {
-    new_viewport_size: Option<Extent2<u32>>,
+    viewport_size: Extent2<u32>,
     prog: GLColorProgram,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
+    mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_index_buffers: HashMap<MeshID, gx::Buffer>,
     pipeline_statistics_arb_queries: HashMap<gx::QueryTarget, gx::Query>,
 }
 
 impl GLSystem {
-    pub fn new() -> Self {
+    pub fn new(viewport_size: Extent2<u32>) -> Self {
         let pipeline_statistics_arb_targets = [
             gx::QueryTarget::VerticesSubmittedARB              ,
             gx::QueryTarget::PrimitivesSubmittedARB            ,
@@ -162,29 +179,77 @@ impl GLSystem {
             Default::default()
         };
         Self {
-            new_viewport_size: None,
+            viewport_size,
             prog: GLColorProgram::new().unwrap(),
             mesh_position_buffers: Default::default(),
+            mesh_normal_buffers: Default::default(),
             mesh_color_buffers: Default::default(),
             mesh_index_buffers: Default::default(),
             pipeline_statistics_arb_queries,
         }
     }
 
-    fn render_scene(&mut self, scene: &Scene, _: &Draw) {
+    fn render_scene(&mut self, scene: &Scene, _draw: &Draw) {
         unsafe {
-            gl::UseProgram(self.prog.gl_id());
+            check_gl!(gl::UseProgram(self.prog.gl_id()));
         }
-        for (mesh_id, mesh) in scene.meshes.iter() {
+        for camera in scene.cameras.values() {
+            self.render_scene_with_camera(scene, _draw, camera);
+        }
+    }
 
-            self.prog.set_u_mvp(&Mat4::default());
+    fn render_scene_with_camera(&mut self, scene: &Scene, _draw: &Draw, camera: &Camera) {
+        let &Camera {
+            position: camera_position,
+            target: camera_target,
+            scale: camera_scale,
+            projection_mode,
+            fov_y_radians: fov_y,
+            near,
+            far,
+        } = camera;
+
+        for &MeshInstance { ref mesh_id, xform } in scene.mesh_instances.values() {
+            let mesh = &scene.meshes[mesh_id];
+
+            let aspect_ratio = {
+                let Extent2 { w, h } = self.viewport_size;
+                assert_ne!(w, 0);
+                assert_ne!(h, 0);
+                w as f32 / h as f32
+            };
+            let proj = match projection_mode {
+                CameraProjectionMode::Perspective => Mat4::perspective_lh_no(fov_y, aspect_ratio, near, far),
+                CameraProjectionMode::Ortho => Mat4::orthographic_lh_no(FrustumPlanes {
+                    right: aspect_ratio,
+                    left: -aspect_ratio,
+                    top: 1.,
+                    bottom: -1.,
+                    near,
+                    far,
+                }),
+            };
+            let view = Mat4::<f32>::scaling_3d(camera_scale.recip())
+                * Mat4::look_at(camera_position, camera_target, Vec3::up());
+            let model = Mat4::from(xform);
+            let mvp = proj * view * model;
+
+            self.prog.set_u_mvp(&mvp);
+            check_gl!("Set u_mvp");
+
+            /*
+            unsafe {
+                gl::Disable(gl::CULL_FACE);
+                //gl::CullFace(gl::BACK);
+            }
+            */
 
             assert!(!mesh.vposition.is_empty());
             let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
             unsafe {
-                gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id());
-                gl::EnableVertexAttribArray(ATTRIB_POSITION_VEC3F32);
-                gl::VertexAttribPointer(ATTRIB_POSITION_VEC3F32, 3, gl::FLOAT, gl::FALSE, 3*4, 0 as _);
+                check_gl!(gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id()));
+                check_gl!(gl::EnableVertexAttribArray(ATTRIB_POSITION_VEC3F32));
+                check_gl!(gl::VertexAttribPointer(ATTRIB_POSITION_VEC3F32, 3, gl::FLOAT, gl::FALSE, 3*4, 0 as _));
                 gl::BindBuffer(gx::BufferTarget::Array as _, 0);
             }
 
@@ -231,9 +296,10 @@ impl GLSystem {
     }
     fn handle_scene_command(&mut self, scene: &Scene, cmd: &SceneCommand) {
         match *cmd {
-            SceneCommand::MeshUpdated { mesh_id } => {
-                if let Some(&Mesh { topology: _, ref vposition, ref vcolor, ref indices, }) = scene.meshes.get(&mesh_id) {
+            SceneCommand::AddMesh(mesh_id) => {
+                if let Some(&Mesh { topology: _, ref vposition, ref vnormal, ref vcolor, ref indices, }) = scene.meshes.get(&mesh_id) {
                     gx_buffer_data_dsa(self.mesh_position_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), vposition, gx::BufferUsage::StaticDraw);
+                    gx_buffer_data_dsa(self.mesh_normal_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), vnormal, gx::BufferUsage::StaticDraw);
                     if vcolor.is_empty() {
                         self.mesh_color_buffers.remove(&mesh_id);
                     } else {
@@ -246,25 +312,22 @@ impl GLSystem {
                     }
                 }
             },
+            SceneCommand::AddMeshInstance(_id) => {},
         }
     }
 }
 
 impl System for GLSystem {
     fn on_canvas_resized(&mut self, _g: &mut G, size: Extent2<u32>) {
-        self.new_viewport_size = Some(size);
+        self.viewport_size = size;
     }
     fn draw(&mut self, g: &mut G, d: &Draw) {
-        if let Some(Extent2 { w, h }) = self.new_viewport_size.take() {
-            debug!("GL: Setting viewport to (0, 0, {}, {})", w, h);
-            unsafe {
-                gl::Viewport(0, 0, w as _, h as _);
-            }
-        }
-
         unsafe {
+            let Extent2 { w, h } = self.viewport_size;
+            gl::Viewport(0, 0, w as _, h as _);
             gl::ClearColor(1., 0., 1., 1.);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+            check_gl!("Viewport + clear");
         }
 
         for (target, query) in self.pipeline_statistics_arb_queries.iter() {

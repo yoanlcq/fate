@@ -2,6 +2,9 @@ pub extern crate gl;
 
 pub mod attrib;
 pub use attrib::{Attrib, ProgramAttribs};
+#[macro_use]
+pub mod error;
+pub use error::*;
 pub mod get;
 pub use self::get::*;
 pub mod object;

@@ -4,27 +4,29 @@ use std::collections::VecDeque;
 #[derive(Debug)]
 pub struct FrameTimeManager {
     previous_frame_times: VecDeque<Duration>,
-    current_frame_start: Option<Instant>,
+    current_frame_start: Instant,
     max_len: usize,
     average_frame_time: Duration,
-    frame_time: Duration,
 }
 
 impl FrameTimeManager {
     pub fn with_max_len(max_len: usize) -> Self {
+        assert_ne!(max_len, 0);
         Self {
             previous_frame_times: VecDeque::new(),
-            current_frame_start: None,
+            current_frame_start: Instant::now(), // Should actually be in begin_main_loop_iteration()
             max_len,
             average_frame_time: Duration::default(),
-            frame_time: Duration::default(),
         }
     }
     pub fn begin_main_loop_iteration(&mut self) {
-        self.current_frame_start = Some(Instant::now());
+        self.current_frame_start = Instant::now();
     }
     pub fn end_main_loop_iteration  (&mut self) {
-        self.previous_frame_times.push_back(self.current_frame_start.unwrap().elapsed());
+        let current_frame_end = Instant::now();
+        self.previous_frame_times.push_back(current_frame_end - self.current_frame_start);
+        self.current_frame_start = current_frame_end;
+
         while self.previous_frame_times.len() > self.max_len {
             self.previous_frame_times.pop_front();
         }
@@ -38,7 +40,7 @@ impl FrameTimeManager {
         };
     }
     pub fn dt(&self) -> Duration {
-        self.frame_time
+        self.previous_frame_times.back().map(Clone::clone).unwrap_or_default()
     }
     pub fn smooth_dt(&self) -> Duration {
         self.average_frame_time

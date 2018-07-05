@@ -106,6 +106,9 @@ impl Platform for Sdl2Platform {
     fn show_window(&mut self) {
         // Window starts shown
     }
+    fn canvas_size(&self) -> Extent2<u32> {
+        self.window.size().into()
+    }
     fn gl_swap_buffers(&mut self) {
         self.window.gl_swap_window();
     }

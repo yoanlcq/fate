@@ -62,9 +62,15 @@ pub fn run(m: &mut MainSystem) {
         m.draw(&t.draw());
         if m.quit() { break 'main; }
 
+        // XXX: t.end_main_loop_iteration() normally sleeps to limit FPS if necessary.
+        // However, it is unknown whether m.end_main_loop_iteration() wants
+        // be called after sleeping or before sleeping.
+        // Normally, time spent sleeping has to be taken into account for accurate
+        // delta time retrieval, so I'll assume m.end_main_loop_iteration() wants to
+        // be called after t.end_main_loop_iteration().
+        t.end_main_loop_iteration();
         m.end_main_loop_iteration();
         if m.quit() { break 'main; }
-        t.end_main_loop_iteration();
     }
 }
 

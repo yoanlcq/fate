@@ -47,6 +47,9 @@ impl Platform for DmcPlatform {
     fn show_window(&mut self) {
         self.window.show().unwrap();
     }
+    fn canvas_size(&self) -> Extent2<u32> {
+        self.window.canvas_size().unwrap()
+    }
     fn gl_swap_buffers(&mut self) {
         self.window.gl_swap_buffers().unwrap();
     }

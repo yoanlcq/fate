@@ -6,13 +6,15 @@ impl Program {
         unsafe {
             let program = gl::CreateProgram();
             assert_ne!(program, 0);
+            check_gl!("Before attaching shaders");
             gl::AttachShader(program, vs.gl_id());
             gl::AttachShader(program, fs.gl_id());
             gl::LinkProgram(program);
             gl::DetachShader(program, vs.gl_id());
             gl::DetachShader(program, fs.gl_id());
             let mut status = gl::FALSE as GLint;
-            gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
+            check_gl!("Before getting link status");
+            check_gl!(gl::GetProgramiv(program, gl::LINK_STATUS, &mut status));
             let s = Program(program);
             if status == gl::TRUE as _ {
                 return Ok(s);

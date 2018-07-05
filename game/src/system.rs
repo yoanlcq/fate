@@ -3,11 +3,29 @@
 // TODO: Retrieve a specific system at runtime
 // Solved: It depends. Finding by key is annoying; Why not directly typing g.my_sys ? We know our game.
 
-pub use fate::main_loop::{Tick, Draw};
+pub use std::time::Duration;
 pub use fate::vek::{Vec2, Extent2};
+pub use fate::lab::duration_ext::DurationExt;
 pub use quit::Quit;
 pub use game::G;
 pub use message::Message;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Tick {
+    pub t: Duration,
+    pub dt_as_duration: Duration,
+    pub dt: f32,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Draw {
+    pub t: Duration,
+    pub dt_as_duration: Duration,
+    pub dt: f32,
+    pub smooth_dt_as_duration: Duration,
+    pub smooth_dt: f32,
+    pub tick_progress: f64,
+}
 
 // All items take &mut self since we know we're single-threaded.
 pub trait System {

@@ -2,16 +2,17 @@ use std::time::Duration;
 use std::cell::RefCell;
 use std::env;
 use std::collections::VecDeque;
-use fate::main_loop::{MainSystem, Tick, Draw};
+use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
+use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
 use super::SharedGame;
 use gx::{self, gl};
-use scene::SceneCommandClearerSystem;
-use system::System;
+use scene::{SceneLogicSystem, SceneCommandClearerSystem};
+use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
 use quit::{Quit, Quitter};
 use event::Event;
-use gamegl::{GLSystem, gl_debug_message_callback};
+use gamegl::{gl_error_hook, GLSystem, gl_debug_message_callback};
 
 
 
@@ -41,6 +42,7 @@ impl Game {
             f
         });
         info!("OpenGL context summary:\n{}", gx::ContextSummary::new());
+        gx::set_error_hook(gl_error_hook);
         gx::boot_gl();
         gx::set_debug_message_callback(Some(gl_debug_message_callback));
         gx::log_debug_message("OpenGL debug logging is enabled.");
@@ -48,7 +50,8 @@ impl Game {
         let shared = SharedGame::new();
         let mut systems = Vec::new();
         systems.push(Box::new(Quitter::default()) as Box<System>);
-        systems.push(Box::new(GLSystem::new()));
+        systems.push(Box::new(SceneLogicSystem::new()));
+        systems.push(Box::new(GLSystem::new(platform.canvas_size())));
         systems.push(Box::new(SceneCommandClearerSystem::new()));
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
@@ -101,16 +104,18 @@ impl MainSystem for Game {
     fn frame_time_ceil(&self) -> Duration { Duration::from_millis(250) }
 
     fn begin_main_loop_iteration(&mut self) {
-        self.shared.borrow_mut().frame_time_manager.begin_main_loop_iteration();
+        let mut shared = self.shared.borrow_mut();
+        shared.frame_time_manager.begin_main_loop_iteration();
         for sys in self.systems.iter_mut() {
-            sys.begin_main_loop_iteration(&mut self.shared.borrow_mut());
+            sys.begin_main_loop_iteration(&mut shared);
         }
     }
     fn end_main_loop_iteration  (&mut self) {
+        let mut shared = self.shared.borrow_mut();
         for sys in self.systems.iter_mut() {
-            sys.end_main_loop_iteration(&mut self.shared.borrow_mut());
+            sys.end_main_loop_iteration(&mut shared);
         }
-        self.shared.borrow_mut().frame_time_manager.end_main_loop_iteration();
+        shared.frame_time_manager.end_main_loop_iteration();
         let fps_stats = self.fps_manager.end_main_loop_iteration(&mut self.fps_ceil);
         if let Some(fps_stats) = fps_stats {
             println!("{}", fps_stats);
@@ -128,16 +133,37 @@ impl MainSystem for Game {
             self.pump_messages();
         }
     } 
-    fn tick(&mut self, tick: &Tick) {
+    fn tick(&mut self, tick: &MainLoopTick) {
         let mut shared = self.shared.borrow_mut();
         shared.t += tick.dt;
+
+        let dt_as_duration = tick.dt;
+        let tick = Tick {
+            t: shared.t,
+            dt_as_duration,
+            dt: dt_as_duration.to_f64_seconds() as _,
+        };
+
         for sys in self.systems.iter_mut() {
-            sys.tick(&mut shared, tick);
+            sys.tick(&mut shared, &tick);
         }
     }
-    fn draw(&mut self, draw: &Draw) {
+    fn draw(&mut self, draw: &MainLoopDraw) {
+        let mut shared = self.shared.borrow_mut();
+
+        let dt_as_duration = shared.frame_time_manager.dt();
+        let smooth_dt_as_duration = shared.frame_time_manager.smooth_dt();
+        let draw = Draw {
+            t: shared.t,
+            dt_as_duration,
+            smooth_dt_as_duration,
+            dt: dt_as_duration.to_f64_seconds() as _,
+            smooth_dt: smooth_dt_as_duration.to_f64_seconds() as _,
+            tick_progress: draw.tick_progress,
+        };
+
         for sys in self.systems.iter_mut() {
-            sys.draw(&mut self.shared.borrow_mut(), draw);
+            sys.draw(&mut shared, &draw);
         }
         self.platform.gl_swap_buffers();
     }

@@ -60,9 +60,11 @@ macro_rules! shader {
             }
             pub fn compile_status(&self) -> Result<(), ()> {
                 let mut status = gl::FALSE as GLint;
+                check_gl!("Before getting compile status");
                 unsafe {
                     gl::GetShaderiv(self.gl_id(), gl::COMPILE_STATUS, &mut status);
                 }
+                check_gl!("Getting compile status");
                 if status == gl::TRUE as _ { Ok(()) } else { Err(()) }
             }
             pub fn info_log_length(&self) -> GLint {
