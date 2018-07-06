@@ -147,6 +147,7 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 pub struct GLSystem {
     viewport_size: Extent2<u32>,
     prog: GLColorProgram,
+    mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
@@ -181,6 +182,7 @@ impl GLSystem {
         Self {
             viewport_size,
             prog: GLColorProgram::new().unwrap(),
+            mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
             mesh_color_buffers: Default::default(),
@@ -209,28 +211,29 @@ impl GLSystem {
             far,
         } = camera;
 
+        let aspect_ratio = {
+            let Extent2 { w, h } = self.viewport_size;
+            assert_ne!(w, 0);
+            assert_ne!(h, 0);
+            w as f32 / h as f32
+        };
+        let proj = match projection_mode {
+            CameraProjectionMode::Perspective => Mat4::perspective_lh_no(fov_y, aspect_ratio, near, far),
+            CameraProjectionMode::Ortho => Mat4::orthographic_lh_no(FrustumPlanes {
+                right: aspect_ratio,
+                left: -aspect_ratio,
+                top: 1.,
+                bottom: -1.,
+                near,
+                far,
+            }),
+        };
+        let view = Mat4::<f32>::scaling_3d(camera_scale.recip())
+            * Mat4::look_at(camera_position, camera_target, Vec3::up());
+
         for &MeshInstance { ref mesh_id, xform } in scene.mesh_instances.values() {
             let mesh = &scene.meshes[mesh_id];
 
-            let aspect_ratio = {
-                let Extent2 { w, h } = self.viewport_size;
-                assert_ne!(w, 0);
-                assert_ne!(h, 0);
-                w as f32 / h as f32
-            };
-            let proj = match projection_mode {
-                CameraProjectionMode::Perspective => Mat4::perspective_lh_no(fov_y, aspect_ratio, near, far),
-                CameraProjectionMode::Ortho => Mat4::orthographic_lh_no(FrustumPlanes {
-                    right: aspect_ratio,
-                    left: -aspect_ratio,
-                    top: 1.,
-                    bottom: -1.,
-                    near,
-                    far,
-                }),
-            };
-            let view = Mat4::<f32>::scaling_3d(camera_scale.recip())
-                * Mat4::look_at(camera_position, camera_target, Vec3::up());
             let model = Mat4::from(xform);
             let mvp = proj * view * model;
 
@@ -243,6 +246,9 @@ impl GLSystem {
                 //gl::CullFace(gl::BACK);
             }
             */
+            unsafe {
+                gl::BindVertexArray(self.mesh_vaos[mesh_id].gl_id()); // FIXME: Filling them every time = not efficient
+            }
 
             assert!(!mesh.vposition.is_empty());
             let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
@@ -287,6 +293,9 @@ impl GLSystem {
                     gl::DrawArrays(mesh.topology, 0, mesh.vposition.len() as _);
                 }
             }
+            unsafe {
+                gl::BindVertexArray(0);
+            }
         }
     }
     fn pump_scene_draw_commands(&mut self, scene: &mut Scene) {
@@ -298,17 +307,18 @@ impl GLSystem {
         match *cmd {
             SceneCommand::AddMesh(mesh_id) => {
                 if let Some(&Mesh { topology: _, ref vposition, ref vnormal, ref vcolor, ref indices, }) = scene.meshes.get(&mesh_id) {
-                    gx_buffer_data_dsa(self.mesh_position_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), vposition, gx::BufferUsage::StaticDraw);
-                    gx_buffer_data_dsa(self.mesh_normal_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), vnormal, gx::BufferUsage::StaticDraw);
+                    self.mesh_vaos.entry(mesh_id).or_insert_with(gx::VertexArray::new);
+                    gx_buffer_data_dsa(self.mesh_position_buffers.entry(mesh_id).or_insert_with(gx::Buffer::new), vposition, gx::BufferUsage::StaticDraw);
+                    gx_buffer_data_dsa(self.mesh_normal_buffers.entry(mesh_id).or_insert_with(gx::Buffer::new), vnormal, gx::BufferUsage::StaticDraw);
                     if vcolor.is_empty() {
                         self.mesh_color_buffers.remove(&mesh_id);
                     } else {
-                        gx_buffer_data_dsa(self.mesh_color_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), vcolor, gx::BufferUsage::StaticDraw);
+                        gx_buffer_data_dsa(self.mesh_color_buffers.entry(mesh_id).or_insert_with(gx::Buffer::new), vcolor, gx::BufferUsage::StaticDraw);
                     }
                     if indices.is_empty() {
                         self.mesh_index_buffers.remove(&mesh_id);
                     } else {
-                        gx_buffer_data_dsa(self.mesh_index_buffers.entry(mesh_id).or_insert(gx::Buffer::new()), indices, gx::BufferUsage::StaticDraw);
+                        gx_buffer_data_dsa(self.mesh_index_buffers.entry(mesh_id).or_insert_with(gx::Buffer::new), indices, gx::BufferUsage::StaticDraw);
                     }
                 }
             },
