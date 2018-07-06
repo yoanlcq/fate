@@ -64,7 +64,6 @@ struct GLColorProgram {
 
 impl GLColorProgram {
     pub fn new() -> Result<Self, String> {
-        check_gl!("GLColorProgram: Before any shader");
         let vs = gx::VertexShader::try_from_source(VS_SRC)?;
         let fs = gx::FragmentShader::try_from_source(FS_SRC)?;
         let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
@@ -74,7 +73,6 @@ impl GLColorProgram {
         if u_mvp == -1 {
             return Err(format!("u_mvp is invalid!"));
         }
-        check_gl!("GLColorProgram");
 
         Ok(Self { prog, u_mvp, })
     }
@@ -131,12 +129,12 @@ pub struct UniformInfo;
 
 fn gx_buffer_data<T>(target: gx::BufferTarget, data: &[T], usage: gx::BufferUsage) {
     unsafe {
-        check_gl!(gl::BufferData(target as _, mem::size_of_val(data) as _, data.as_ptr() as _, usage as _));
+        gl::BufferData(target as _, mem::size_of_val(data) as _, data.as_ptr() as _, usage as _);
     }
 }
 fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
     unsafe {
-        check_gl!(gl::BindBuffer(gx::BufferTarget::Array as _, buf.gl_id()));
+        gl::BindBuffer(gx::BufferTarget::Array as _, buf.gl_id());
         gx_buffer_data(gx::BufferTarget::Array, data, usage);
         gl::BindBuffer(gx::BufferTarget::Array as _, 0);
     }
@@ -193,7 +191,7 @@ impl GLSystem {
 
     fn render_scene(&mut self, scene: &Scene, _draw: &Draw) {
         unsafe {
-            check_gl!(gl::UseProgram(self.prog.gl_id()));
+            gl::UseProgram(self.prog.gl_id());
         }
         for camera in scene.cameras.values() {
             self.render_scene_with_camera(scene, _draw, camera);
@@ -233,12 +231,9 @@ impl GLSystem {
 
         for &MeshInstance { ref mesh_id, xform } in scene.mesh_instances.values() {
             let mesh = &scene.meshes[mesh_id];
-
             let model = Mat4::from(xform);
             let mvp = proj * view * model;
-
             self.prog.set_u_mvp(&mvp);
-            check_gl!("Set u_mvp");
 
             /*
             unsafe {
@@ -253,9 +248,9 @@ impl GLSystem {
             assert!(!mesh.vposition.is_empty());
             let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
             unsafe {
-                check_gl!(gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id()));
-                check_gl!(gl::EnableVertexAttribArray(ATTRIB_POSITION_VEC3F32));
-                check_gl!(gl::VertexAttribPointer(ATTRIB_POSITION_VEC3F32, 3, gl::FLOAT, gl::FALSE, 3*4, 0 as _));
+                gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id());
+                gl::EnableVertexAttribArray(ATTRIB_POSITION_VEC3F32);
+                gl::VertexAttribPointer(ATTRIB_POSITION_VEC3F32, 3, gl::FLOAT, gl::FALSE, 3*4, 0 as _);
                 gl::BindBuffer(gx::BufferTarget::Array as _, 0);
             }
 
@@ -337,7 +332,6 @@ impl System for GLSystem {
             gl::Viewport(0, 0, w as _, h as _);
             gl::ClearColor(1., 0., 1., 1.);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-            check_gl!("Viewport + clear");
         }
 
         for (target, query) in self.pipeline_statistics_arb_queries.iter() {

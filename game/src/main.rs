@@ -9,7 +9,6 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - Retirer un max de check_gl dans GX et le reste
 // - Je veux bouger la camera
 //   (du coup confirmer que le back face culling du cube est correct)
 // - Je veux que les cubes soient éclairés
