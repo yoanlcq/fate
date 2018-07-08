@@ -62,6 +62,8 @@ impl Platform for DmcPlatform {
             dmc::Event::WindowCloseRequested { .. } => Some(Event::Quit),
             dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => Some(Event::MouseMotion(x as _, y as _)),
             dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => Some(Event::CanvasResized(w, h)),
+            dmc::Event::KeyboardKeyPressed  { key, .. } => Some(Event::KeyboardKeyPressed(key)),
+            dmc::Event::KeyboardKeyReleased { key, .. } => Some(Event::KeyboardKeyReleased(key)),
             _ => None,
         }
     }
