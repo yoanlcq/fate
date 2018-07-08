@@ -1,4 +1,5 @@
 use std::os::raw::c_void;
+use std::collections::VecDeque;
 use super::{Platform, Settings};
 use event::Event;
 use dmc;
@@ -9,6 +10,7 @@ pub struct DmcPlatform {
     window: dmc::Window,
     #[allow(dead_code)]
     gl_context: dmc::gl::GLContext,
+    pending_events: VecDeque<Event>,
 }
 
 impl DmcPlatform {
@@ -39,6 +41,7 @@ impl DmcPlatform {
 
         Self {
             dmc, window, gl_context,
+            pending_events: VecDeque::with_capacity(8),
         }
     }
 }
@@ -57,14 +60,37 @@ impl Platform for DmcPlatform {
         self.gl_context.proc_address(proc)
     }
     fn poll_event(&mut self) -> Option<Event> {
-        match self.dmc.poll_event()? {
-            dmc::Event::Quit => Some(Event::Quit),
-            dmc::Event::WindowCloseRequested { .. } => Some(Event::Quit),
-            dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => Some(Event::MouseMotion(x as _, y as _)),
-            dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => Some(Event::CanvasResized(w, h)),
-            dmc::Event::KeyboardKeyPressed  { key, .. } => Some(Event::KeyboardKeyPressed(key)),
-            dmc::Event::KeyboardKeyReleased { key, .. } => Some(Event::KeyboardKeyReleased(key)),
-            _ => None,
+        self.pump_events();
+        let ev = self.pending_events.pop_front();
+        if let Some(ref ev) = ev {
+            debug!("GAME EVENT: {:?}", ev);
+        }
+        ev
+    }
+}
+
+impl DmcPlatform {
+    fn pump_events(&mut self) {
+        while let Some(ev) = self.dmc.poll_event() {
+            // debug!("DMC EVENT: {:?}", ev); // Tracing DMC events
+            self.pump_dmc_event(ev);
+        }
+    }
+    fn pump_dmc_event(&mut self, ev: dmc::Event) {
+        let mut push = |e| self.pending_events.push_back(e);
+        match ev {
+            dmc::Event::Quit => push(Event::Quit),
+            dmc::Event::WindowCloseRequested { .. } => push(Event::Quit),
+            dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => push(Event::MouseMotion(x as _, y as _)),
+            dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => push(Event::CanvasResized(w, h)),
+            dmc::Event::KeyboardKeyReleased { key, .. } => push(Event::KeyboardKeyReleased(key)),
+            dmc::Event::KeyboardKeyPressed  { key, ref text, is_repeat, .. } if !is_repeat => {
+                push(Event::KeyboardKeyPressed(key));
+                if let Some(text) = text {
+                    push(Event::Text(text.to_string()));
+                }
+            },
+            _ => (),
         }
     }
 }

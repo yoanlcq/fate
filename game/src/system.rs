@@ -45,6 +45,6 @@ pub trait System {
     fn on_mouse_button(&mut self, _g: &mut G, _btn: u32, _is_down: bool) {}
     fn on_canvas_resized(&mut self, _g: &mut G, _size: Extent2<u32>) {}
     fn on_key(&mut self, _g: &mut G, _key: Key, _state: KeyState) {}
+    fn on_text(&mut self, _g: &mut G, _text: &str) {}
 }
-
 

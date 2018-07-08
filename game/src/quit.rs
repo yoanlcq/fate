@@ -20,7 +20,4 @@ pub struct Quitter(Quit);
 impl System for Quitter {
     fn quit(&self) -> Quit { self.0 }
     fn on_quit(&mut self, _: &mut G) { self.0 = Quit::ShouldQuit; }
-    fn on_key(&mut self, _: &mut G, key: Key, state: KeyState) {
-        debug!("Key {:?}: {:?}", state, key);
-    }
 }
