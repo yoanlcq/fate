@@ -19,6 +19,28 @@ pub struct MeshInstance {
 }
 
 impl Mesh {
+    // A skybox is special because face winding is inverted so that we don't need to change cull face state.
+    pub fn new_skybox() -> Self {
+        let mut m = Self::new_cube_smooth_triangle_strip(0.5);
+
+        // Flip winding by inserting a degenerate triangle
+        let pos = m.vposition[0];
+        let norm = m.vnormal[0];
+        m.vposition.insert(0, pos);
+        m.vnormal.insert(0, norm);
+
+        // ... and reverse normals too (not that they are expected to be used anyway...)
+        for n in &mut m.vnormal {
+            *n = -*n;
+        }
+
+        // Make sure to make it opaque white
+        for col in &mut m.vcolor {
+            *col = Rgba::white();
+        }
+
+        m
+    }
     pub fn new_cube_smooth_triangle_strip(s: f32) -> Self {
         let vposition = [
             Vec4::new(-s,  s,  s, 1.), // Front-top-left
@@ -158,6 +180,10 @@ pub struct Scene {
 }
 
 impl Scene {
+    pub const MESHID_SKYBOX: MeshID = 10;
+    pub const MESHID_CUBE: MeshID = 11;
+    pub const MESHID_CUBE_SMOOTH: MeshID = 12;
+
     pub fn new() -> Self {
         let mut cameras = HashMap::new();
         let mut meshes = HashMap::new();
@@ -174,21 +200,45 @@ impl Scene {
             far: 10000.,
         });
 
-        meshes.insert(0xdead, Mesh::new_cube());
-        draw_commands_queue.push_back(SceneCommand::AddMesh(0xdead));
+        meshes.insert(Self::MESHID_SKYBOX, Mesh::new_skybox());
+        meshes.insert(Self::MESHID_CUBE, Mesh::new_cube_triangles(0.5));
+        meshes.insert(Self::MESHID_CUBE_SMOOTH, Mesh::new_cube_smooth_triangle_strip(0.5));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_SKYBOX));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE_SMOOTH));
+
+
+        mesh_instances.insert(1300, MeshInstance {
+            mesh_id: Self::MESHID_SKYBOX,
+            xform: Transform {
+                scale: Vec3::broadcast(1000.),
+                .. Default::default()
+            },
+        });
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(1300));
+
         mesh_instances.insert(13, MeshInstance {
-            mesh_id: 0xdead,
+            mesh_id: Self::MESHID_CUBE,
             xform: Default::default(),
         });
         draw_commands_queue.push_back(SceneCommand::AddMeshInstance(13));
         mesh_instances.insert(42, MeshInstance {
-            mesh_id: 0xdead,
+            mesh_id: Self::MESHID_CUBE,
             xform: Transform {
                 position: Vec3::new(2., 0., 0.),
                 .. Default::default()
             },
         });
         draw_commands_queue.push_back(SceneCommand::AddMeshInstance(42));
+        mesh_instances.insert(468, MeshInstance {
+            mesh_id: Self::MESHID_CUBE_SMOOTH,
+            xform: Transform {
+                position: Vec3::new(-2., 0., 0.),
+                .. Default::default()
+            },
+        });
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(468));
+
 
         Self {
             cameras,

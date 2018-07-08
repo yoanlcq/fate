@@ -10,21 +10,17 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - Je veux que l'on soit dans un plus gros cube, qui fait office de skybox
 // - Je veux bouger la camera
 //   (du coup confirmer que le back face culling du cube est correct)
-// - En fait je veux une skybox
-// - Program: set_mat4(b"name\0", &m) -> Result<()> (grab all uniforms procedurally into a shader)
 // - Text
-// - Passer au Core profile :/
 // - More stock meshes (e.g cube_smooth, cube, uv_sphere...)
 // - More stock textures (e.g black, white, magenta (debug), checker ....)
 // - Load textures (PNG, JPG, compressed...)
-// - Skybox
+// - En fait je veux une vraie skybox
 // - Materials & pipelines
 //   - Basic lighting
 //   - PBR lighting
-// - Debug draw (using SceneCmds. Draw texture, draw text, draw debug mesh.....)
+// - Debug draw (using SceneCmds. Draw texture, draw text, draw debug mesh, draw wireframe, draw normals.....)
 // - GUI
 // - Load meshes (obj and GLTF)
 // - Instanced rendering
