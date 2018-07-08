@@ -10,10 +10,13 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - Je veux bouger la camera
-//   (du coup confirmer que le back face culling du cube est correct)
+// - Je veux orienter la caméra avec la souris
+// - Je veux déplacer la caméra avec les flèches
+// - ECS.
+//   - La skybox utilise un autre shader
+//   - La skybox n'est pas mise à jour
+//   - Les meshs qui veulent tourner doivent opter pour un component
 // - Text
-// - More stock meshes (e.g cube_smooth, cube, uv_sphere...)
 // - More stock textures (e.g black, white, magenta (debug), checker ....)
 // - Load textures (PNG, JPG, compressed...)
 // - En fait je veux une vraie skybox

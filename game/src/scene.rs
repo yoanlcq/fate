@@ -19,6 +19,75 @@ pub struct MeshInstance {
 }
 
 impl Mesh {
+    pub fn new_icosahedron(s: f32, nb_subdivisions: usize) -> Self {
+        let t = (1. + 5_f32.sqrt()) / 2.;
+        let mut vertices = vec![
+            Vec3::new(-1.0,  t, 0.0).normalized() * s,
+            Vec3::new( 1.0,  t, 0.0).normalized() * s,
+            Vec3::new(-1.0, -t, 0.0).normalized() * s,
+            Vec3::new( 1.0, -t, 0.0).normalized() * s,
+            Vec3::new(0.0, -1.0,  t).normalized() * s,
+            Vec3::new(0.0,  1.0,  t).normalized() * s,
+            Vec3::new(0.0, -1.0, -t).normalized() * s,
+            Vec3::new(0.0,  1.0, -t).normalized() * s,
+            Vec3::new( t, 0.0, -1.0).normalized() * s,
+            Vec3::new( t, 0.0,  1.0).normalized() * s,
+            Vec3::new(-t, 0.0, -1.0).normalized() * s,
+            Vec3::new(-t, 0.0,  1.0).normalized() * s,
+        ];
+        let mut indices = vec![
+            0, 11, 5,
+            0, 5, 1,
+            0, 1, 7,
+            0, 7, 10,
+            0, 10, 11,
+            1, 5, 9,
+            5, 11, 4,
+            11, 10, 2,
+            10, 7, 6,
+            7, 1, 8,
+            3, 9, 4,
+            3, 4, 2,
+            3, 2, 6,
+            3, 6, 8,
+            3, 8, 9,
+            4, 9, 5,
+            2, 4, 11,
+            6, 2, 10,
+            8, 6, 7,
+            9, 8, 1,
+        ];
+
+        for _ in 0..nb_subdivisions {
+            let mut out_vertices = vec![];
+            let mut out_indices = vec![];
+            for face in indices.chunks(3) {
+                let v0 = vertices[face[0] as usize];
+                let v1 = vertices[face[1] as usize];
+                let v2 = vertices[face[2] as usize];
+                let v3 = ((v0 + v1) / 2.).normalized() * s;
+                let v4 = ((v1 + v2) / 2.).normalized() * s;
+                let v5 = ((v2 + v0) / 2.).normalized() * s;
+                let i = out_vertices.len() as u16;
+                out_vertices.extend(&[v0, v1, v2, v3, v4, v5]);
+                out_indices.extend(&[i+0, i+3, i+5]);
+                out_indices.extend(&[i+3, i+1, i+4]);
+                out_indices.extend(&[i+5, i+4, i+2]);
+                out_indices.extend(&[i+3, i+4, i+5]);
+            }
+            vertices = out_vertices;
+            indices = out_indices;
+        }
+
+        Self {
+            topology: gl::TRIANGLES,
+            vposition: vertices.iter().cloned().map(Vec4::from_point).collect(),
+            vnormal: vertices.iter().cloned().map(Vec4::from_direction).collect(),
+            vcolor: vec![Rgba::blue()],
+            indices,
+        }
+    }
+
     // A skybox is special because face winding is inverted so that we don't need to change cull face state.
     pub fn new_skybox() -> Self {
         let mut m = Self::new_cube_smooth_triangle_strip(0.5);
