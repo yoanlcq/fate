@@ -1,14 +1,14 @@
 use std::collections::{HashMap, VecDeque};
 use gx::gl::{self, types::GLenum};
-use fate::vek::{Vec3, Rgba, Transform};
+use fate::vek::{Vec3, Vec4, Rgba, Transform};
 use system::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mesh {
     pub topology: GLenum,
-    pub vposition: Vec<Vec3<f32>>, // Not optional
-    pub vnormal: Vec<Vec3<f32>>, // Not optional
-    pub vcolor: Vec<Rgba<f32>>, // Optional. If there's only one element, it is used for all vertices.
+    pub vposition: Vec<Vec4<f32>>, // Not optional
+    pub vnormal: Vec<Vec4<f32>>, // Not optional
+    pub vcolor: Vec<Rgba<u8>>, // Optional. If there's only one element, it is used for all vertices.
     pub indices: Vec<u16>, // Optional. If empty, it's rendered using glDrawArrays.
 }
 
@@ -21,40 +21,40 @@ pub struct MeshInstance {
 impl Mesh {
     pub fn new_cube_smooth_triangle_strip(s: f32) -> Self {
         let vposition = [
-            Vec3::new(-s,  s,  s), // Front-top-left
-            Vec3::new( s,  s,  s), // Front-top-right
-            Vec3::new(-s, -s,  s), // Front-bottom-left
-            Vec3::new( s, -s,  s), // Front-bottom-right
-            Vec3::new( s, -s, -s), // Back-bottom-right
-            Vec3::new( s,  s,  s), // Front-top-right
-            Vec3::new( s,  s, -s), // Back-top-right
-            Vec3::new(-s,  s,  s), // Front-top-left
-            Vec3::new(-s,  s, -s), // Back-top-left
-            Vec3::new(-s, -s,  s), // Front-bottom-left
-            Vec3::new(-s, -s, -s), // Back-bottom-left
-            Vec3::new( s, -s, -s), // Back-bottom-right
-            Vec3::new(-s,  s, -s), // Back-top-left
-            Vec3::new( s,  s, -s), // Back-top-right
+            Vec4::new(-s,  s,  s, 1.), // Front-top-left
+            Vec4::new( s,  s,  s, 1.), // Front-top-right
+            Vec4::new(-s, -s,  s, 1.), // Front-bottom-left
+            Vec4::new( s, -s,  s, 1.), // Front-bottom-right
+            Vec4::new( s, -s, -s, 1.), // Back-bottom-right
+            Vec4::new( s,  s,  s, 1.), // Front-top-right
+            Vec4::new( s,  s, -s, 1.), // Back-top-right
+            Vec4::new(-s,  s,  s, 1.), // Front-top-left
+            Vec4::new(-s,  s, -s, 1.), // Back-top-left
+            Vec4::new(-s, -s,  s, 1.), // Front-bottom-left
+            Vec4::new(-s, -s, -s, 1.), // Back-bottom-left
+            Vec4::new( s, -s, -s, 1.), // Back-bottom-right
+            Vec4::new(-s,  s, -s, 1.), // Back-top-left
+            Vec4::new( s,  s, -s, 1.), // Back-top-right
         ];
 
         Self {
             topology: gl::TRIANGLE_STRIP,
             vposition: vposition.to_vec(),
-            vnormal: vposition.iter().cloned().map(Vec3::normalized).collect(),
+            vnormal: vposition.iter().cloned().map(|mut p| { p.w = 0.; p.normalize(); p.w = 0.; p }).collect(),
             vcolor: vec![Rgba::red()],
             indices: vec![],
         }
     }
     pub fn new_cube_triangles(s: f32) -> Self {
         let v = (
-            Vec3::new(-s,  s, -s), // 0
-            Vec3::new( s,  s, -s), // 1
-            Vec3::new( s,  s,  s), // 2
-            Vec3::new(-s,  s,  s), // 3
-            Vec3::new(-s, -s,  s), // 4
-            Vec3::new(-s, -s, -s), // 5
-            Vec3::new( s, -s, -s), // 6
-            Vec3::new( s, -s,  s), // 7
+            Vec4::new(-s,  s, -s, 1.), // 0
+            Vec4::new( s,  s, -s, 1.), // 1
+            Vec4::new( s,  s,  s, 1.), // 2
+            Vec4::new(-s,  s,  s, 1.), // 3
+            Vec4::new(-s, -s,  s, 1.), // 4
+            Vec4::new(-s, -s, -s, 1.), // 5
+            Vec4::new( s, -s, -s, 1.), // 6
+            Vec4::new( s, -s,  s, 1.), // 7
         );
         let vposition = [
             v.7, v.2, v.1,
@@ -71,42 +71,42 @@ impl Mesh {
             v.1, v.5, v.6,
         ];
         let vnormal = [
-            Vec3::right(),
-            Vec3::right(),
-            Vec3::right(),
-            Vec3::right(),
-            Vec3::right(),
-            Vec3::right(),
-            Vec3::left(),
-            Vec3::left(),
-            Vec3::left(),
-            Vec3::left(),
-            Vec3::left(),
-            Vec3::left(),
-            Vec3::up(),
-            Vec3::up(),
-            Vec3::up(),
-            Vec3::up(),
-            Vec3::up(),
-            Vec3::up(),
-            Vec3::down(),
-            Vec3::down(),
-            Vec3::down(),
-            Vec3::down(),
-            Vec3::down(),
-            Vec3::down(),
-            Vec3::forward_lh(),
-            Vec3::forward_lh(),
-            Vec3::forward_lh(),
-            Vec3::forward_lh(),
-            Vec3::forward_lh(),
-            Vec3::forward_lh(),
-            Vec3::back_lh(),
-            Vec3::back_lh(),
-            Vec3::back_lh(),
-            Vec3::back_lh(),
-            Vec3::back_lh(),
-            Vec3::back_lh(),
+            Vec4::right(),
+            Vec4::right(),
+            Vec4::right(),
+            Vec4::right(),
+            Vec4::right(),
+            Vec4::right(),
+            Vec4::left(),
+            Vec4::left(),
+            Vec4::left(),
+            Vec4::left(),
+            Vec4::left(),
+            Vec4::left(),
+            Vec4::up(),
+            Vec4::up(),
+            Vec4::up(),
+            Vec4::up(),
+            Vec4::up(),
+            Vec4::up(),
+            Vec4::down(),
+            Vec4::down(),
+            Vec4::down(),
+            Vec4::down(),
+            Vec4::down(),
+            Vec4::down(),
+            Vec4::forward_lh(),
+            Vec4::forward_lh(),
+            Vec4::forward_lh(),
+            Vec4::forward_lh(),
+            Vec4::forward_lh(),
+            Vec4::forward_lh(),
+            Vec4::back_lh(),
+            Vec4::back_lh(),
+            Vec4::back_lh(),
+            Vec4::back_lh(),
+            Vec4::back_lh(),
+            Vec4::back_lh(),
         ];
         Self {
             topology: gl::TRIANGLES,

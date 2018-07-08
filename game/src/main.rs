@@ -1,4 +1,5 @@
 extern crate fate;
+#[allow(unused_imports)]
 #[macro_use]
 extern crate fate_gx as gx;
 extern crate dmc;
@@ -9,11 +10,9 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
+// - Je veux que l'on soit dans un plus gros cube, qui fait office de skybox
 // - Je veux bouger la camera
 //   (du coup confirmer que le back face culling du cube est correct)
-// - Je veux que les cubes soient éclairés
-// - Je veux que les cubes tournent sur eux-mêmes
-// - Je veux que l'on soit dans un plus gros cube, qui fait office de skybox
 // - En fait je veux une skybox
 // - Program: set_mat4(b"name\0", &m) -> Result<()> (grab all uniforms procedurally into a shader)
 // - Text
