@@ -84,12 +84,8 @@ impl DmcPlatform {
             dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => push(Event::MouseMotion(x as _, y as _)),
             dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => push(Event::CanvasResized(w, h)),
             dmc::Event::KeyboardKeyReleased { key, .. } => push(Event::KeyboardKeyReleased(key)),
-            dmc::Event::KeyboardKeyPressed  { key, ref text, is_repeat, .. } if !is_repeat => {
-                push(Event::KeyboardKeyPressed(key));
-                if let Some(text) = text {
-                    push(Event::Text(text.to_string()));
-                }
-            },
+            dmc::Event::KeyboardKeyPressed  { key,  repeat_count, .. } if repeat_count <= 1 => push(Event::KeyboardKeyPressed(key)),
+            dmc::Event::KeyboardTextChar    { char, repeat_count, .. } if repeat_count <= 1 => push(Event::KeyboardTextChar(char)),
             _ => (),
         }
     }
