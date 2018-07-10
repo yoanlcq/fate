@@ -42,9 +42,11 @@ pub trait System {
     // events
     fn on_quit(&mut self, _g: &mut G) {}
     fn on_mouse_motion(&mut self, _g: &mut G, _pos: Vec2<f64>) {}
+    fn on_mouse_motion_raw(&mut self, _g: &mut G, _displacement: Vec2<f64>) {}
     fn on_mouse_button(&mut self, _g: &mut G, _btn: u32, _is_down: bool) {}
     fn on_canvas_resized(&mut self, _g: &mut G, _size: Extent2<u32>) {}
     fn on_key(&mut self, _g: &mut G, _key: Key, _state: KeyState) {}
+    fn on_key_raw(&mut self, _g: &mut G, _key: Key, _state: KeyState) {}
     fn on_text_char(&mut self, _g: &mut G, _char: char) {}
 }
 

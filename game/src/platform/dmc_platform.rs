@@ -82,10 +82,13 @@ impl DmcPlatform {
             dmc::Event::Quit => push(Event::Quit),
             dmc::Event::WindowCloseRequested { .. } => push(Event::Quit),
             dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => push(Event::MouseMotion(x as _, y as _)),
+            dmc::Event::MouseMotionRaw { displacement: Vec2 { x, y }, .. } => push(Event::MouseMotionRaw(x as _, y as _)),
             dmc::Event::WindowResized { size: Extent2 { w, h }, .. } => push(Event::CanvasResized(w, h)),
             dmc::Event::KeyboardKeyReleased { key, .. } => push(Event::KeyboardKeyReleased(key)),
             dmc::Event::KeyboardKeyPressed  { key,  is_repeat, .. } if !is_repeat => push(Event::KeyboardKeyPressed(key)),
             dmc::Event::KeyboardTextChar    { char, .. } => push(Event::KeyboardTextChar(char)),
+            dmc::Event::KeyboardKeyReleasedRaw { key, .. } => push(Event::KeyboardKeyReleasedRaw(key)),
+            dmc::Event::KeyboardKeyPressedRaw  { key, .. } => push(Event::KeyboardKeyPressedRaw(key)),
             dmc::Event::KeyboardTextString  { ref text, .. } => {
                 for char in text.chars() {
                     push(Event::KeyboardTextChar(char));
