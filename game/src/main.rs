@@ -10,7 +10,6 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - X11: Bug du 'e' chapeau
 // - Je veux orienter la caméra avec la souris
 // - Je veux déplacer la caméra avec les flèches
 // - ECS.

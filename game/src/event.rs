@@ -6,6 +6,10 @@ pub enum Event {
     Quit,
     MouseMotion(f64, f64),
     MouseMotionRaw(f64, f64),
+    MouseEnter,
+    MouseLeave,
+    KeyboardFocusGained,
+    KeyboardFocusLost,
     CanvasResized(u32, u32),
     KeyboardKeyPressed(Key),
     KeyboardKeyReleased(Key),
@@ -18,6 +22,10 @@ impl Event {
     pub fn dispatch(&self, sys: &mut System, g: &mut G) {
         match *self {
             Event::Quit => sys.on_quit(g),
+            Event::MouseEnter => sys.on_mouse_enter(g),
+            Event::MouseLeave => sys.on_mouse_leave(g),
+            Event::KeyboardFocusGained => sys.on_keyboard_focus_gained(g),
+            Event::KeyboardFocusLost => sys.on_keyboard_focus_lost(g),
             Event::MouseMotion(x, y) => sys.on_mouse_motion(g, Vec2 { x, y }),
             Event::MouseMotionRaw(x, y) => sys.on_mouse_motion_raw(g, Vec2 { x, y }),
             Event::CanvasResized(w, h) => sys.on_canvas_resized(g, Extent2 { w, h }),
