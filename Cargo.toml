@@ -2,6 +2,7 @@
 members = [
     "lab",
     "font",
+    "img",
     "gx",
     "main-loop",
     "fate",

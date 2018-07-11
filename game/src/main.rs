@@ -10,6 +10,8 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
+// - Me débarrasser de ces warnings (mettre du code dans GX)
+// - Avoir une crate wrapper pour vek (sinon ça va être compliqué)
 // - Je veux orienter la caméra avec la souris
 // - Je veux déplacer la caméra avec les flèches
 // - ECS.

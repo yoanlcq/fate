@@ -1,6 +1,6 @@
 extern crate vek;
 extern crate freetype_sys as freetype;
-extern crate imgref;
+extern crate fate_img as img;
 extern crate libc;
 
 use std::rc::Rc;
@@ -11,7 +11,7 @@ use std::ptr;
 use std::slice;
 use libc::{c_void, c_char, c_short, c_int, c_long};
 use vek::{Vec2, Extent2, Mat2, Aabr};
-use imgref::{ImgVec, ImgRef};
+use img::{ImgVec, ImgRef};
 use freetype::*;
 
 macro_rules! ft_error_codes {
