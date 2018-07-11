@@ -91,6 +91,37 @@ void main() {
 }
 ";
 
+static SKY_VS_SRC: &'static [u8] = b"
+#version 450 core
+
+uniform mat4 u_proj_matrix;
+uniform mat4 u_modelview_matrix;
+
+layout(location = 0) in vec4 a_position;
+
+out vec3 v_tex_coords;
+
+void main() {
+    v_tex_coords = a_position.xyz;
+    vec4 pos = u_proj_matrix * u_modelview_matrix * vec4(a_position.xyz, 1.0);
+    gl_Position = pos.xyww; // Set z to 1
+}
+";
+
+static SKY_FS_SRC: &'static [u8] = b"
+#version 450 core
+
+uniform samplerCube u_cubemap;
+
+in vec3 v_tex_coords;
+
+out vec4 f_color;
+
+void main() {
+    f_color = texture(u_cubemap, v_tex_coords);
+}
+";
+
 pub trait UniformElement: Sized {
     const GLSL_TYPE: GLSLType;
     fn gl_uniform(loc: GLint, m: &[Self]);

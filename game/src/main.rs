@@ -24,6 +24,9 @@ extern crate backtrace;
 //   - Basic lighting
 //   - PBR lighting
 // - Debug draw (using SceneCmds. Draw texture, draw text, draw debug mesh, draw wireframe, draw normals.....)
+// - Hot async reloading of:
+//   - Shaders
+//   - Resources
 // - GUI
 // - Load meshes (obj and GLTF)
 // - Instanced rendering
