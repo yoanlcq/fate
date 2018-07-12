@@ -1,11 +1,13 @@
 use system::*;
-use dmc::device::{Key, ButtonState};
+use dmc::device::{MouseButton, Key, ButtonState};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Quit,
     MouseMotion(f64, f64),
     MouseMotionRaw(f64, f64),
+    MouseButtonPressed(MouseButton),
+    MouseButtonReleased(MouseButton),
     MouseEnter,
     MouseLeave,
     KeyboardFocusGained,
@@ -28,6 +30,8 @@ impl Event {
             Event::KeyboardFocusLost => sys.on_keyboard_focus_lost(g),
             Event::MouseMotion(x, y) => sys.on_mouse_motion(g, Vec2 { x, y }),
             Event::MouseMotionRaw(x, y) => sys.on_mouse_motion_raw(g, Vec2 { x, y }),
+            Event::MouseButtonPressed(btn) => sys.on_mouse_button(g, btn, ButtonState::Down),
+            Event::MouseButtonReleased(btn) => sys.on_mouse_button(g, btn, ButtonState::Up),
             Event::CanvasResized(w, h) => sys.on_canvas_resized(g, Extent2 { w, h }),
             Event::KeyboardKeyPressed(key) => sys.on_key(g, key, ButtonState::Down),
             Event::KeyboardKeyReleased(key) => sys.on_key(g, key, ButtonState::Up),

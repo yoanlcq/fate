@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use gx::gl::{self, types::GLenum};
-use fate::vek::{Vec3, Vec4, Rgba, Transform};
+use fate::vek::{Vec3, Vec4, Rgba, Transform, Quaternion};
 use system::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -229,6 +229,22 @@ pub struct Camera {
     pub far: f32,
 }
 
+impl Camera {
+    pub fn forward(&self) -> Vec3<f32> {
+        (self.target - self.position).normalized()
+    }
+    pub fn up(&self) -> Vec3<f32> {
+        self.forward().cross(self.right())
+    }
+    pub fn right(&self) -> Vec3<f32> {
+        self.up_vector_for_lookat().cross(self.forward())
+    }
+    // !!! Must be normalized
+    pub fn up_vector_for_lookat(&self) -> Vec3<f32> {
+        Vec3::up()
+    }
+}
+
 pub type MeshID = u32;
 pub type MeshInstanceID = u32;
 pub type CameraID = u32;
@@ -347,6 +363,38 @@ impl System for SceneLogicSystem {
     fn draw(&mut self, g: &mut G, draw: &Draw) {
         for i in g.scene.mesh_instances.values_mut() {
             i.xform.orientation.rotate_x(90_f32.to_radians() * draw.dt);
+        }
+        for camera in g.scene.cameras.values_mut() {
+            // Translate
+            let input = g.input.debug_camera_keyboard_dpad();
+            let is_freefly = true; // Otherwise, it is "look at target"
+            if input != Vec3::zero() { // Testing inequality is fine because it's a D-pad
+                let camera_speed = 10.;
+                let tx = camera.right() * input.x;
+                let ty = camera.up() * input.y;
+                let tz = camera.forward() * input.z;
+                let t = (tx + ty + tz) * camera_speed * draw.dt;
+                if is_freefly {
+                    camera.position += t;
+                    camera.target += t;
+                }
+            }
+
+            // Rotate
+            let disp = g.input.mouse_displacement();
+            if g.input.mouse_button(MouseButton::Left).is_down() && disp != Vec2::zero() {
+                let degrees_per_pixel = 0.6;
+                let disp = disp.map(|x| (x * degrees_per_pixel).to_radians() as f32);
+                let mut self_to_target = camera.target - camera.position;
+                let rx = Quaternion::rotation_3d(disp.y, camera.right());
+                let ry = Quaternion::rotation_3d(disp.x, camera.up());
+                self_to_target = rx * ry * self_to_target;
+                if is_freefly {
+                    camera.target = camera.position + self_to_target;
+                } else {
+                    camera.position = camera.target - self_to_target;
+                }
+            }
         }
     }
 }

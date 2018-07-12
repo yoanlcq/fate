@@ -86,6 +86,8 @@ impl DmcPlatform {
             dmc::Event::MouseLeave { .. } => push(Event::MouseLeave),
             dmc::Event::KeyboardFocusGained { .. } => push(Event::KeyboardFocusGained),
             dmc::Event::KeyboardFocusLost { .. } => push(Event::KeyboardFocusLost),
+            dmc::Event::MouseButtonReleased { button, .. } => push(Event::MouseButtonReleased(button)),
+            dmc::Event::MouseButtonPressed  { button, .. } => push(Event::MouseButtonPressed(button)),
             dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => push(Event::MouseMotion(x as _, y as _)),
             dmc::Event::MouseMotionRaw { displacement: Vec2 { x, y }, .. } => push(Event::MouseMotionRaw(x as _, y as _)),
             dmc::Event::KeyboardKeyReleased { key, .. } => push(Event::KeyboardKeyReleased(key)),

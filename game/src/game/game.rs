@@ -11,6 +11,7 @@ use scene::{SceneLogicSystem, SceneCommandClearerSystem};
 use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
 use quit::{Quit, Quitter};
+use input::InputUpdater;
 use event::Event;
 use gamegl::{gl_error_hook, GLSystem, gl_debug_message_callback};
 
@@ -47,12 +48,15 @@ impl Game {
         gx::set_debug_message_callback(Some(gl_debug_message_callback));
         gx::log_debug_message("OpenGL debug logging is enabled.");
 
-        let shared = SharedGame::new();
-        let mut systems = Vec::new();
-        systems.push(Box::new(Quitter::default()) as Box<System>);
-        systems.push(Box::new(SceneLogicSystem::new()));
-        systems.push(Box::new(GLSystem::new(platform.canvas_size())));
-        systems.push(Box::new(SceneCommandClearerSystem::new()));
+        let canvas_size = platform.canvas_size();
+        let shared = SharedGame::new(canvas_size);
+        let systems: Vec<Box<System>> = vec![
+            Box::new(InputUpdater::new()),
+            Box::new(Quitter::default()),
+            Box::new(SceneLogicSystem::new()),
+            Box::new(GLSystem::new(canvas_size)),
+            Box::new(SceneCommandClearerSystem::new()),
+        ];
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
             desired_fps_ceil: 64.,

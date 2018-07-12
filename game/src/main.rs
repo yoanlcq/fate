@@ -10,6 +10,9 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
+// - X11:
+//   - Le KeyRelease est pété à cause la façon dont le repeat marche
+//   - XI2: XI_Motion c'est aussi scroll de touchpad. Faut query les class à la main :/
 // - Avoir une crate wrapper pour vek (sinon ça va être compliqué)
 // - Je veux orienter la caméra avec la souris
 // - Je veux déplacer la caméra avec les flèches
@@ -42,6 +45,7 @@ pub mod message;
 pub mod system;
 pub mod gamegl;
 pub mod scene;
+pub mod input;
 
 fn main() {
     early::setup_log();
