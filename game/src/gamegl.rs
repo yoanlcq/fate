@@ -111,20 +111,20 @@ void main() {
 static SKY_FS_SRC: &'static [u8] = b"
 #version 450 core
 
-struct CubemapSelector {
-    uint texarray_id;
+struct TextureSelector {
+    uint tab;
     float layer;
 };
-uniform CubemapSelector u_cubemap_selector;
 
-uniform samplerCubeArray u_all_cubemaps[4]; // 1x1, Low-res, Medium-res, Hi-res
+uniform samplerCubeArray u_cubemaps[4]; // Solid 1x1, Low-res, Medium-res, Hi-res
+uniform TextureSelector u_skybox;
 
 in vec3 v_tex_coords;
 
 out vec4 f_color;
 
 void main() {
-    f_color = texture(u_all_cubemaps[u_cubemap_selector.texarray_id], vec4(v_tex_coords, u_cubemap_selector.layer));
+    f_color = texture(u_cubemaps[u_skybox.tab], vec4(v_tex_coords, u_skybox.layer));
 }
 ";
 

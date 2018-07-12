@@ -10,6 +10,7 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
+// - Skybox: u_z_fma (par instance, permet d'appliquer un FMA sur l'élément Z)
 // - Avoir une crate wrapper pour vek (sinon ça va être compliqué)
 // - Je veux orienter la caméra avec la souris
 // - Je veux déplacer la caméra avec les flèches
