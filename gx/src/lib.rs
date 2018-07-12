@@ -1,4 +1,5 @@
 pub extern crate gl;
+extern crate vek;
 
 pub mod attrib;
 pub use attrib::{Attrib, ProgramAttribs};
@@ -13,6 +14,7 @@ pub mod buffer;
 pub use self::buffer::*;
 pub mod shader;
 pub mod program;
+pub use self::program::*;
 pub mod texture_unit;
 pub use self::texture_unit::*;
 pub mod missing_bits;

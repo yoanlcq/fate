@@ -1,7 +1,7 @@
 use std::mem;
 use std::collections::HashMap;
-use fate::vek::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, FrustumPlanes};
-use gx::{self, Object, gl::{self, types::*}};
+use fate::vek::{Rgba, Rgb, Mat4, Extent2, Vec3, FrustumPlanes};
+use gx::{self, Object, gl};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, CameraProjectionMode, Camera};
 use system::*;
 
@@ -111,247 +111,43 @@ void main() {
 static SKY_FS_SRC: &'static [u8] = b"
 #version 450 core
 
-uniform samplerCube u_cubemap;
+struct CubemapSelector {
+    uint texarray_id;
+    float layer;
+};
+uniform CubemapSelector u_cubemap_selector;
+
+uniform samplerCubeArray u_all_cubemaps[4]; // 1x1, Low-res, Medium-res, Hi-res
 
 in vec3 v_tex_coords;
 
 out vec4 f_color;
 
 void main() {
-    f_color = texture(u_cubemap, v_tex_coords);
+    f_color = texture(u_all_cubemaps[u_cubemap_selector.texarray_id], vec4(v_tex_coords, u_cubemap_selector.layer));
 }
 ";
 
-pub trait UniformElement: Sized {
-    const GLSL_TYPE: GLSLType;
-    fn gl_uniform(loc: GLint, m: &[Self]);
+fn new_gl_color_program() -> Result<gx::ProgramEx, String> {
+    let vs = gx::VertexShader::try_from_source(VS_SRC)?;
+    let fs = gx::FragmentShader::try_from_source(FS_SRC)?;
+    let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
+    Ok(gx::ProgramEx::new(prog))
 }
-
-impl UniformElement for Mat4<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatMat4;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::UniformMatrix4fv(loc, m.len() as _, m[0].gl_should_transpose() as _, &m[0][(0, 0)]);
-        }
-    }
+fn new_gl_sky_program() -> Result<gx::ProgramEx, String> {
+    let vs = gx::VertexShader::try_from_source(SKY_VS_SRC)?;
+    let fs = gx::FragmentShader::try_from_source(SKY_FS_SRC)?;
+    let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
+    Ok(gx::ProgramEx::new(prog))
 }
-
-impl UniformElement for Vec4<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec4;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform4fv(loc, m.len() as _, &m[0][0]);
-        }
+fn unwrap_or_display_error(r: Result<gx::ProgramEx, String>) -> gx::ProgramEx {
+    match r {
+        Ok(p) => p,
+        Err(e) => {
+            error!("GL compile error\n{}", e);
+            panic!("GL compile error\n{}", e)
+        },
     }
-}
-impl UniformElement for Vec3<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec3;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform3fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
-impl UniformElement for Rgba<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec4;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform4fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
-impl UniformElement for Rgb<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec3;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform3fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
-
-
-
-#[derive(Debug)]
-struct GLColorProgram {
-    prog: gx::Program,
-    uniforms: HashMap<String, GLSLActiveVar>,
-}
-
-impl GLColorProgram {
-    pub fn new() -> Result<Self, String> {
-        let vs = gx::VertexShader::try_from_source(VS_SRC)?;
-        let fs = gx::FragmentShader::try_from_source(FS_SRC)?;
-        let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
-        let mut s = Self { prog, uniforms: HashMap::default(), }; // XXX not pretty
-        s.uniforms = s.active_uniforms().map(|v| (v.name.clone(), v)).collect();
-        Ok(s)
-    }
-    pub fn gl_id(&self) -> GLuint {
-        self.prog.gl_id()
-    }
-
-    pub fn set_uniform<T: UniformElement>(&self, name: &str, value: &[T]) {
-        let uniform = &self.uniforms[name];
-        assert_eq!(uniform.array_len, value.len() as _);
-        assert_eq!(uniform.type_, T::GLSL_TYPE);
-        T::gl_uniform(uniform.location, value);
-    }
-    pub fn program_iv(&self, param: GLenum) -> GLint {
-        let mut i = 0;
-        unsafe {
-            gl::GetProgramiv(self.gl_id(), param, &mut i);
-        }
-        i
-    }
-    pub fn nb_active_attribs(&self) -> usize {
-        self.program_iv(gl::ACTIVE_ATTRIBUTES) as _
-    }
-    pub fn nb_active_uniforms(&self) -> usize {
-        self.program_iv(gl::ACTIVE_UNIFORMS) as _
-    }
-    pub fn active_attrib_unchecked(&self, index: usize) -> Option<GLSLActiveVar> {
-        self.active_var(index, gl::GetActiveAttrib, gl::GetAttribLocation)
-    }
-    pub fn active_uniform_unchecked(&self, index: usize) -> Option<GLSLActiveVar> {
-        self.active_var(index, gl::GetActiveUniform, gl::GetUniformLocation)
-    }
-    pub fn active_attrib(&self, index: usize) -> Option<GLSLActiveVar> {
-        if index >= self.nb_active_attribs() {
-            return None;
-        }
-        self.active_attrib_unchecked(index)
-    }
-    pub fn active_uniform(&self, index: usize) -> Option<GLSLActiveVar> {
-        if index >= self.nb_active_uniforms() {
-            return None;
-        }
-        self.active_uniform_unchecked(index)
-    }
-    // GL docs:
-    //     If no information is available, length will be 0, and name will be an empty string.
-    //     This situation could occur if this function is called after a link operation that failed.
-    fn active_var(&self, i: usize, get_active_var: GLGetActiveVar, get_var_location: GLGetVarLocation) -> Option<GLSLActiveVar> {
-        let mut name = [0_u8; 256];
-        let mut name_len = 0;
-        let mut array_len = 0;
-        let mut var_type = 0;
-        unsafe {
-            (get_active_var)(self.gl_id(), i as _, name.len() as _, &mut name_len, &mut array_len, &mut var_type, name.as_mut_ptr() as _);
-        }
-        if name_len == 0 {
-            return None;
-        }
-        let location = unsafe {
-            (get_var_location)(self.gl_id(), name.as_ptr() as _)
-        };
-        assert_ne!(location, -1);
-        Some(GLSLActiveVar {
-            name: String::from_utf8(name[..name_len as usize].to_vec()).unwrap(),
-            array_len,
-            type_: GLSLType::try_from_glenum(var_type).unwrap(),
-            location,
-        })
-    }
-    pub fn active_attribs(&self) -> GLSLActiveVars {
-        GLSLActiveVars::new(self, self.nb_active_attribs(), gl::GetActiveAttrib, gl::GetAttribLocation)
-    }
-    pub fn active_uniforms(&self) -> GLSLActiveVars {
-        GLSLActiveVars::new(self, self.nb_active_uniforms(), gl::GetActiveUniform, gl::GetUniformLocation)
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct GLSLActiveVar {
-    pub name: String,
-    pub array_len: GLsizei,
-    pub type_: GLSLType,
-    pub location: GLint,
-}
-
-type GLGetActiveVar = unsafe fn(GLuint, GLuint, GLsizei, *mut GLsizei, *mut GLint, *mut GLenum, *mut GLchar);
-type GLGetVarLocation = unsafe fn(GLuint, *const GLchar) -> GLint;
-
-pub struct GLSLActiveVars<'a> {
-    prog: &'a GLColorProgram,
-    nb: usize,
-    i: usize,
-    get_active_var: GLGetActiveVar,
-    get_var_location: GLGetVarLocation,
-}
-
-impl<'a> GLSLActiveVars<'a> {
-    fn new(prog: &'a GLColorProgram, nb: usize, get_active_var: GLGetActiveVar, get_var_location: GLGetVarLocation) -> Self {
-        Self { prog, i: 0, nb, get_active_var, get_var_location }
-    }
-}
-
-impl<'a> Iterator for GLSLActiveVars<'a> {
-    type Item = GLSLActiveVar;
-    fn next(&mut self) -> Option<GLSLActiveVar> {
-        while self.i < self.nb {
-            let item = self.prog.active_var(self.i, self.get_active_var, self.get_var_location);
-            self.i += 1;
-            if item.is_some() {
-                return item;
-            }
-        }
-        None
-    }
-}
-
-macro_rules! gl_type_enum {
-    ($($Type:ident = $GL:ident,)+) => {
-        #[repr(u32)]
-        #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-        pub enum GLSLType {
-            $($Type = gl::$GL,)+
-        }
-        impl GLSLType {
-            pub fn try_from_glenum(e: GLenum) -> Option<Self> {
-                match e {
-                    $(gl::$GL => Some(GLSLType::$Type),)+
-                    _ => None
-                }
-            }
-        }
-    }
-}
-
-gl_type_enum!{
-    Float           = FLOAT            ,
-    FloatVec2       = FLOAT_VEC2       ,
-    FloatVec3       = FLOAT_VEC3       ,
-    FloatVec4       = FLOAT_VEC4       ,
-    FloatMat2       = FLOAT_MAT2       ,
-    FloatMat3       = FLOAT_MAT3       ,
-    FloatMat4       = FLOAT_MAT4       ,
-    FloatMat2x3     = FLOAT_MAT2x3     ,
-    FloatMat2x4     = FLOAT_MAT2x4     ,
-    FloatMat3x2     = FLOAT_MAT3x2     ,
-    FloatMat3x4     = FLOAT_MAT3x4     ,
-    FloatMat4x2     = FLOAT_MAT4x2     ,
-    FloatMat4x3     = FLOAT_MAT4x3     ,
-    Int             = INT              ,
-    IntVec2         = INT_VEC2         ,
-    IntVec3         = INT_VEC3         ,
-    IntVec4         = INT_VEC4         ,
-    UnsignedInt     = UNSIGNED_INT     ,
-    UnsignedIntVec2 = UNSIGNED_INT_VEC2,
-    UnsignedIntVec3 = UNSIGNED_INT_VEC3,
-    UnsignedIntVec4 = UNSIGNED_INT_VEC4,
-    Double          = DOUBLE           ,
-    DoubleVec2      = DOUBLE_VEC2      ,
-    DoubleVec3      = DOUBLE_VEC3      ,
-    DoubleVec4      = DOUBLE_VEC4      ,
-    DoubleMat2      = DOUBLE_MAT2      ,
-    DoubleMat3      = DOUBLE_MAT3      ,
-    DoubleMat4      = DOUBLE_MAT4      ,
-    DoubleMat2x3    = DOUBLE_MAT2x3    ,
-    DoubleMat2x4    = DOUBLE_MAT2x4    ,
-    DoubleMat3x2    = DOUBLE_MAT3x2    ,
-    DoubleMat3x4    = DOUBLE_MAT3x4    ,
-    DoubleMat4x2    = DOUBLE_MAT4x2    ,
-    DoubleMat4x3    = DOUBLE_MAT4x3    ,
 }
 
 
@@ -372,7 +168,8 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
 #[derive(Debug)]
 pub struct GLSystem {
     viewport_size: Extent2<u32>,
-    prog: GLColorProgram,
+    color_program: gx::ProgramEx,
+    sky_program: gx::ProgramEx,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -407,7 +204,8 @@ impl GLSystem {
         };
         Self {
             viewport_size,
-            prog: GLColorProgram::new().unwrap(),
+            color_program: unwrap_or_display_error(new_gl_color_program()),
+            sky_program:   unwrap_or_display_error(new_gl_sky_program  ()),
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
@@ -419,7 +217,7 @@ impl GLSystem {
 
     fn render_scene(&mut self, scene: &Scene, _draw: &Draw) {
         unsafe {
-            gl::UseProgram(self.prog.gl_id());
+            gl::UseProgram(self.color_program.program().gl_id());
         }
         for camera in scene.cameras.values() {
             self.render_scene_with_camera(scene, _draw, camera);
@@ -457,17 +255,17 @@ impl GLSystem {
         let view = Mat4::<f32>::scaling_3d(camera_scale.recip())
             * Mat4::look_at(camera_position, camera_target, Vec3::up());
 
-        self.prog.set_uniform("u_proj_matrix", &[proj]);
-        self.prog.set_uniform("u_light_position_viewspace", &[Vec3::new(0., 0., 0.)]);
-        self.prog.set_uniform("u_light_color", &[Rgb::white()]);
+        self.color_program.set_uniform("u_proj_matrix", &[proj]);
+        self.color_program.set_uniform("u_light_position_viewspace", &[Vec3::new(0., 0., 0.)]);
+        self.color_program.set_uniform("u_light_color", &[Rgb::white()]);
 
         for &MeshInstance { ref mesh_id, xform } in scene.mesh_instances.values() {
             let mesh = &scene.meshes[mesh_id];
             let model = Mat4::from(xform);
             let modelview = view * model;
             let normal_matrix = modelview.inverted().transposed();
-            self.prog.set_uniform("u_modelview_matrix", &[modelview]);
-            self.prog.set_uniform("u_normal_matrix", &[normal_matrix]);
+            self.color_program.set_uniform("u_modelview_matrix", &[modelview]);
+            self.color_program.set_uniform("u_normal_matrix", &[normal_matrix]);
 
             /*
             unsafe {
