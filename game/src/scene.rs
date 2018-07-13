@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use gx::gl::{self, types::GLenum};
-use fate::vek::{Vec3, Vec4, Rgba, Transform, Quaternion};
+use fate::math::{Vec3, Vec4, Rgba, Transform, Quaternion};
 use system::*;
 
 #[derive(Debug, Clone, PartialEq)]

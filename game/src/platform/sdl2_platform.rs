@@ -1,6 +1,6 @@
 use std::os::raw::c_void;
 use super::{Platform, Settings};
-use fate::vek::Extent2;
+use fate::math::Extent2;
 use event::Event;
 use dmc;
 use sdl2::{self, Sdl, EventPump};

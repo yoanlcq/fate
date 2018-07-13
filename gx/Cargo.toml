@@ -6,4 +6,4 @@ authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
 
 [dependencies]
 gl = "0.10.0"
-vek = "~0.9.0"
+fate-math = { path = "../math" }

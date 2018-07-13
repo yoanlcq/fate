@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::mem;
 use dmc::device::{MouseButton, ButtonState, Keysym, KeyState};
-use fate::vek::{Vec2, Vec3};
+use fate::math::{Vec2, Vec3};
 use system::*;
 
 #[derive(Debug, Default, Clone, PartialEq)]

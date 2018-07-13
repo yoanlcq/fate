@@ -1,5 +1,5 @@
 pub extern crate gl;
-extern crate vek;
+extern crate fate_math as math;
 
 pub mod attrib;
 pub use attrib::{Attrib, ProgramAttribs};

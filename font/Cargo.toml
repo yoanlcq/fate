@@ -5,6 +5,6 @@ authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
 
 [dependencies]
 fate-img = { path = "../img" }
-vek = { version = "~0.9" }
+fate-math = { path = "../math" }
 freetype-sys = "~0.7.0"
 libc = "~0.2.42" # For c_void used by callbacks in FreeType. Urgh.

@@ -3,7 +3,7 @@ extern crate bitflags;
 #[macro_use]
 extern crate log;
 
-extern crate vek;
+extern crate fate_math as math;
 
 // mod global;
 pub mod fps;

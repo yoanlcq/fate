@@ -4,7 +4,7 @@
 // Solved: It depends. Finding by key is annoying; Why not directly typing g.my_sys ? We know our game.
 
 pub use std::time::Duration;
-pub use fate::vek::{Vec2, Extent2};
+pub use fate::math::{Vec2, Extent2};
 pub use fate::lab::duration_ext::DurationExt;
 pub use dmc::device::{Key, KeyState, MouseButton, ButtonState};
 pub use quit::Quit;

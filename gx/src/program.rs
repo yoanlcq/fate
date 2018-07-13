@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use super::{Program, VertexShader, FragmentShader, Object};
 use gl::{self, types::*};
-use vek::{Mat4, Vec3, Vec4, Rgba, Rgb};
+use math::{Mat4, Vec3, Vec4, Rgba, Rgb};
 
 impl Program {
     pub fn try_from_vert_frag(vs: &VertexShader, fs: &FragmentShader) -> Result<Self, String> {

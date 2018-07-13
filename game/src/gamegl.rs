@@ -1,6 +1,6 @@
 use std::mem;
 use std::collections::HashMap;
-use fate::vek::{Rgba, Rgb, Mat4, Extent2, Vec3, FrustumPlanes};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, FrustumPlanes};
 use gx::{self, Object, gl};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, CameraProjectionMode, Camera};
 use system::*;

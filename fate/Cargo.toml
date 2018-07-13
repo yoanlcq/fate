@@ -10,6 +10,9 @@ name = "fate"
 version = "0.1.0" # remember to update html_root_url
 
 [dependencies]
-vek = "~0.9.3"
-fate-main-loop = { path = "../main-loop" }
+fate-font = { path = "../font" }
+fate-gx = { path = "../gx" }
+fate-img = { path = "../img" }
 fate-lab = { path = "../lab" }
+fate-main-loop = { path = "../main-loop" }
+fate-math = { path = "../math" }

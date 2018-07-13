@@ -1,7 +1,7 @@
 extern crate imgref;
 extern crate image;
 extern crate stb_image;
-extern crate vek;
+extern crate fate_math as math;
 
 pub use imgref::*;
 pub use image::{
@@ -14,7 +14,7 @@ pub use image::{
 use std::fs;
 use std::io;
 use std::path::Path;
-use vek::Extent2;
+use math::Extent2;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum ChannelDataType {

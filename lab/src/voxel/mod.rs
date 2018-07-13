@@ -84,9 +84,8 @@
 // - Code is easy to port to computes shaders;
 
 use std::mem;
-use std::slice;
 use std::marker::PhantomData;
-use vek::Vec3;
+use math::Vec3;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct VoxelHashMap<T> {

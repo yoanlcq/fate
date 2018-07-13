@@ -1,5 +1,5 @@
 use std::os::raw::c_void;
-use fate::vek::Extent2;
+use fate::math::Extent2;
 use dmc;
 use event::Event;
 

@@ -1,6 +1,6 @@
-extern crate vek;
 extern crate freetype_sys as freetype;
 extern crate fate_img as img;
+extern crate fate_math as math;
 extern crate libc;
 
 use std::rc::Rc;
@@ -10,7 +10,7 @@ use std::mem;
 use std::ptr;
 use std::slice;
 use libc::{c_void, c_char, c_short, c_int, c_long};
-use vek::{Vec2, Extent2, Mat2, Aabr};
+use math::{Vec2, Extent2, Mat2, Aabr};
 use img::{ImgVec, ImgRef};
 use freetype::*;
 

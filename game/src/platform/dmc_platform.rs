@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use super::{Platform, Settings};
 use event::Event;
 use dmc;
-use fate::vek::{Vec2, Extent2};
+use fate::math::{Vec2, Extent2};
 
 pub struct DmcPlatform {
     dmc: dmc::Context,

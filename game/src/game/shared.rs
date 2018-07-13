@@ -4,7 +4,7 @@ use frame_time::FrameTimeManager;
 use message::Message;
 use scene::Scene;
 use input::Input;
-use fate::vek::Extent2;
+use fate::math::Extent2;
 
 
 #[derive(Debug)]

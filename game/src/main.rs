@@ -1,7 +1,6 @@
 extern crate fate;
 #[allow(unused_imports)]
 #[macro_use]
-extern crate fate_gx as gx;
 extern crate dmc;
 extern crate sdl2;
 #[macro_use]
@@ -9,11 +8,11 @@ extern crate log;
 extern crate env_logger;
 extern crate backtrace;
 
+use fate::gx;
+
 // TODO list:
 // - X11:
-//   - Le KeyRelease est pété à cause la façon dont le repeat marche
 //   - XI2: XI_Motion c'est aussi scroll de touchpad. Faut query les class à la main :/
-// - Avoir une crate wrapper pour vek (sinon ça va être compliqué)
 // - Je veux orienter la caméra avec la souris
 // - Je veux déplacer la caméra avec les flèches
 // - ECS.
