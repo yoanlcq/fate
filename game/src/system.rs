@@ -48,7 +48,10 @@ pub trait System {
     fn on_keyboard_focus_lost(&mut self, _g: &mut G) {}
     fn on_mouse_motion(&mut self, _g: &mut G, _pos: Vec2<f64>) {}
     fn on_mouse_motion_raw(&mut self, _g: &mut G, _displacement: Vec2<f64>) {}
+    fn on_mouse_scroll(&mut self, _g: &mut G, _delta: Vec2<f64>) {}
+    fn on_mouse_scroll_raw(&mut self, _g: &mut G, _delta: Vec2<f64>) {}
     fn on_mouse_button(&mut self, _g: &mut G, _btn: MouseButton, _state: ButtonState) {}
+    fn on_mouse_button_raw(&mut self, _g: &mut G, _btn: MouseButton, _state: ButtonState) {}
     fn on_key(&mut self, _g: &mut G, _key: Key, _state: KeyState) {}
     fn on_key_raw(&mut self, _g: &mut G, _key: Key, _state: KeyState) {}
     fn on_text_char(&mut self, _g: &mut G, _char: char) {}

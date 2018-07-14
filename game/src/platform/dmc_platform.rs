@@ -88,13 +88,17 @@ impl DmcPlatform {
             dmc::Event::KeyboardFocusLost { .. } => push(Event::KeyboardFocusLost),
             dmc::Event::MouseButtonReleased { button, .. } => push(Event::MouseButtonReleased(button)),
             dmc::Event::MouseButtonPressed  { button, .. } => push(Event::MouseButtonPressed(button)),
+            dmc::Event::MouseButtonReleasedRaw { button, .. } => push(Event::MouseButtonReleasedRaw(button)),
+            dmc::Event::MouseButtonPressedRaw  { button, .. } => push(Event::MouseButtonPressedRaw(button)),
             dmc::Event::MouseMotion { position: Vec2 { x, y }, .. } => push(Event::MouseMotion(x as _, y as _)),
             dmc::Event::MouseMotionRaw { displacement: Vec2 { x, y }, .. } => push(Event::MouseMotionRaw(x as _, y as _)),
+            dmc::Event::MouseScroll { scroll: Vec2 { x, y }, .. } => push(Event::MouseScroll(x as _, y as _)),
+            dmc::Event::MouseScrollRaw { scroll: Vec2 { x, y }, .. } => push(Event::MouseScrollRaw(x as _, y as _)),
             dmc::Event::KeyboardKeyReleased { key, .. } => push(Event::KeyboardKeyReleased(key)),
             dmc::Event::KeyboardKeyPressed  { key,  is_repeat, .. } if !is_repeat => push(Event::KeyboardKeyPressed(key)),
-            dmc::Event::KeyboardTextChar    { char, .. } => push(Event::KeyboardTextChar(char)),
             dmc::Event::KeyboardKeyReleasedRaw { key, .. } => push(Event::KeyboardKeyReleasedRaw(key)),
             dmc::Event::KeyboardKeyPressedRaw  { key, .. } => push(Event::KeyboardKeyPressedRaw(key)),
+            dmc::Event::KeyboardTextChar    { char, .. } => push(Event::KeyboardTextChar(char)),
             dmc::Event::KeyboardTextString  { ref text, .. } => {
                 for char in text.chars() {
                     push(Event::KeyboardTextChar(char));
