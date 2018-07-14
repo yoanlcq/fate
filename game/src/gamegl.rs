@@ -1,8 +1,8 @@
 use std::mem;
 use std::collections::HashMap;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, FrustumPlanes};
-use gx::{self, Object, gl};
-use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, CameraProjectionMode, Camera};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
+use fate::gx::{self, Object, gl, GLSLType};
+use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use system::*;
 
 static mut NB_ERRORS: usize = 0;
@@ -104,7 +104,7 @@ out vec3 v_tex_coords;
 void main() {
     v_tex_coords = a_position.xyz;
     vec4 pos = u_proj_matrix * u_modelview_matrix * vec4(a_position.xyz, 1.0);
-    gl_Position = pos.xyww; // Set z to 1
+    gl_Position = pos.xyww; // Z = 1 after perspective divide by w
 }
 ";
 
@@ -116,7 +116,7 @@ struct TextureSelector {
     float layer;
 };
 
-uniform samplerCubeArray u_cubemaps[4]; // Solid 1x1, Low-res, Medium-res, Hi-res
+uniform samplerCubeArray u_cube_map_tabs[4]; // Solid 1x1, Low-res, Medium-res, Hi-res
 uniform TextureSelector u_skybox;
 
 in vec3 v_tex_coords;
@@ -124,7 +124,7 @@ in vec3 v_tex_coords;
 out vec4 f_color;
 
 void main() {
-    f_color = texture(u_cubemaps[u_skybox.tab], vec4(v_tex_coords, u_skybox.layer));
+    f_color = texture(u_cube_map_tabs[u_skybox.tab], vec4(v_tex_coords, u_skybox.layer));
 }
 ";
 
@@ -134,7 +134,7 @@ fn new_gl_color_program() -> Result<gx::ProgramEx, String> {
     let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
     Ok(gx::ProgramEx::new(prog))
 }
-fn new_gl_sky_program() -> Result<gx::ProgramEx, String> {
+fn new_gl_skybox_program() -> Result<gx::ProgramEx, String> {
     let vs = gx::VertexShader::try_from_source(SKY_VS_SRC)?;
     let fs = gx::FragmentShader::try_from_source(SKY_FS_SRC)?;
     let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
@@ -164,18 +164,72 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
     }
 }
 
-
 #[derive(Debug)]
 pub struct GLSystem {
     viewport_size: Extent2<u32>,
     color_program: gx::ProgramEx,
-    sky_program: gx::ProgramEx,
+    skybox_program: gx::ProgramEx,
+	cube_map_tabs: [gx::Texture; 1],
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_index_buffers: HashMap<MeshID, gx::Buffer>,
     pipeline_statistics_arb_queries: HashMap<gx::QueryTarget, gx::Query>,
+}
+
+fn create_1st_cube_map_tab() -> gx::Texture {
+    let levels = 1;
+    let level = 0;
+    let internal_format = gl::RGB8;
+    let format = gl::RGB;
+    let type_ = gl::UNSIGNED_BYTE;
+    let w = 1;
+    let h = 1;
+	let x = 0;
+	let y = 0;
+	let z = 0;
+    let orange = Rgb::new(255, 175, 45);
+    let pixels = [
+		// Skybox 1: 6 colors
+        Rgb::<u8>::new(255, 000, 000), // +X
+        Rgb::<u8>::new(000, 255, 255), // -X
+        Rgb::<u8>::new(000, 255, 000), // +Y
+        Rgb::<u8>::new(255, 000, 255), // -Y
+        Rgb::<u8>::new(000, 000, 255), // +Z
+        Rgb::<u8>::new(255, 255, 000), // -Z
+		// ---
+        Rgb::cyan(),
+        Rgb::cyan(),
+        Rgb::blue(),
+        Rgb::white(),
+        Rgb::cyan(),
+        Rgb::cyan(),
+		// ---
+        orange,
+        orange,
+        Rgb::red(),
+        Rgb::yellow(),
+        orange,
+        orange,
+		// ---
+        Rgb::white(),
+        Rgb::white(),
+        Rgb::white(),
+        Rgb::white(),
+        Rgb::white(),
+        Rgb::white(),
+    ];
+	let depth = pixels.len();
+    unsafe {
+        gl::ActiveTexture(gl::TEXTURE0);
+        let tex = check_gl!(gx::Texture::new());
+        check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, tex.gl_id()));
+        check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w, h, depth as _));
+        check_gl!(gl::TexSubImage3D(gl::TEXTURE_CUBE_MAP_ARRAY, level, x, y, z, w, h, depth as _, format, type_, pixels.as_ptr() as _));
+        check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0));
+        tex
+    }
 }
 
 impl GLSystem {
@@ -204,8 +258,9 @@ impl GLSystem {
         };
         Self {
             viewport_size,
-            color_program: unwrap_or_display_error(new_gl_color_program()),
-            sky_program:   unwrap_or_display_error(new_gl_sky_program  ()),
+            color_program:  unwrap_or_display_error(new_gl_color_program()),
+            skybox_program: unwrap_or_display_error(new_gl_skybox_program  ()),
+            cube_map_tabs: [create_1st_cube_map_tab()],
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
@@ -215,57 +270,85 @@ impl GLSystem {
         }
     }
 
-    fn render_scene(&mut self, scene: &Scene, _draw: &Draw) {
-        unsafe {
-            gl::UseProgram(self.color_program.program().gl_id());
-        }
+    fn render_scene(&mut self, scene: &Scene, draw: &Draw) {
         for camera in scene.cameras.values() {
-            self.render_scene_with_camera(scene, _draw, camera);
+            unsafe {
+                let Extent2 { w, h } = camera.viewport_size;
+                gl::Viewport(0, 0, w as _, h as _); // XXX x and y are mindlessly set to zero
+            }
+            self.render_scene_with_camera(scene, draw, camera);
+            self.render_skybox(scene, draw, camera);
+        }
+    }
+
+    fn render_skybox(&mut self, scene: &Scene, _draw: &Draw, camera: &Camera) {
+        let mesh_id = &Scene::MESHID_SKYBOX;
+        let mesh = &scene.meshes[mesh_id];
+
+        let view = camera.view_matrix();
+        let proj = camera.proj_matrix();
+        let view_without_translation = {
+            let mut r = view;
+            r.cols.w = Vec4::unit_w();
+            r
+        };
+
+        let funny: i32 = 9; // Important: Use i32, not u32.
+        unsafe {
+            gl::UseProgram(self.skybox_program.inner().gl_id());
+            gl::ActiveTexture(gl::TEXTURE0 + funny as u32);
+            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, self.cube_map_tabs[0].gl_id());
+            // FIXME: Be less braindead and use sampler objects
+            gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MAG_FILTER, scene.skybox_min_mag_filter as _);
+            gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MIN_FILTER, scene.skybox_min_mag_filter as _);
+            gl::BindVertexArray(self.mesh_vaos[mesh_id].gl_id()); // FIXME: Filling them every time = not efficient
+            gl::DepthFunc(gl::LEQUAL);
+        }
+
+        self.skybox_program.set_uniform_primitive("u_proj_matrix", &[proj]);
+        self.skybox_program.set_uniform_primitive("u_modelview_matrix", &[view_without_translation]);
+        {
+            let tabs = self.skybox_program.uniform("u_cube_map_tabs[0]").unwrap();
+            assert_eq!(tabs.type_, Some(GLSLType::SamplerCubeMapArray));
+            assert_eq!(tabs.array_len, 4);
+            self.skybox_program.set_uniform_unchecked(tabs.location, &[funny, funny, funny, funny]);
+
+            assert!((scene.skybox_selector.tab as i32) < tabs.array_len);
+            self.skybox_program.set_uniform_primitive("u_skybox.tab", &[scene.skybox_selector.tab as u32]);
+            self.skybox_program.set_uniform_primitive("u_skybox.layer", &[scene.skybox_selector.layer as f32]);
+        }
+
+        self.gl_update_mesh_position_attrib(mesh_id, mesh);
+        self.gl_draw_mesh(mesh_id, mesh);
+
+        unsafe {
+            gl::DepthFunc(gl::LESS);
+            gl::BindVertexArray(0);
+            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::UseProgram(0);
         }
     }
 
     fn render_scene_with_camera(&mut self, scene: &Scene, _draw: &Draw, camera: &Camera) {
-        let &Camera {
-            position: camera_position,
-            target: camera_target,
-            scale: camera_scale,
-            projection_mode,
-            fov_y_radians: fov_y,
-            near,
-            far,
-        } = camera;
+        let view = camera.view_matrix();
+        let proj = camera.proj_matrix();
+        
+        unsafe {
+            gl::UseProgram(self.color_program.inner().gl_id());
+        }
 
-        let aspect_ratio = {
-            let Extent2 { w, h } = self.viewport_size;
-            assert_ne!(w, 0);
-            assert_ne!(h, 0);
-            w as f32 / h as f32
-        };
-        let proj = match projection_mode {
-            CameraProjectionMode::Perspective => Mat4::perspective_lh_no(fov_y, aspect_ratio, near, far),
-            CameraProjectionMode::Ortho => Mat4::orthographic_lh_no(FrustumPlanes {
-                right: aspect_ratio,
-                left: -aspect_ratio,
-                top: 1.,
-                bottom: -1.,
-                near,
-                far,
-            }),
-        };
-        let view = Mat4::<f32>::scaling_3d(camera_scale.recip())
-            * Mat4::look_at(camera_position, camera_target, Vec3::up());
-
-        self.color_program.set_uniform("u_proj_matrix", &[proj]);
-        self.color_program.set_uniform("u_light_position_viewspace", &[Vec3::new(0., 0., 0.)]);
-        self.color_program.set_uniform("u_light_color", &[Rgb::white()]);
+        self.color_program.set_uniform_primitive("u_proj_matrix", &[proj]);
+        self.color_program.set_uniform_primitive("u_light_position_viewspace", &[Vec3::new(0., 0., 0.)]);
+        self.color_program.set_uniform_primitive("u_light_color", &[Rgb::white()]);
 
         for &MeshInstance { ref mesh_id, xform } in scene.mesh_instances.values() {
             let mesh = &scene.meshes[mesh_id];
             let model = Mat4::from(xform);
             let modelview = view * model;
             let normal_matrix = modelview.inverted().transposed();
-            self.color_program.set_uniform("u_modelview_matrix", &[modelview]);
-            self.color_program.set_uniform("u_normal_matrix", &[normal_matrix]);
+            self.color_program.set_uniform_primitive("u_modelview_matrix", &[modelview]);
+            self.color_program.set_uniform_primitive("u_normal_matrix", &[normal_matrix]);
 
             /*
             unsafe {
@@ -277,61 +360,74 @@ impl GLSystem {
                 gl::BindVertexArray(self.mesh_vaos[mesh_id].gl_id()); // FIXME: Filling them every time = not efficient
             }
 
-            assert!(!mesh.vposition.is_empty());
-            let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
-            unsafe {
-                gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id());
-                gl::EnableVertexAttribArray(VAttrib::PositionVec4f32 as _);
-                gl::VertexAttribPointer(VAttrib::PositionVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
-                gl::BindBuffer(gx::BufferTarget::Array as _, 0);
-            }
+            self.gl_update_mesh_position_attrib(mesh_id, mesh);
+            self.gl_update_mesh_normal_attrib(mesh_id, mesh);
+            self.gl_update_mesh_color_attrib(mesh_id, mesh);
+            self.gl_draw_mesh(mesh_id, mesh);
 
-            assert!(!mesh.vnormal.is_empty());
-            let norm_buffer = self.mesh_normal_buffers.get(mesh_id).expect("Meshes must have a normals buffer (for now)!");
-            unsafe {
-                gl::BindBuffer(gx::BufferTarget::Array as _, norm_buffer.gl_id());
-                gl::EnableVertexAttribArray(VAttrib::NormalVec4f32 as _);
-                gl::VertexAttribPointer(VAttrib::NormalVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
-                gl::BindBuffer(gx::BufferTarget::Array as _, 0);
-            }
-
-            let set_default_color = |rgba: Rgba<u8>| unsafe {
-                let rgba = rgba.map(|x| x as f32) / 255.;
-                gl::DisableVertexAttribArray(VAttrib::ColorRgbau8 as _);
-                gl::VertexAttrib4f(VAttrib::ColorRgbau8 as _, rgba.r, rgba.g, rgba.b, rgba.a);
-            };
-            match self.mesh_color_buffers.get(mesh_id) {
-                None => set_default_color(Rgba::white()),
-                Some(col_buffer) => {
-                    match mesh.vcolor.len() {
-                        0 => set_default_color(Rgba::white()),
-                        1 => set_default_color(mesh.vcolor[0]),
-                        _ => unsafe {
-                            gl::BindBuffer(gx::BufferTarget::Array as _, col_buffer.gl_id());
-                            gl::EnableVertexAttribArray(VAttrib::ColorRgbau8 as _);
-                            gl::VertexAttribPointer(VAttrib::ColorRgbau8 as _, 4, gl::FLOAT, gl::TRUE, 4, 0 as _);
-                            gl::BindBuffer(gx::BufferTarget::Array as _, 0);
-                        },
-                    }
-                },
-            }
-
-            if let Some(idx_buffer) = self.mesh_index_buffers.get(mesh_id) {
-                if !mesh.indices.is_empty() {
-                    unsafe {
-                        gl::BindBuffer(gx::BufferTarget::ElementArray as _, idx_buffer.gl_id());
-                        assert!(mem::size_of_val(&mesh.indices[0]) == 2); // for gl::UNSIGNED_SHORT
-                        gl::DrawElements(mesh.topology, mesh.indices.len() as _, gl::UNSIGNED_SHORT, 0 as _);
-                        gl::BindBuffer(gx::BufferTarget::ElementArray as _, 0);
-                    }
-                }
-            } else {
-                unsafe {
-                    gl::DrawArrays(mesh.topology, 0, mesh.vposition.len() as _);
-                }
-            }
             unsafe {
                 gl::BindVertexArray(0);
+            }
+        }
+        unsafe {
+            gl::UseProgram(0);
+        }
+    }
+    fn gl_update_mesh_position_attrib(&self, mesh_id: &MeshID, mesh: &Mesh) {
+        assert!(!mesh.vposition.is_empty());
+        let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
+        unsafe {
+            gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id());
+            gl::EnableVertexAttribArray(VAttrib::PositionVec4f32 as _);
+            gl::VertexAttribPointer(VAttrib::PositionVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
+            gl::BindBuffer(gx::BufferTarget::Array as _, 0);
+        }
+    }
+    fn gl_update_mesh_normal_attrib(&self, mesh_id: &MeshID, mesh: &Mesh) {
+        assert!(!mesh.vnormal.is_empty());
+        let norm_buffer = self.mesh_normal_buffers.get(mesh_id).expect("Meshes must have a normals buffer (for now)!");
+        unsafe {
+            gl::BindBuffer(gx::BufferTarget::Array as _, norm_buffer.gl_id());
+            gl::EnableVertexAttribArray(VAttrib::NormalVec4f32 as _);
+            gl::VertexAttribPointer(VAttrib::NormalVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
+            gl::BindBuffer(gx::BufferTarget::Array as _, 0);
+        }
+    }
+    fn gl_update_mesh_color_attrib(&self, mesh_id: &MeshID, mesh: &Mesh) {
+        let set_default_color = |rgba: Rgba<u8>| unsafe {
+            let rgba = rgba.map(|x| x as f32) / 255.;
+            gl::DisableVertexAttribArray(VAttrib::ColorRgbau8 as _);
+            gl::VertexAttrib4f(VAttrib::ColorRgbau8 as _, rgba.r, rgba.g, rgba.b, rgba.a);
+        };
+        match self.mesh_color_buffers.get(mesh_id) {
+            None => set_default_color(Rgba::white()),
+            Some(col_buffer) => {
+                match mesh.vcolor.len() {
+                    0 => set_default_color(Rgba::white()),
+                    1 => set_default_color(mesh.vcolor[0]),
+                    _ => unsafe {
+                        gl::BindBuffer(gx::BufferTarget::Array as _, col_buffer.gl_id());
+                        gl::EnableVertexAttribArray(VAttrib::ColorRgbau8 as _);
+                        gl::VertexAttribPointer(VAttrib::ColorRgbau8 as _, 4, gl::FLOAT, gl::TRUE, 4, 0 as _);
+                        gl::BindBuffer(gx::BufferTarget::Array as _, 0);
+                    },
+                }
+            },
+        }
+    }
+    fn gl_draw_mesh(&self, mesh_id: &MeshID, mesh: &Mesh) {
+        if let Some(idx_buffer) = self.mesh_index_buffers.get(mesh_id) {
+            if !mesh.indices.is_empty() {
+                unsafe {
+                    gl::BindBuffer(gx::BufferTarget::ElementArray as _, idx_buffer.gl_id());
+                    assert!(mem::size_of_val(&mesh.indices[0]) == 2); // for gl::UNSIGNED_SHORT
+                    gl::DrawElements(mesh.topology, mesh.indices.len() as _, gl::UNSIGNED_SHORT, 0 as _);
+                    gl::BindBuffer(gx::BufferTarget::ElementArray as _, 0);
+                }
+            }
+        } else {
+            unsafe {
+                gl::DrawArrays(mesh.topology, 0, mesh.vposition.len() as _);
             }
         }
     }

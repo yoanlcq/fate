@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::cell::RefCell;
 use super::{Program, VertexShader, FragmentShader, Object};
 use gl::{self, types::*};
 use math::{Mat4, Vec3, Vec4, Rgba, Rgb};
@@ -292,6 +293,11 @@ gl_type_enum!{
     UnsignedIntImage2DMultisample        = UNSIGNED_INT_IMAGE_2D_MULTISAMPLE        ,
     UnsignedIntImage2DMultisampleArray   = UNSIGNED_INT_IMAGE_2D_MULTISAMPLE_ARRAY  ,
     UnsignedIntAtomicCounter             = UNSIGNED_INT_ATOMIC_COUNTER              ,
+
+    SamplerCubeMapArray                  = SAMPLER_CUBE_MAP_ARRAY                   ,
+    SamplerCubeMapArrayShadow            = SAMPLER_CUBE_MAP_ARRAY_SHADOW            ,
+    IntSamplerCubeMapArray               = INT_SAMPLER_CUBE_MAP_ARRAY               ,
+    UnsignedIntSamplerCubeMapArray       = UNSIGNED_INT_SAMPLER_CUBE_MAP_ARRAY      ,
 }
 
 
@@ -301,6 +307,20 @@ pub trait UniformElement: Sized {
     fn gl_uniform(loc: GLint, m: &[Self]);
 }
 
+macro_rules! impl_gl_uniform_element {
+    ($($T:ty: $GLSL:ident => $func:ident,)+) => {
+        $(
+            impl UniformElement for $T {
+                const GLSL_TYPE: GLSLType = GLSLType::$GLSL;
+                fn gl_uniform(loc: GLint, m: &[Self]) {
+                    unsafe {
+                        gl::$func(loc, m.len() as _, m.as_ptr() as _);
+                    }
+                }
+            }
+        )+
+    }
+}
 impl UniformElement for Mat4<f32> {
     const GLSL_TYPE: GLSLType = GLSLType::FloatMat4;
     fn gl_uniform(loc: GLint, m: &[Self]) {
@@ -310,38 +330,16 @@ impl UniformElement for Mat4<f32> {
     }
 }
 
-impl UniformElement for Vec4<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec4;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform4fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
+impl_gl_uniform_element!{
+    Vec4<f32>: FloatVec4 => Uniform4fv,
+    Vec3<f32>: FloatVec3 => Uniform3fv,
+    Rgba<f32>: FloatVec4 => Uniform4fv,
+    Rgb <f32>: FloatVec3 => Uniform3fv,
+    u32: UnsignedInt => Uniform1uiv,
+    i32: Int => Uniform1iv,
+    f32: Float => Uniform1fv,
 }
-impl UniformElement for Vec3<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec3;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform3fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
-impl UniformElement for Rgba<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec4;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform4fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
-impl UniformElement for Rgb<f32> {
-    const GLSL_TYPE: GLSLType = GLSLType::FloatVec3;
-    fn gl_uniform(loc: GLint, m: &[Self]) {
-        unsafe {
-            gl::Uniform3fv(loc, m.len() as _, &m[0][0]);
-        }
-    }
-}
+
 
 /// A ProgramEx caches uniform information in a HashMap to allow setting uniforms
 /// in a fast and safe way.
@@ -349,6 +347,8 @@ impl UniformElement for Rgb<f32> {
 pub struct ProgramEx {
     program: Program,
     uniforms: HashMap<String, GLSLActiveVar>,
+    // For more complex stuff such as "u_foobar[2].field[0]"
+    extra_uniform_locations: RefCell<HashMap<String, GLint>>,
 }
 
 impl ProgramEx {
@@ -357,24 +357,47 @@ impl ProgramEx {
         Self {
             program,
             uniforms,
+            extra_uniform_locations: Default::default(),
         }
     }
-    pub fn program(&self) -> &Program {
+    pub fn inner(&self) -> &Program {
         &self.program
     }
-    pub fn into_program(self) -> Program {
+    pub fn into_inner(self) -> Program {
         self.program
     }
     pub fn uniform(&self, name: &str) -> Option<&GLSLActiveVar> {
         self.uniforms.get(name)
     }
-    pub fn set_uniform<T: UniformElement>(&self, name: &str, value: &[T]) {
-        let uniform = &self.uniforms[name];
-        assert_eq!(uniform.array_len, value.len() as _);
-        assert_eq!(uniform.type_, Some(T::GLSL_TYPE));
-        T::gl_uniform(uniform.location, value);
+    pub fn set_uniform_primitive<T: UniformElement>(&self, name: &str, value: &[T]) {
+        self.set_uniform(name, T::GLSL_TYPE, value)
+    }
+    pub fn set_uniform<T: UniformElement>(&self, name: &str, ty: GLSLType, value: &[T]) {
+        let mut extra_uniform_locations = self.extra_uniform_locations.borrow_mut();
+        let location;
+        if let Some(uniform) = self.uniform(name) {
+            assert_eq!(uniform.array_len, value.len() as _);
+            assert_eq!(uniform.type_, Some(ty));
+            location = uniform.location;
+        } else if let Some(loc) = extra_uniform_locations.get(name).map(Clone::clone) {
+            location = loc;
+        } else {
+            let cstring = ::std::ffi::CString::new(name).unwrap();
+            match self.program.uniform_location(cstring.as_bytes_with_nul()) {
+                None => panic!("No such uniform: `{}`", name),
+                Some(loc) => {
+                    location = loc;
+                    extra_uniform_locations.insert(cstring.into_string().unwrap(), location);
+                },
+            }
+        }
+        assert_ne!(location, -1);
+        self.set_uniform_unchecked(location, value);
+    }
+    pub fn set_uniform_unchecked<T: UniformElement>(&self, location: GLint, value: &[T]) {
+        T::gl_uniform(location, value);
     }
 }
 
 impl From<Program> for ProgramEx { fn from(p: Program) -> Self { Self::new(p) } }
-impl From<ProgramEx> for Program { fn from(p: ProgramEx) -> Self { p.into_program() } }
+impl From<ProgramEx> for Program { fn from(p: ProgramEx) -> Self { p.into_inner() } }

@@ -1,3 +1,4 @@
+#[macro_use]
 extern crate fate;
 #[allow(unused_imports)]
 #[macro_use]
@@ -7,8 +8,6 @@ extern crate sdl2;
 extern crate log;
 extern crate env_logger;
 extern crate backtrace;
-
-use fate::gx;
 
 // TODO list:
 // - X11:

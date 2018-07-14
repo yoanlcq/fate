@@ -6,7 +6,7 @@
 pub use std::time::Duration;
 pub use fate::math::{Vec2, Extent2};
 pub use fate::lab::duration_ext::DurationExt;
-pub use dmc::device::{Key, KeyState, MouseButton, ButtonState};
+pub use dmc::device::{Key, KeyState, MouseButton, ButtonState, Keysym};
 pub use quit::Quit;
 pub use game::G;
 pub use message::Message;

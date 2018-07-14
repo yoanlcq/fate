@@ -25,7 +25,7 @@ impl SharedGame {
             t: Duration::default(),
             frame_time_manager: FrameTimeManager::with_max_len(60),
             pending_messages: VecDeque::new(),
-            scene: Scene::new(),
+            scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),
         }
     }

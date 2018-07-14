@@ -36,10 +36,10 @@ impl Error {
 #[macro_export]
 macro_rules! check_gl {
     () => { 
-        check_gl!("<no expression provided>");
+        check_gl!{"<no expression provided>"}
     };
     ($expr:expr) => {
-        { $expr; $crate::pump_gl_errors(stringify!($expr)); }
+        { let val = $expr; $crate::pump_gl_errors(stringify!($expr)); val }
     };
 }
 

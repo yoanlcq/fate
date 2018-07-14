@@ -5,8 +5,8 @@ use std::collections::VecDeque;
 use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
 use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
+use fate::gx::{self, gl};
 use super::SharedGame;
-use gx::{self, gl};
 use scene::{SceneLogicSystem, SceneCommandClearerSystem};
 use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
@@ -75,9 +75,12 @@ impl Game {
         }
     }
     pub fn poll_event(&mut self) -> Option<Event> {
-        // let start = Instant::now();
         let ev = self.platform.poll_event();
-        // debug!("poll_event: {}", start.elapsed().to_f64_seconds());
+        /*
+        if let Some(ref ev) = ev {
+            debug!("GAME EVENT: {:?}", ev);
+        }
+        */
         ev
     }
     pub fn pump_messages(&mut self) {

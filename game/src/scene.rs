@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use gx::gl::{self, types::GLenum};
-use fate::math::{Vec3, Vec4, Rgba, Transform, Quaternion};
+use fate::math::{Vec3, Vec4, Rgba, Transform, Quaternion, Mat4, FrustumPlanes};
+use fate::gx::gl::{self, types::GLenum};
 use system::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,6 +223,7 @@ pub struct Camera {
     pub position: Vec3<f32>,
     pub target: Vec3<f32>,
     pub scale: Vec3<f32>,
+    pub viewport_size: Extent2<u32>,
     pub projection_mode: CameraProjectionMode,
     pub fov_y_radians: f32,
     pub near: f32,
@@ -243,6 +244,38 @@ impl Camera {
     pub fn up_vector_for_lookat(&self) -> Vec3<f32> {
         Vec3::up()
     }
+    pub fn aspect_ratio(&self) -> f32 {
+        let Extent2 { w, h } = self.viewport_size;
+        assert_ne!(w, 0);
+        assert_ne!(h, 0);
+        w as f32 / h as f32
+    }
+    pub fn ortho_frustum_planes(&self) -> FrustumPlanes<f32> {
+        let aspect_ratio = self.aspect_ratio();
+        FrustumPlanes {
+            right: aspect_ratio,
+            left: -aspect_ratio,
+            top: 1.,
+            bottom: -1.,
+            near: self.near,
+            far: self.far,
+        }
+    }
+    pub fn proj_matrix(&self) -> Mat4<f32> {
+        match self.projection_mode {
+            CameraProjectionMode::Perspective => {
+                Mat4::perspective_lh_no(self.fov_y_radians, self.aspect_ratio(), self.near, self.far)
+            },
+            CameraProjectionMode::Ortho => {
+                Mat4::orthographic_lh_no(self.ortho_frustum_planes())
+            },
+        }
+    }
+    pub fn view_matrix(&self) -> Mat4<f32> {
+        let zoom = Mat4::<f32>::scaling_3d(self.scale.recip());
+        let look = Mat4::look_at(self.position, self.target, Vec3::up());
+        zoom * look
+    }
 }
 
 pub type MeshID = u32;
@@ -258,6 +291,8 @@ pub enum SceneCommand {
 #[derive(Debug)]
 pub struct Scene {
     pub cameras: HashMap<CameraID, Camera>,
+    pub skybox_selector: SkyboxSelector,
+    pub skybox_min_mag_filter: GLenum,
     pub meshes: HashMap<MeshID, Mesh>,
     pub mesh_instances: HashMap<MeshInstanceID, MeshInstance>,
     // Later we may also want a tick_commands_queue
@@ -269,7 +304,7 @@ impl Scene {
     pub const MESHID_CUBE: MeshID = 11;
     pub const MESHID_CUBE_SMOOTH: MeshID = 12;
 
-    pub fn new() -> Self {
+    pub fn new(viewport_size: Extent2<u32>) -> Self {
         let mut cameras = HashMap::new();
         let mut meshes = HashMap::new();
         let mut mesh_instances = HashMap::new();
@@ -279,6 +314,7 @@ impl Scene {
             position: Vec3::new(0., 0., -5.),
             target: Vec3::zero(),
             scale: Vec3::one(),
+            viewport_size,
             projection_mode: CameraProjectionMode::Perspective,
             fov_y_radians: 60_f32.to_radians(),
             near: 0.001,
@@ -292,15 +328,6 @@ impl Scene {
         draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE));
         draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE_SMOOTH));
 
-
-        mesh_instances.insert(1300, MeshInstance {
-            mesh_id: Self::MESHID_SKYBOX,
-            xform: Transform {
-                scale: Vec3::broadcast(1000.),
-                .. Default::default()
-            },
-        });
-        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(1300));
 
         mesh_instances.insert(13, MeshInstance {
             mesh_id: Self::MESHID_CUBE,
@@ -324,8 +351,13 @@ impl Scene {
         });
         draw_commands_queue.push_back(SceneCommand::AddMeshInstance(468));
 
+        let skybox_selector = SkyboxSelector {
+            tab: 0, layer: 0,
+        };
 
         Self {
+            skybox_min_mag_filter: gl::LINEAR,
+            skybox_selector,
             cameras,
             meshes,
             mesh_instances,
@@ -360,6 +392,25 @@ impl SceneLogicSystem {
 }
 
 impl System for SceneLogicSystem {
+    fn on_canvas_resized(&mut self, g: &mut G, size: Extent2<u32>) {
+        for camera in g.scene.cameras.values_mut() {
+            camera.viewport_size = size;
+        }
+    }
+    fn on_key(&mut self, g: &mut G, key: Key, state: KeyState) {
+        match key.sym {
+            Some(Keysym::T) if state.is_down() && g.scene.skybox_selector.tab > 0 => g.scene.skybox_selector.tab -= 1,
+            Some(Keysym::Y) if state.is_down() => g.scene.skybox_selector.tab += 1,
+            Some(Keysym::U) if state.is_down() && g.scene.skybox_selector.layer > 0 => g.scene.skybox_selector.layer -= 1,
+            Some(Keysym::I) if state.is_down() => g.scene.skybox_selector.layer += 1,
+            Some(Keysym::O) if state.is_down() => g.scene.skybox_min_mag_filter = match g.scene.skybox_min_mag_filter {
+                gl::LINEAR => gl::NEAREST,
+                gl::NEAREST => gl::LINEAR,
+                _ => gl::LINEAR,
+            },
+            _ => (),
+        }
+    }
     fn draw(&mut self, g: &mut G, draw: &Draw) {
         for i in g.scene.mesh_instances.values_mut() {
             i.xform.orientation.rotate_x(90_f32.to_radians() * draw.dt);
@@ -399,3 +450,10 @@ impl System for SceneLogicSystem {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub struct TextureSelector {
+    pub tab: u16,
+    pub layer: u16,
+}
+
+pub type SkyboxSelector = TextureSelector;

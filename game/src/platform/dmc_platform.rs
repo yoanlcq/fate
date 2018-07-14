@@ -61,11 +61,7 @@ impl Platform for DmcPlatform {
     }
     fn poll_event(&mut self) -> Option<Event> {
         self.pump_events();
-        let ev = self.pending_events.pop_front();
-        if let Some(ref ev) = ev {
-            debug!("GAME EVENT: {:?}", ev);
-        }
-        ev
+        self.pending_events.pop_front()
     }
 }
 
