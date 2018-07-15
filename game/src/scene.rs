@@ -303,6 +303,10 @@ impl Scene {
     pub const MESHID_SKYBOX: MeshID = 10;
     pub const MESHID_CUBE: MeshID = 11;
     pub const MESHID_CUBE_SMOOTH: MeshID = 12;
+    pub const MESHID_ICOSAHEDRON_0: MeshID = 13;
+    pub const MESHID_ICOSAHEDRON_1: MeshID = 14;
+    pub const MESHID_ICOSAHEDRON_2: MeshID = 15;
+    pub const MESHID_ICOSAHEDRON_3: MeshID = 16;
 
     pub fn new(viewport_size: Extent2<u32>) -> Self {
         let mut cameras = HashMap::new();
@@ -324,32 +328,49 @@ impl Scene {
         meshes.insert(Self::MESHID_SKYBOX, Mesh::new_skybox());
         meshes.insert(Self::MESHID_CUBE, Mesh::new_cube_triangles(0.5));
         meshes.insert(Self::MESHID_CUBE_SMOOTH, Mesh::new_cube_smooth_triangle_strip(0.5));
+        meshes.insert(Self::MESHID_ICOSAHEDRON_0, Mesh::new_icosahedron(0.5, 0));
+        meshes.insert(Self::MESHID_ICOSAHEDRON_1, Mesh::new_icosahedron(0.5, 1));
+        meshes.insert(Self::MESHID_ICOSAHEDRON_2, Mesh::new_icosahedron(0.5, 2));
+        meshes.insert(Self::MESHID_ICOSAHEDRON_3, Mesh::new_icosahedron(0.5, 3));
         draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_SKYBOX));
         draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE));
         draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_CUBE_SMOOTH));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_ICOSAHEDRON_0));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_ICOSAHEDRON_1));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_ICOSAHEDRON_2));
+        draw_commands_queue.push_back(SceneCommand::AddMesh(Self::MESHID_ICOSAHEDRON_3));
 
+        let cube0_instance_id = 0;
+        let cube1_instance_id = 1;
+        let icosahedron0_instance_id = 2;
+        let icosahedron1_instance_id = 3;
 
-        mesh_instances.insert(13, MeshInstance {
-            mesh_id: Self::MESHID_CUBE,
-            xform: Default::default(),
-        });
-        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(13));
-        mesh_instances.insert(42, MeshInstance {
-            mesh_id: Self::MESHID_CUBE,
-            xform: Transform {
-                position: Vec3::new(2., 0., 0.),
-                .. Default::default()
-            },
-        });
-        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(42));
-        mesh_instances.insert(468, MeshInstance {
-            mesh_id: Self::MESHID_CUBE_SMOOTH,
+        mesh_instances.insert(cube0_instance_id, MeshInstance { mesh_id: Self::MESHID_CUBE, xform: Default::default() });
+        mesh_instances.insert(cube1_instance_id, MeshInstance { mesh_id: Self::MESHID_CUBE_SMOOTH,
             xform: Transform {
                 position: Vec3::new(-2., 0., 0.),
                 .. Default::default()
             },
         });
-        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(468));
+        mesh_instances.insert(icosahedron0_instance_id, MeshInstance {
+            mesh_id: Self::MESHID_ICOSAHEDRON_2,
+            xform: Transform {
+                position: Vec3::new(2., 0., 0.),
+                .. Default::default()
+            },
+        });
+        mesh_instances.insert(icosahedron1_instance_id, MeshInstance {
+            mesh_id: Self::MESHID_ICOSAHEDRON_3,
+            xform: Transform {
+                position: Vec3::new(0., 2., 0.),
+                .. Default::default()
+            },
+        });
+
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(cube0_instance_id));
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(cube1_instance_id));
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(icosahedron0_instance_id));
+        draw_commands_queue.push_back(SceneCommand::AddMeshInstance(icosahedron1_instance_id));
 
         let skybox_selector = SkyboxSelector {
             tab: 0, layer: 0,

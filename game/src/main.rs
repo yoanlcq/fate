@@ -10,18 +10,12 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - X11:
-//   - XI2: XI_Motion c'est aussi scroll de touchpad. Faut query les class à la main :/
-// - Je veux orienter la caméra avec la souris
-// - Je veux déplacer la caméra avec les flèches
-// - ECS.
-//   - La skybox utilise un autre shader
-//   - La skybox n'est pas mise à jour
-//   - Les meshs qui veulent tourner doivent opter pour un component
-// - Text
 // - More stock textures (e.g black, white, magenta (debug), checker ....)
 // - Load textures (PNG, JPG, compressed...)
 // - En fait je veux une vraie skybox
+// - ECS.
+//   - Les meshs qui veulent tourner doivent opter pour un component
+// - Text
 // - Materials & pipelines
 //   - Basic lighting
 //   - PBR lighting
