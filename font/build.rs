@@ -1,5 +1,6 @@
 extern crate hyper;
 
+use hyper::{Uri, Response, rt::{Future, Stream}};
 use std::path::PathBuf;
 use std::env;
 use std::fs;
@@ -9,15 +10,19 @@ fn fetch_freetype_msvc(arch: &str) {
     let dir = PathBuf::from(manifest_dir).join("target").join("downloads").join(arch);
     fs::DirBuilder::new().recursive(true).create(&dir).unwrap();
 
-    let url_base = "https://github.com/PistonDevelopers/binaries/raw/master";
+    let url_base = "http://github.com/PistonDevelopers/binaries/raw/master";
     let file_names = ["freetype.dll", "freetype.lib"];
 
-    let client = hyper::Client::new();
-    for file_name in file_names {
-        let data = client.get(format!("{}/{}/{}", url_base, arch, file_name)).send().unwrap();
-        fs::write(format!("{}/{}", dir, file_name), &data).unwrap();
+    for file_name in &file_names {
+        let dir = dir.clone();
+        let file_name = file_name.to_string();
+        hyper::rt::run({
+            let uri: Uri = format!("{}/{}/{}", url_base, arch, file_name).parse().unwrap();
+            hyper::Client::new().get(uri).map(Response::into_body).flatten_stream().concat2().map(move |data| {
+                fs::write(dir.join(file_name), &data).unwrap();
+            }).map_err(|_| ())
+        });
     }
-    Ok(())
 }
 
 fn main() {
