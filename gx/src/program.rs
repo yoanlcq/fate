@@ -1,27 +1,70 @@
 use std::collections::HashMap;
 use std::cell::RefCell;
-use super::{Program, VertexShader, FragmentShader, Object};
+use super::{
+    Object,
+    Program, 
+    VertexShader,
+    TessEvaluationShader,
+    TessControlShader,
+    GeometryShader,
+    FragmentShader,
+    ComputeShader,
+};
 use gl::{self, types::*};
 use math::{Mat4, Vec3, Vec4, Rgba, Rgb};
 
 impl Program {
-    pub fn try_from_vert_frag(vs: &VertexShader, fs: &FragmentShader) -> Result<Self, String> {
+    pub fn link_status(&self) -> bool {
+        self.program_iv(gl::LINK_STATUS) != 0
+    }
+    pub fn try_from_shaders(shaders: &[GLuint]) -> Result<Self, String> {
         unsafe {
             let program = gl::CreateProgram();
             assert_ne!(program, 0);
-            gl::AttachShader(program, vs.gl_id());
-            gl::AttachShader(program, fs.gl_id());
-            gl::LinkProgram(program);
-            gl::DetachShader(program, vs.gl_id());
-            gl::DetachShader(program, fs.gl_id());
-            let mut status = gl::FALSE as GLint;
-            gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-            let s = Program(program);
-            if status == gl::TRUE as _ {
-                return Ok(s);
+
+            let mut nb_attached = 0;
+            for shader in shaders.iter().filter(|&s| *s != 0) {
+                gl::AttachShader(program, *shader);
+                nb_attached += 1;
             }
-            Err(s.info_log())
+            assert_ne!(nb_attached, 0);
+
+            gl::LinkProgram(program);
+
+            for shader in shaders.iter().filter(|&s| *s != 0)  {
+                gl::DetachShader(program, *shader);
+            }
+
+            let program = Program(program);
+
+            if program.link_status() {
+                Ok(program)
+            } else {
+                Err(program.info_log())
+            }
         }
+    }
+    pub fn try_from_stages(
+        vert: Option<&VertexShader>,
+        tesc: Option<&TessControlShader>,
+        tese: Option<&TessEvaluationShader>,
+        geom: Option<&GeometryShader>,
+        frag: Option<&FragmentShader>
+    ) -> Result<Self, String> {
+        let shaders = [
+            vert.map(|s| s.gl_id()).unwrap_or(0), 
+            tesc.map(|s| s.gl_id()).unwrap_or(0),
+            tese.map(|s| s.gl_id()).unwrap_or(0),
+            geom.map(|s| s.gl_id()).unwrap_or(0),
+            frag.map(|s| s.gl_id()).unwrap_or(0),
+        ];
+        Self::try_from_shaders(&shaders)
+    }
+    pub fn try_from_compute(cs: &ComputeShader) -> Result<Self, String> {
+        Self::try_from_shaders(&[cs.gl_id()])
+    }
+    pub fn try_from_vert_frag(vs: &VertexShader, fs: &FragmentShader) -> Result<Self, String> {
+        Self::try_from_shaders(&[vs.gl_id(), fs.gl_id()])
     }
     pub fn info_log(&self) -> String {
         use ::std::ptr;
