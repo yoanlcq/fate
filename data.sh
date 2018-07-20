@@ -2,20 +2,18 @@
 # SOIT `--keep-local` (garder les fichiers locaux en cas de conflit)
 # SOIT `--keep-remote` (garder les fichiers distants en cas de conflit)
 
-folder_id=1g1_YUWfT_qkRuSV6pnpxgh0hggXVg36A
+folder_id=1PpEbHm5CE1xHqrUOOX21wtIhH9KVo7nW
 gdrive_args=${@:2}
-
-mkdir -p ./art
 
 case $1 in
     help)
         gdrive help sync download $gdrive_args
         ;;
     pull)
-        gdrive sync download $folder_id ./art $gdrive_args
+        gdrive sync download $folder_id ./ $gdrive_args
         ;;
     push)
-        gdrive sync upload ./art $folder_id $gdrive_args
+        gdrive sync upload ./ $folder_id $gdrive_args
         ;;
     *)
         echo "Usage: $0 <pull|push>"
