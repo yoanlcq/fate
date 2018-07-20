@@ -1,3 +1,6 @@
+# data/ folder
+data/
+
 # DLL files, since SDL2 is downloaded by game build script
 **/*.lib
 **/*.dll

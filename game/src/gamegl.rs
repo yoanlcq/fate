@@ -1,4 +1,5 @@
 use std::mem;
+use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
 use fate::gx::{self, Object, gl, GLSLType};
@@ -169,7 +170,7 @@ pub struct GLSystem {
     viewport_size: Extent2<u32>,
     color_program: gx::ProgramEx,
     skybox_program: gx::ProgramEx,
-	cube_map_tabs: [gx::Texture; 1],
+	cube_map_tabs: [gx::Texture; 2],
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -232,8 +233,47 @@ fn create_1st_cube_map_tab() -> gx::Texture {
     }
 }
 
+fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
+    let levels = 1;
+    let level = 0;
+    let internal_format = gl::RGB8;
+    let format = gl::RGB;
+    let type_ = gl::UNSIGNED_BYTE;
+    let w = 1024;
+    let h = 1024;
+	let x = 0;
+	let y = 0;
+	let z = 0;
+
+
+    let dir = PathBuf::from("art/3rdparty/mayhem");
+    let dir = data_path.join(dir);
+    let names = [
+        "aqua4_lf.jpg",
+        "aqua4_rt.jpg",
+        "aqua4_dn.jpg",
+        "aqua4_up.jpg",
+        "aqua4_bk.jpg",
+        "aqua4_ft.jpg",
+    ];
+
+    let depth = names.len();
+
+    let pixels = unimplemented!();
+
+    unsafe {
+        gl::ActiveTexture(gl::TEXTURE0);
+        let tex = check_gl!(gx::Texture::new());
+        check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, tex.gl_id()));
+        check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w, h, depth as _));
+        check_gl!(gl::TexSubImage3D(gl::TEXTURE_CUBE_MAP_ARRAY, level, x, y, z, w, h, depth as _, format, type_, pixels));
+        check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0));
+        tex
+    }
+}
+
 impl GLSystem {
-    pub fn new(viewport_size: Extent2<u32>) -> Self {
+    pub fn new(viewport_size: Extent2<u32>, data_path: &Path) -> Self {
         let pipeline_statistics_arb_targets = [
             gx::QueryTarget::VerticesSubmittedARB              ,
             gx::QueryTarget::PrimitivesSubmittedARB            ,
@@ -260,7 +300,7 @@ impl GLSystem {
             viewport_size,
             color_program:  unwrap_or_display_error(new_gl_color_program()),
             skybox_program: unwrap_or_display_error(new_gl_skybox_program  ()),
-            cube_map_tabs: [create_1st_cube_map_tab()],
+            cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(data_path)],
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),

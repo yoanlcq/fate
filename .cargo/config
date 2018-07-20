@@ -1,7 +1,7 @@
 [target.i686-pc-windows-msvc.freetype]
-rustc-link-search = ["target/freetype/i686"]
+rustc-link-search = ["data/lib/i686-pc-windows-msvc"]
 rustc-link-lib = ["freetype"]
 
 [target.x86_64-pc-windows-msvc.freetype]
-rustc-link-search = ["target/freetype/x86_64"]
+rustc-link-search = ["data/lib/x86_64-pc-windows-msvc"]
 rustc-link-lib = ["freetype"]

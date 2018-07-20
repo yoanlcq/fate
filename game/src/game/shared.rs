@@ -14,6 +14,7 @@ pub struct SharedGame {
     pub pending_messages: VecDeque<Message>,
     pub scene: Scene,
     pub input: Input,
+    pub res: Resources,
 }
 
 pub type G = SharedGame;
@@ -27,6 +28,7 @@ impl SharedGame {
             pending_messages: VecDeque::new(),
             scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),
+            res: Resources::new().unwrap(),
         }
     }
     #[allow(dead_code)]
@@ -36,3 +38,36 @@ impl SharedGame {
 }
 
 
+use std::env;
+use std::path::{PathBuf, Path};
+
+#[derive(Debug)]
+pub struct Resources {
+    data_path: PathBuf,
+}
+
+impl Resources {
+    pub fn new() -> Result<Self, String> {
+        let data_path = {
+            let mut dir = env::current_exe().map_err(|io| format!("{}", io))?;
+            loop {
+                if !dir.pop() {
+                    break Err(format!("Could not find `data` directory!"));
+                }
+                trace!("Searching for data path in `{}`", dir.display());
+                dir.push("data");
+                if dir.is_dir() {
+                    break Ok(dir);
+                }
+                dir.pop();
+            }
+        }?;
+        trace!("Found data path at `{}`", data_path.display());
+        Ok(Self {
+            data_path,
+        })
+    }
+    pub fn data_path(&self) -> &Path {
+        &self.data_path
+    }
+}
