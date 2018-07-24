@@ -159,6 +159,7 @@ pub trait Loading {
     type Progress: Progress;
     fn poll(&self) -> Self::Progress;
     fn wait(self) -> Result<Self::Item, Self::Error>;
+    fn cancel(self); // NOTE: Should this return a Future indicating the progress of cancellation??
 }
 impl Progress for LoadingFileProgress {
     fn is_complete(&self) -> bool {

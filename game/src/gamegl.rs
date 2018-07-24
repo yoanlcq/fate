@@ -237,12 +237,12 @@ fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
     let levels = 1;
     let level = 0;
     let internal_format = gl::RGB8;
-    let w = 512_u32;
-    let h = 512_u32;
+    let w = 1024_u32;
+    let h = 1024_u32;
 	let x = 0;
 	let y = 0;
 
-    let dir = data_path.join(PathBuf::from("art/3rdparty/mayhem_mediumres"));
+    let dir = data_path.join(PathBuf::from("art/3rdparty/mayhem"));
     let suffixes = [ "ft", "bk", "up", "dn", "rt", "lf" ];
     let extension = "jpg";
     let mut paths = vec![];
