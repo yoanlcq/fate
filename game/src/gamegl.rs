@@ -3,6 +3,7 @@ use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
 use fate::gx::{self, Object, gl, GLSLType};
+use fate::img::{self, AsSlice};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use system::*;
 
@@ -223,7 +224,6 @@ fn create_1st_cube_map_tab() -> gx::Texture {
     ];
 	let depth = pixels.len();
     unsafe {
-        gl::ActiveTexture(gl::TEXTURE0);
         let tex = check_gl!(gx::Texture::new());
         check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, tex.gl_id()));
         check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w, h, depth as _));
@@ -237,36 +237,48 @@ fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
     let levels = 1;
     let level = 0;
     let internal_format = gl::RGB8;
-    let format = gl::RGB;
-    let type_ = gl::UNSIGNED_BYTE;
-    let w = 1024;
-    let h = 1024;
+    let w = 512_u32;
+    let h = 512_u32;
 	let x = 0;
 	let y = 0;
-	let z = 0;
 
+    let dir = data_path.join(PathBuf::from("art/3rdparty/mayhem_mediumres"));
+    let suffixes = [ "ft", "bk", "up", "dn", "rt", "lf" ];
+    let extension = "jpg";
+    let mut paths = vec![];
+    for name in &["grouse", "aqua4", "h2s", "flame"] {
+        for suffix in &suffixes {
+            paths.push(dir.join(format!("{}_{}.{}", name, suffix, extension)));
+        }
+    }
 
-    let dir = PathBuf::from("art/3rdparty/mayhem");
-    let dir = data_path.join(dir);
-    let names = [
-        "aqua4_lf.jpg",
-        "aqua4_rt.jpg",
-        "aqua4_dn.jpg",
-        "aqua4_up.jpg",
-        "aqua4_bk.jpg",
-        "aqua4_ft.jpg",
-    ];
-
-    let depth = names.len();
-
-    let pixels = unimplemented!();
+    for path in paths.iter() {
+        info!("Checking `{}`", path.display());
+        let metadata = img::load_metadata(path).unwrap();
+        assert_eq!(metadata.size.w, w);
+        assert_eq!(metadata.size.h, h);
+        assert_eq!(metadata.pixel_format.semantic(), img::PixelSemantic::Rgb);
+        assert_eq!(metadata.pixel_format.bits(), 24);
+    }
 
     unsafe {
-        gl::ActiveTexture(gl::TEXTURE0);
         let tex = check_gl!(gx::Texture::new());
         check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, tex.gl_id()));
-        check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w, h, depth as _));
-        check_gl!(gl::TexSubImage3D(gl::TEXTURE_CUBE_MAP_ARRAY, level, x, y, z, w, h, depth as _, format, type_, pixels));
+        check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w as _, h as _, paths.len() as _));
+
+        for (z, path) in paths.iter().enumerate() {
+            info!("Loading `{}`", path.display());
+            let img = img::load(&path);
+            match img {
+                Ok((_, img::AnyImage::Rgb8(img))) => {
+                    let format = gl::RGB;
+                    let type_ = gl::UNSIGNED_BYTE;
+                    check_gl!(gl::TexSubImage3D(gl::TEXTURE_CUBE_MAP_ARRAY, level, x, y, z as _, w as _, h as _, 1, format, type_, img.as_ptr() as _));
+                },
+                _ => unimplemented!{},
+            }
+        }
+
         check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0));
         tex
     }
@@ -336,11 +348,15 @@ impl GLSystem {
         let funny: i32 = 9; // Important: Use i32, not u32.
         unsafe {
             gl::UseProgram(self.skybox_program.inner().gl_id());
-            gl::ActiveTexture(gl::TEXTURE0 + funny as u32);
-            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, self.cube_map_tabs[0].gl_id());
-            // FIXME: Be less braindead and use sampler objects
-            gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MAG_FILTER, scene.skybox_min_mag_filter as _);
-            gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MIN_FILTER, scene.skybox_min_mag_filter as _);
+
+            for (i, cube_map_tab) in self.cube_map_tabs.iter().enumerate() {
+                gl::ActiveTexture(gl::TEXTURE0 + funny as u32 + i as u32);
+                gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, cube_map_tab.gl_id());
+                // FIXME: Be less braindead and use sampler objects
+                gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MAG_FILTER, scene.skybox_min_mag_filter as _);
+                gl::TexParameteri(gl::TEXTURE_CUBE_MAP_ARRAY, gl::TEXTURE_MIN_FILTER, scene.skybox_min_mag_filter as _);
+            }
+
             gl::BindVertexArray(self.mesh_vaos[mesh_id].gl_id()); // FIXME: Filling them every time = not efficient
             gl::DepthFunc(gl::LEQUAL);
         }
@@ -351,7 +367,7 @@ impl GLSystem {
             let tabs = self.skybox_program.uniform("u_cube_map_tabs[0]").unwrap();
             assert_eq!(tabs.type_, Some(GLSLType::SamplerCubeMapArray));
             assert_eq!(tabs.array_len, 4);
-            self.skybox_program.set_uniform_unchecked(tabs.location, &[funny, funny, funny, funny]);
+            self.skybox_program.set_uniform_unchecked(tabs.location, &[funny, funny+1, funny, funny+1]);
 
             assert!((scene.skybox_selector.tab as i32) < tabs.array_len);
             self.skybox_program.set_uniform_primitive("u_skybox.tab", &[scene.skybox_selector.tab as u32]);
@@ -390,12 +406,6 @@ impl GLSystem {
             self.color_program.set_uniform_primitive("u_modelview_matrix", &[modelview]);
             self.color_program.set_uniform_primitive("u_normal_matrix", &[normal_matrix]);
 
-            /*
-            unsafe {
-                gl::Disable(gl::CULL_FACE);
-                //gl::CullFace(gl::BACK);
-            }
-            */
             unsafe {
                 gl::BindVertexArray(self.mesh_vaos[mesh_id].gl_id()); // FIXME: Filling them every time = not efficient
             }
@@ -460,7 +470,7 @@ impl GLSystem {
             if !mesh.indices.is_empty() {
                 unsafe {
                     gl::BindBuffer(gx::BufferTarget::ElementArray as _, idx_buffer.gl_id());
-                    assert!(mem::size_of_val(&mesh.indices[0]) == 2); // for gl::UNSIGNED_SHORT
+                    assert_eq!(mem::size_of_val(&mesh.indices[0]), 2); // for gl::UNSIGNED_SHORT
                     gl::DrawElements(mesh.topology, mesh.indices.len() as _, gl::UNSIGNED_SHORT, 0 as _);
                     gl::BindBuffer(gx::BufferTarget::ElementArray as _, 0);
                 }
@@ -516,9 +526,8 @@ impl System for GLSystem {
             target.begin(query);
         }
 
-        let scene = &mut g.scene;
-        self.pump_scene_draw_commands(scene);
-        self.render_scene(scene, d);
+        self.pump_scene_draw_commands(&mut g.scene);
+        self.render_scene(&mut g.scene, d);
 
         for target in self.pipeline_statistics_arb_queries.keys() {
             target.end();

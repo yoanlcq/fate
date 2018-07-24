@@ -13,6 +13,9 @@ pub use image::{
 
 use std::fs;
 use std::io;
+use std::mem;
+use std::ptr;
+use std::slice;
 use std::path::Path;
 use math::Extent2;
 
@@ -69,8 +72,18 @@ impl PixelFormat {
     pub fn channels(&self) -> &[ChannelInfo] { &self.channels[..self.semantic.nb_channels()] }
     pub fn bits(&self) -> u32 { self.channels().iter().map(|c| c.bits()).sum() }
 
-    fn new_unchecked(semantic: PixelSemantic, bits_per_pixel: u32, t: ChannelDataType) -> Self {
-        Self { semantic, channels: [ChannelInfo { data_type: Some(t), bits: bits_per_pixel / semantic.nb_channels() as u32 }; 4] }
+    fn new_unchecked(semantic: PixelSemantic, bits_per_channel: u32, t: ChannelDataType) -> Self {
+        let channel_info = ChannelInfo {
+            data_type: Some(t),
+            bits: bits_per_channel,
+        };
+        let mut channels = [channel_info; 4];
+        if semantic.nb_channels() < 4 {
+            for c in &mut channels[semantic.nb_channels() ..] {
+                *c = Default::default();
+            }
+        }
+        Self { semantic, channels }
     }
     fn from_colortype_and_uniform_channel_datatype(c: image::ColorType, t: ChannelDataType) -> Self {
         match c {
@@ -151,7 +164,7 @@ pub struct Metadata {
     pub size: Extent2<u32>,
 }
 
-pub fn format<R: io::BufRead + io::Seek>(mut r: R) -> Result<ImageFormat> {
+fn format<R: io::BufRead + io::Seek>(mut r: R) -> Result<ImageFormat> {
     // image::guess_format() actually only compares the start of the file to some pre-defined magic headers, for all formats!
     let mut magic = [0_u8; 16];
     let magic = {
@@ -165,21 +178,24 @@ pub fn format<R: io::BufRead + io::Seek>(mut r: R) -> Result<ImageFormat> {
 
 pub fn metadata<R: io::BufRead + io::Seek>(mut r: R) -> Result<Metadata> {
     let image_format = format(&mut r)?;
-    match image_format {
-        ImageFormat::PNG  => decoder_metadata(image_format, image::png::PNGDecoder::new(r)),
-        ImageFormat::JPEG => decoder_metadata(image_format, image::jpeg::JPEGDecoder::new(r)),
-        ImageFormat::GIF  => decoder_metadata(image_format, image::gif::Decoder::new(r)),
-        ImageFormat::WEBP => decoder_metadata(image_format, image::webp::WebpDecoder::new(r)),
-        ImageFormat::PNM  => decoder_metadata(image_format, image::pnm::PNMDecoder::new(r)?),
-        ImageFormat::TIFF => decoder_metadata(image_format, image::tiff::TIFFDecoder::new(r)?),
-        ImageFormat::TGA  => decoder_metadata(image_format, image::tga::TGADecoder::new(r)),
-        ImageFormat::BMP  => decoder_metadata(image_format, image::bmp::BMPDecoder::new(r)),
-        ImageFormat::ICO  => decoder_metadata(image_format, image::ico::ICODecoder::new(r)?),
-        ImageFormat::HDR  => decoder_metadata(image_format, image::hdr::HDRAdapter::new(r)?),
+    let start = r.seek(io::SeekFrom::Current(0)).map_err(Error::IoError)?;
+    let metadata = match image_format {
+        ImageFormat::PNG  => decoder_metadata(image_format, image::png::PNGDecoder::new(&mut r)),
+        ImageFormat::JPEG => decoder_metadata(image_format, image::jpeg::JPEGDecoder::new(&mut r)),
+        ImageFormat::GIF  => decoder_metadata(image_format, image::gif::Decoder::new(&mut r)),
+        ImageFormat::WEBP => decoder_metadata(image_format, image::webp::WebpDecoder::new(&mut r)),
+        ImageFormat::PNM  => decoder_metadata(image_format, image::pnm::PNMDecoder::new(&mut r)?),
+        ImageFormat::TIFF => decoder_metadata(image_format, image::tiff::TIFFDecoder::new(&mut r)?),
+        ImageFormat::TGA  => decoder_metadata(image_format, image::tga::TGADecoder::new(&mut r)),
+        ImageFormat::BMP  => decoder_metadata(image_format, image::bmp::BMPDecoder::new(&mut r)),
+        ImageFormat::ICO  => decoder_metadata(image_format, image::ico::ICODecoder::new(&mut r)?),
+        ImageFormat::HDR  => decoder_metadata(image_format, image::hdr::HDRAdapter::new(&mut r)?),
         ImageFormat::DXT  => Err(Error::UnsupportedError(format!("TODO: DXT loader needs to know width, height, and DXTVariant ahead of time"))),
         ImageFormat::PIC  => Err(Error::UnsupportedError(format!("TODO: use stb_image"))),
         ImageFormat::PSD  => Err(Error::UnsupportedError(format!("TODO: use stb_image"))),
-    }
+    };
+    r.seek(io::SeekFrom::Start(start)).map_err(Error::IoError)?;
+    metadata
 }
 
 fn decoder_metadata<T: image::ImageDecoder>(image_format: ImageFormat, mut decoder: T) -> Result<Metadata> {
@@ -273,8 +289,14 @@ pub fn read_with_format<R: io::BufRead + io::Seek>(r: R, format: ImageFormat) ->
 pub fn load<P: AsRef<Path>>(path: P) -> Result<(Metadata, AnyImage)> {
     read(io::BufReader::new(fs::File::open(path).map_err(Error::IoError)?))
 }
+pub fn load_metadata<P: AsRef<Path>>(path: P) -> Result<Metadata> {
+    metadata(io::BufReader::new(fs::File::open(path).map_err(Error::IoError)?))
+}
 pub fn load_from_memory(mem: Vec<u8>) -> Result<(Metadata, AnyImage)> {
     read(io::Cursor::new(mem))
+}
+pub fn load_metadata_from_memory(mem: &[u8]) -> Result<Metadata> {
+    metadata(io::Cursor::new(mem))
 }
 pub fn save<P: AsRef<Path>>(path: P, metadata: Metadata, pixels: &[u8]) -> Result<()> {
     write(fs::File::create(path).map_err(Error::IoError)?, metadata, pixels)
@@ -297,5 +319,65 @@ pub fn write<W: io::Write>(mut out: W, metadata: Metadata, pixels: &[u8]) -> Res
         ImageFormat::DXT  => Err(Error::UnsupportedError(format!("TODO: DXT encoder needs to know DXTVariant"))),
         ImageFormat::PIC  => Err(Error::UnsupportedError(format!("PIC encoding is not supported"))),
         ImageFormat::PSD  => Err(Error::UnsupportedError(format!("PSD encoding is not supported"))),
+    }
+}
+
+// Traits which assert that stride == width, ensuring it is correct
+// to get a 1D slice of pixels.
+
+// FIXME: That's all because Img<T> does not provide getters to the buffer. Pull Request....
+
+pub trait AsSlice<T> {
+    fn as_slice(&self) -> &[T];
+    fn as_ptr(&self) -> *const T { self.as_slice().as_ptr() }
+}
+
+pub trait AsMutSlice<T> {
+    fn as_mut_slice(&mut self) -> &mut [T];
+    fn as_mut_ptr(&mut self) -> *mut T { self.as_mut_slice().as_mut_ptr() }
+}
+
+impl<'a, Pixel: Copy> AsSlice<Pixel> for ImgRef<'a, Pixel> {
+    fn as_slice(&self) -> &[Pixel] {
+        assert_eq!(self.stride(), self.width());
+        unsafe {
+            let fake_owned = ptr::read(self);
+            let pixels = slice::from_raw_parts(&fake_owned[(0_usize, 0)] as *const _ as _, self.width() * self.height());
+            mem::forget(fake_owned);
+            pixels
+        }
+    }
+}
+impl<'a, Pixel: Copy> AsMutSlice<Pixel> for ImgRefMut<'a, Pixel> {
+    fn as_mut_slice(&mut self) -> &mut [Pixel] {
+        assert_eq!(self.stride(), self.width());
+        unsafe {
+            let mut fake_owned = ptr::read(self);
+            let pixels = slice::from_raw_parts_mut(&mut fake_owned[(0_usize, 0)] as *mut _ as _, self.width() * self.height());
+            mem::forget(fake_owned);
+            pixels
+        }
+    }
+}
+impl<Pixel: Copy> AsSlice<Pixel> for ImgVec<Pixel> {
+    fn as_slice(&self) -> &[Pixel] {
+        assert_eq!(self.stride(), self.width());
+        unsafe {
+            let fake_owned = ptr::read(self);
+            let pixels = slice::from_raw_parts(&fake_owned[(0_usize, 0)] as *const _ as _, self.width() * self.height());
+            mem::forget(fake_owned);
+            pixels
+        }
+    }
+}
+impl<Pixel: Copy> AsMutSlice<Pixel> for ImgVec<Pixel> {
+    fn as_mut_slice(&mut self) -> &mut [Pixel] {
+        assert_eq!(self.stride(), self.width());
+        unsafe {
+            let mut fake_owned = ptr::read(self);
+            let pixels = slice::from_raw_parts_mut(&mut fake_owned[(0_usize, 0)] as *mut _ as _, self.width() * self.height());
+            mem::forget(fake_owned);
+            pixels
+        }
     }
 }

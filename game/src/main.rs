@@ -11,8 +11,6 @@ extern crate backtrace;
 
 // TODO list:
 // - More stock textures (e.g black, white, magenta (debug), checker ....)
-// - Load textures (PNG, JPG, compressed...)
-// - En fait je veux une vraie skybox
 // - ECS.
 //   - Les meshs qui veulent tourner doivent opter pour un component
 // - Text
