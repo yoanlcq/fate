@@ -34,6 +34,12 @@ pub struct ChannelInfo {
 impl ChannelInfo {
     pub fn bits(&self) -> u32 { self.bits }
     pub fn data_type(&self) -> Option<ChannelDataType> { self.data_type }
+    pub fn new(bits: u32, data_type: ChannelDataType) -> Self {
+        Self {
+            bits,
+            data_type: Some(data_type),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
@@ -72,6 +78,16 @@ impl PixelFormat {
     pub fn channels(&self) -> &[ChannelInfo] { &self.channels[..self.semantic.nb_channels()] }
     pub fn bits(&self) -> u32 { self.channels().iter().map(|c| c.bits()).sum() }
 
+    pub fn new(semantic: PixelSemantic, in_channels: &[ChannelInfo]) -> Self {
+        let mut channels = [ChannelInfo::default(); 4];
+        for (channel, in_channel) in channels.iter_mut().zip(in_channels.iter()) {
+            *channel = *in_channel;
+        }
+        Self {
+            semantic,
+            channels,
+        }
+    }
     fn new_unchecked(semantic: PixelSemantic, bits_per_channel: u32, t: ChannelDataType) -> Self {
         let channel_info = ChannelInfo {
             data_type: Some(t),
@@ -301,6 +317,18 @@ pub fn load_metadata_from_memory(mem: &[u8]) -> Result<Metadata> {
 pub fn save<P: AsRef<Path>>(path: P, metadata: Metadata, pixels: &[u8]) -> Result<()> {
     write(fs::File::create(path).map_err(Error::IoError)?, metadata, pixels)
 }
+pub fn save_gray_u8<P: AsRef<Path>>(path: P, image_format: ImageFormat, img: ImgRef<u8>) -> Result<()> {
+    let metadata = Metadata {
+        image_format,
+        size: Extent2::new(img.width(), img.height()).map(|x| x as _),
+        pixel_format: PixelFormat::new(
+            PixelSemantic::Gray, 
+            &[ChannelInfo::new(8, ChannelDataType::UnsignedBits)]
+        ),
+    };
+    save(path, metadata, img.as_slice())
+}
+
 
 pub fn write<W: io::Write>(mut out: W, metadata: Metadata, pixels: &[u8]) -> Result<()> {
     let Extent2 { w, h } = metadata.size;

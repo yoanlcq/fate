@@ -29,6 +29,12 @@ macro_rules! ft_error_codes {
                 }
             }
         }
+        impl ::std::fmt::Display for Error {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                write!(f, "{:?}", *self)
+            }
+        }
+        impl ::std::error::Error for Error {}
     };
 }
 ft_error_codes!{
@@ -237,6 +243,12 @@ impl Font {
     fn ft_size_metrics(&self) -> &FT_Size_Metrics {
         unsafe { &(*self.ft_face().size).metrics }
     }
+    pub fn set_height_px(&mut self, h: u32) -> Result<(), Error> {
+        self.set_size_px(Extent2 { w: 0, h })
+    }
+    pub fn set_height_pt(&mut self, h: f64, dpi: u32) -> Result<(), Error> {
+        self.set_size_pt(Extent2 { w: 0., h }, Vec2::broadcast(dpi))
+    }
     pub fn set_size_px(&mut self, size: Extent2<u32>) -> Result<(), Error> {
         ft_result(unsafe { FT_Set_Pixel_Sizes(self.ft_face, size.w, size.h) })
     }
@@ -333,7 +345,11 @@ impl<'a> GlyphLoader<'a> {
             let buf = unsafe {
                 slice::from_raw_parts(bmp.buffer, bmp.rows as usize * bmp.pitch as usize)
             };
-            Some(ImgVec::new_stride(buf.to_vec(), bmp.width as _, bmp.rows as _, bmp.pitch as _))
+            if bmp.rows == 0 {
+                None
+            } else {
+                Some(ImgVec::new_stride(buf.to_vec(), bmp.width as _, bmp.rows as _, bmp.pitch as _))
+            }
         };
 
         Ok(Glyph {

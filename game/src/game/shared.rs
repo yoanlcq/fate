@@ -37,13 +37,18 @@ impl SharedGame {
     }
 }
 
-
 use std::env;
 use std::path::{PathBuf, Path};
+use fate::font::{Font, FontLoader};
+use fate::img;
+use atlas::Atlas;
 
 #[derive(Debug)]
 pub struct Resources {
+    font_loader: FontLoader,
     data_path: PathBuf,
+    basis33: Font,
+    basis33_atlas: Atlas,
 }
 
 impl Resources {
@@ -63,11 +68,28 @@ impl Resources {
             }
         }?;
         trace!("Found data path at `{}`", data_path.display());
+        let font_loader = FontLoader::new().map_err(|e| format!("Could not create FontLoader: {}", e))?;
+        let mut basis33 = font_loader.load_font(data_path.join(PathBuf::from("fonts/basis33/basis33.ttf"))).map_err(|e| format!("Could not load basis33 font: {}", e))?;
+        basis33.set_height_px(16).unwrap();
+        let basis33_atlas = Atlas::load(&basis33, &Atlas::all_supported_chars(), 128);
+
+        if false { // Save the atlas so we can check it's fine?
+            let path = data_path.join(PathBuf::from("fonts/basis33/atlas.png"));
+            img::save_gray_u8(&path, img::ImageFormat::PNG, basis33_atlas.atlas.as_ref()).unwrap();
+            info!("Saved `{}`", path.display());
+        }
+
         Ok(Self {
             data_path,
+            font_loader,
+            basis33,
+            basis33_atlas,
         })
     }
     pub fn data_path(&self) -> &Path {
         &self.data_path
+    }
+    pub fn font_loader(&self) -> &FontLoader {
+        &self.font_loader
     }
 }
