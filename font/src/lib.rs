@@ -9,10 +9,14 @@ use std::path::Path;
 use std::mem;
 use std::ptr;
 use std::slice;
+use std::char;
 use libc::{c_void, c_char, c_short, c_int, c_long};
 use math::{Vec2, Extent2, Mat2, Aabr};
 use img::{ImgVec, ImgRef};
 use freetype::*;
+
+pub mod atlas;
+pub use atlas::*;
 
 macro_rules! ft_error_codes {
     ($($variant:ident)+) => {
@@ -222,7 +226,7 @@ impl FontLoader {
 pub struct Font {
     ft: Rc<FreeType>,
     ft_face: FT_Face,
-    mem: Vec<u8>,
+    mem: Vec<u8>, // We do have to keep the memory, as stated by FT_New_Memory_Face.
 }
 
 impl Drop for Font {
@@ -302,6 +306,58 @@ impl Font {
             pedantic: false,
             render_u8_monochrome_bitmap: false,
         }
+    }
+    /// Returns an iterator over all characters supported by this font.
+    /// The `charcode` values are u64, but are technically always supposed to be
+    /// valid `char` values.
+    /// One thing you could do is e.g `font.chars().filter_map(|s| char::from_u32(s.charcode as _))`.
+    pub fn chars<'a>(&'a self) -> Chars<'a> {
+        Chars::new(self)
+    }
+    pub fn build_atlas<I: IntoIterator<Item=char>>(&self, tex_side: usize, chars: I) -> Atlas {
+        Atlas::with_font_chars(tex_side, self, chars)
+    }
+    pub fn build_exhaustive_atlas(&self, tex_side: usize) -> Atlas {
+        self.build_atlas(tex_side, self.chars().filter_map(|c| char::from_u32(c.charcode as _)))
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct CharEntry {
+    pub charcode: u64,
+    pub glyph_index: u32,
+}
+
+#[derive(Debug)]
+pub struct Chars<'a> {
+    font: &'a Font,
+    cur: CharEntry,
+}
+
+impl<'a> Chars<'a> {
+    fn new(font: &'a Font) -> Self {
+        let mut glyph_index = 0;
+        let charcode = unsafe { FT_Get_First_Char(font.ft_face, &mut glyph_index) };
+        Self {
+            font,
+            cur: CharEntry {
+                charcode,
+                glyph_index,
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for Chars<'a> {
+    type Item = CharEntry;
+    fn next(&mut self) -> Option<CharEntry> {
+        if self.cur.glyph_index == 0 {
+            return None;
+        }
+
+        let mut glyph_index = 0;
+        let charcode = unsafe { FT_Get_Next_Char(self.font.ft_face, self.cur.charcode, &mut glyph_index) };
+        Some(mem::replace(&mut self.cur, CharEntry { glyph_index, charcode }))
     }
 }
 

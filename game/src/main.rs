@@ -35,7 +35,7 @@ pub mod system;
 pub mod gamegl;
 pub mod scene;
 pub mod input;
-pub mod atlas;
+pub mod resources;
 
 fn main() {
     early::setup_log();
