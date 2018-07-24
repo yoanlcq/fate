@@ -10,10 +10,9 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - More stock textures (e.g black, white, magenta (debug), checker ....)
+// - Text
 // - ECS.
 //   - Les meshs qui veulent tourner doivent opter pour un component
-// - Text
 // - Materials & pipelines
 //   - Basic lighting
 //   - PBR lighting
@@ -36,6 +35,7 @@ pub mod system;
 pub mod gamegl;
 pub mod scene;
 pub mod input;
+pub mod atlas;
 
 fn main() {
     early::setup_log();
