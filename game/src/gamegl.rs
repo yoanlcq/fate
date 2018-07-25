@@ -1,10 +1,12 @@
 use std::mem;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Aabr};
 use fate::gx::{self, Object, gl, GLSLType};
 use fate::img::{self, AsSlice};
+use fate::font::Atlas;
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
+use game::SharedGame;
 use system::*;
 
 static mut NB_ERRORS: usize = 0;
@@ -172,6 +174,7 @@ pub struct GLSystem {
     color_program: gx::ProgramEx,
     skybox_program: gx::ProgramEx,
 	cube_map_tabs: [gx::Texture; 2],
+    basis33_atlas_tex: gx::Texture,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -284,8 +287,113 @@ fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
     }
 }
 
+fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
+    let levels = 1;
+    let internal_format = gl::R8;
+    let (w, h) = (atlas.img.width(), atlas.img.height());
+    assert!(w.is_power_of_two());
+    assert!(h.is_power_of_two());
+    assert_eq!(w, h);
+    unsafe {
+        let tex = check_gl!(gx::Texture::new());
+        check_gl!(gl::BindTexture(gl::TEXTURE_2D, tex.gl_id()));
+        check_gl!(gl::TexStorage2D(gl::TEXTURE_2D, levels, internal_format, w as _, h as _));
+        {
+            let format = gl::RED;
+            let type_ = gl::UNSIGNED_BYTE;
+            let level = 0;
+            check_gl!(gl::TexSubImage2D(gl::TEXTURE_2D, level, 0, 0, w as _, h as _, format, type_, atlas.img.as_ptr() as _));
+            info!("GL: Created font atlas for basis33.");
+        }
+        check_gl!(gl::BindTexture(gl::TEXTURE_2D, 0));
+        tex
+    }
+}
+
+ pub fn draw_text_gl(atlas: &Atlas, string: &str) {
+    let atlas_size = atlas.size().map(|x| x as f32);
+    let mut cur = Vec2::<i16>::zero();
+    let mut i = 0;
+
+    let mut vertices = vec![];
+    let mut indices = vec![];
+
+    for c in string.chars() {
+        match c {
+            '\n' => {
+                cur.x = 0;
+                cur.y += font_height as i16;
+                continue;
+            },
+            ' ' => {
+                cur += atlas.glyphs[&' '].advance_px;
+                continue;
+            },
+            '\t' => {
+                cur += atlas.glyphs[&' '].advance_px * 4;
+                continue;
+            },
+            c if c.is_ascii_control() || c.is_ascii_whitespace() => {
+                continue;
+            },
+            _ => (),
+        };
+        let c = if atlas.glyphs.contains_key(&c) { c } else { '?' };
+        let glyph = &atlas.glyphs[&c];
+        let mut texcoords = glyph.bounds_px.into_rect().map(
+            |p| p as f32,
+            |e| e as f32
+        );
+        texcoords.x /= atlas_size.w;
+        texcoords.y /= atlas_size.h;
+        texcoords.w /= atlas_size.w;
+        texcoords.h /= atlas_size.h;
+
+        let offset = glyph.bearing_px.map(|x| x as f32) / atlas_size;
+        let mut world_cur = cur.map(|x| x as f32) / atlas_size;
+        world_cur.y = -world_cur.y;
+        world_cur.x += offset.x;
+        world_cur.y -= texcoords.h - offset.y;
+
+        struct Vertex {
+            position: Vec2<f32>,
+            texcoords: Vec2<f32>,
+        }
+
+        let bottom_left = Vertex {
+            position: world_cur,
+            texcoords: texcoords.position() + Vec2::unit_y() * texcoords.h,
+        };
+        let bottom_right = Vertex {
+            position: world_cur + Vec2::unit_x() * texcoords.w,
+            texcoords: texcoords.position() + texcoords.extent(),
+        };
+        let top_left = Vertex {
+            position: world_cur + Vec2::unit_y() * texcoords.h,
+            texcoords: texcoords.position(),
+        };
+        let top_right = Vertex {
+            position: world_cur + texcoords.extent(),
+            texcoords: texcoords.position() + Vec2::unit_x() * texcoords.w,
+        };
+        vertices.push(bottom_left);
+        vertices.push(bottom_right);
+        vertices.push(top_left);
+        vertices.push(top_right);
+        indices.push(i*4 + 0);
+        indices.push(i*4 + 1);
+        indices.push(i*4 + 2);
+        indices.push(i*4 + 3);
+        indices.push(i*4 + 2);
+        indices.push(i*4 + 1);
+
+        cur += glyph.advance_px;
+        i += 1;
+    }
+}
+
 impl GLSystem {
-    pub fn new(viewport_size: Extent2<u32>, data_path: &Path) -> Self {
+    pub fn new(viewport_size: Extent2<u32>, g: &SharedGame) -> Self {
         let pipeline_statistics_arb_targets = [
             gx::QueryTarget::VerticesSubmittedARB              ,
             gx::QueryTarget::PrimitivesSubmittedARB            ,
@@ -310,9 +418,10 @@ impl GLSystem {
         };
         Self {
             viewport_size,
+            basis33_atlas_tex: create_gl_font_atlas(g.res.basis33_atlas()),
             color_program:  unwrap_or_display_error(new_gl_color_program()),
             skybox_program: unwrap_or_display_error(new_gl_skybox_program  ()),
-            cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(data_path)],
+            cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),

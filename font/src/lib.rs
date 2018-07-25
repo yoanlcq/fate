@@ -341,7 +341,7 @@ impl<'a> Chars<'a> {
         Self {
             font,
             cur: CharEntry {
-                charcode,
+                charcode: charcode as _,
                 glyph_index,
             }
         }
@@ -356,8 +356,8 @@ impl<'a> Iterator for Chars<'a> {
         }
 
         let mut glyph_index = 0;
-        let charcode = unsafe { FT_Get_Next_Char(self.font.ft_face, self.cur.charcode, &mut glyph_index) };
-        Some(mem::replace(&mut self.cur, CharEntry { glyph_index, charcode }))
+        let charcode = unsafe { FT_Get_Next_Char(self.font.ft_face, self.cur.charcode as _, &mut glyph_index) };
+        Some(mem::replace(&mut self.cur, CharEntry { glyph_index, charcode: charcode as _ }))
     }
 }
 

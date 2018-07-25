@@ -54,7 +54,7 @@ impl Game {
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
             Box::new(SceneLogicSystem::new()),
-            Box::new(GLSystem::new(canvas_size, shared.res.data_path())),
+            Box::new(GLSystem::new(canvas_size, &shared)),
             Box::new(SceneCommandClearerSystem::new()),
         ];
         let fps_manager = FpsManager {

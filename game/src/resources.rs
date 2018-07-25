@@ -17,11 +17,9 @@ use fate::img;
 //     - le monde du loading screen
 //     - Un monde par "scène"; on est en 0,0 et les objets sont placés relativement à ça
 //     - Au cours de transitions, on blende entre le monde de la scène et le monde du loading screen.
-//   - Monde = Grille 3D sparse
-//     - cas simple: 1x1x1
-//     - cas complexe : 256x256x256
-//     - Chaque cellule contient un monde.
-//       - Les mondes 1x1x1 sont donc des "feuilles" et contiennent N références de ressources
+//   - Monde
+//     - Soit une grille 3D sparse XxYxZ de références de mondes;
+//     - Soit une liste de références de ressources;
 // - Comment identifier les références de ressources ?
 //   - De base les fichiers peuvent être complètement bougés et changés "en notre absence". Il faut pas que ce soit chiant.
 
@@ -73,5 +71,11 @@ impl Resources {
     }
     pub fn font_loader(&self) -> &FontLoader {
         &self.font_loader
+    }
+    pub fn basis33(&self) -> &Font {
+        &self.basis33
+    }
+    pub fn basis33_atlas(&self) -> &Atlas {
+        &self.basis33_atlas
     }
 }

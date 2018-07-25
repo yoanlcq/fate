@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use img::ImgVec;
-use math::{Vec2, Aabr};
+use math::{Vec2, Aabr, Extent2};
 use super::Font;
 
 // Greyscale mono
@@ -14,9 +14,14 @@ pub struct Atlas {
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct AtlasGlyphInfo {
-    pub bounds: Aabr<u16>,
-    pub offset: Vec2<i16>,
-    pub advance: Vec2<i16>,
+    // The glyph's bounding box. `min` is upper-left. `max` is lower-right.
+    pub bounds_px: Aabr<u16>,
+    // Offset to use when drawing the glyph.
+    // X is the distance from the caret to the rendered glyph's left.
+    // Y is the distance from the rendered glyph's top to the baseline.
+    pub bearing_px: Vec2<i16>,
+    // How far to move the cursor for the next character.
+    pub advance_px: Vec2<i16>,
 }
 
 impl Atlas {
@@ -28,6 +33,9 @@ impl Atlas {
             pen: Vec2::zero(),
             biggest_height_in_line: 0,
         }
+    }
+    pub fn size(&self) -> Extent2<u32> {
+        Extent2::new(self.img.width() as _, self.img.height() as _)
     }
     pub fn with_font_chars<I: IntoIterator<Item=char>>(tex_side: usize, font: &Font, chars: I) -> Self {
         let mut me = Self::new(tex_side);
@@ -67,12 +75,12 @@ impl Atlas {
         }
 
         let gi = AtlasGlyphInfo {
-            bounds: Aabr {
+            bounds_px: Aabr {
                 min: self.pen.map(|x| x as _),
                 max: (self.pen + Vec2::new(bmp_w as _, bmp_h as _)).map(|x| x as _),
             },
-            offset: glyph.bitmap_bearing().map(|x| x as _),
-            advance: glyph.advance_px().map(|x| x as _),
+            bearing_px: glyph.bitmap_bearing().map(|x| x as _),
+            advance_px: glyph.advance_px().map(|x| x as _),
         };
         let old = self.glyphs.insert(c, gi);
         assert!(old.is_none());
