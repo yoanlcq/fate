@@ -3,6 +3,28 @@ use std::path::{PathBuf, Path};
 use fate::font::{Font, FontLoader, Atlas};
 use fate::img;
 
+// Pipeline:
+// - Définition de "packs"; fichiers binaires comportant un ensemble cohérent de *références de ressources* pour une partie large d'un monde
+// - Les ressources sont reference-counted pour n'être chargées qu'une fois et gardées tant qu'il y en a besoin
+// - Plusieurs "mondes":
+//   - Monde du GUI "debug": Besoin des atlas nécéessaires
+//   - Monde du GUI "in-game": Idem
+//   - CJ :
+//     - le monde tout court;
+//     - le monde de la "map";
+//     - Un nombre de mondes parallèles. De 1 à N mondes peuvent être rendus simultanément.
+//   - Grisui :
+//     - le monde du loading screen
+//     - Un monde par "scène"; on est en 0,0 et les objets sont placés relativement à ça
+//     - Au cours de transitions, on blende entre le monde de la scène et le monde du loading screen.
+//   - Monde = Grille 3D sparse
+//     - cas simple: 1x1x1
+//     - cas complexe : 256x256x256
+//     - Chaque cellule contient un monde.
+//       - Les mondes 1x1x1 sont donc des "feuilles" et contiennent N références de ressources
+// - Comment identifier les références de ressources ?
+//   - De base les fichiers peuvent être complètement bougés et changés "en notre absence". Il faut pas que ce soit chiant.
+
 #[derive(Debug)]
 pub struct Resources {
     font_loader: FontLoader,
