@@ -1,5 +1,5 @@
 use std::collections::{HashMap, VecDeque};
-use fate::math::{Vec3, Vec4, Rgba, Transform, Quaternion, Mat4, FrustumPlanes};
+use fate::math::{Vec3, Vec4, Rgba, Transform, Quaternion, Mat4, FrustumPlanes, Rect};
 use fate::gx::gl::{self, types::GLenum};
 use system::*;
 
@@ -275,6 +275,43 @@ impl Camera {
         let zoom = Mat4::<f32>::scaling_3d(self.scale.recip());
         let look = Mat4::look_at(self.position, self.target, Vec3::up());
         zoom * look
+    }
+    pub fn viewport(&self) -> Rect<f32, f32> {
+        Rect {
+            x: 0., // FIXME: Did you just assume the top-left corner???
+            y: 0.,
+            w: self.viewport_size.w as _,
+            h: self.viewport_size.h as _,
+        }
+    }
+    pub fn viewport_to_world(&self, p: Vec2<i32>, z: f32) -> Vec3<f32> {
+        let y = self.viewport_size.h as i32 - p.y;
+        let v = Vec3::new(p.x as f32 + 0.5, y as f32 + 0.5, 0.);
+        let mut w = Mat4::viewport_to_world_no(v, self.view_matrix(), self.proj_matrix(), self.viewport());
+        w.z = z;
+        w
+    }
+    pub fn world_to_viewport(&self, o: Vec3<f32>) -> (Vec2<i32>, f32) {
+        let v = Mat4::world_to_viewport_no(o, self.view_matrix(), self.proj_matrix(), self.viewport());
+        let (mut z, mut v) = (v.z, Vec2::from(v.map(|x| x.round() as i32)));
+        if z.abs() <= 0.0001 {
+            z = 0.;
+        }
+        v.y = self.viewport_size.h as i32 - v.y;
+        (v, z)
+    }
+    pub fn viewport_to_ugly_ndc(&self, mut p: Vec2<i32>) -> Vec3<f32> {
+        let vp_size = self.viewport_size.map(|x| x as f32);
+        p.y = self.viewport_size.h as i32 - p.y;
+        let t = p.map(|x| x as f32) / vp_size;
+        let t = (t - 0.5) * 2.;
+        t.into()
+    }
+    pub fn viewport_to_pretty_ndc(&self, p: Vec2<i32>) -> Vec3<f32> {
+        let FrustumPlanes { left, right, top, bottom, .. } = self.ortho_frustum_planes();
+        debug_assert_eq!(left, -right);
+        debug_assert_eq!(bottom, -top);
+        self.viewport_to_ugly_ndc(p) * Vec3::new(right, top, 0.)
     }
 }
 

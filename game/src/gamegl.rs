@@ -39,6 +39,13 @@ pub enum VAttrib {
     ColorRgbau8 = 4,
 }
 
+#[repr(u32)]
+pub enum TextVAttrib {
+    PositionVec2f32 = 0,
+    UvVec2f32 = 1,
+}
+
+
 static VS_SRC: &'static [u8] = b"
 #version 450 core
 
@@ -175,6 +182,7 @@ pub struct GLSystem {
     skybox_program: gx::ProgramEx,
 	cube_map_tabs: [gx::Texture; 2],
     basis33_atlas_tex: gx::Texture,
+    text_mesh: TextMesh,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -287,6 +295,14 @@ fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
     }
 }
 
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[repr(C)]
+struct TextVertex {
+    pub position: Vec2<f32>,
+    pub texcoords: Vec2<f32>,
+}
+
+
 fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
     let levels = 1;
     let internal_format = gl::R8;
@@ -310,85 +326,145 @@ fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
     }
 }
 
- pub fn draw_text_gl(atlas: &Atlas, font_height_px: u32, string: &str) {
-    let atlas_size = atlas.size().map(|x| x as f32);
-    let mut cur = Vec2::<i16>::zero();
-    let mut i = 0;
 
-    let mut vertices = vec![];
-    let mut indices = vec![];
+#[derive(Debug)]
+struct TextMesh {
+    vao: gx::VertexArray,
+    vbo: gx::Buffer,
+    ibo: gx::Buffer,
+    nb_quads: usize,
+    max_quads: usize,
+}
 
-    for c in string.chars() {
-        match c {
-            '\n' => {
-                cur.x = 0;
-                cur.y += font_height_px as i16;
-                continue;
-            },
-            ' ' => {
-                cur += atlas.glyphs[&' '].advance_px;
-                continue;
-            },
-            '\t' => {
-                cur += atlas.glyphs[&' '].advance_px * 4;
-                continue;
-            },
-            c if c.is_ascii_control() || c.is_ascii_whitespace() => {
-                continue;
-            },
-            _ => (),
-        };
-        let c = if atlas.glyphs.contains_key(&c) { c } else { assert!(atlas.glyphs.contains_key(&'?')); '?' };
-        let glyph = &atlas.glyphs[&c];
-        let mut texcoords = glyph.bounds_px.into_rect().map(
-            |p| p as f32,
-            |e| e as f32
-        );
-        texcoords.x /= atlas_size.w;
-        texcoords.y /= atlas_size.h;
-        texcoords.w /= atlas_size.w;
-        texcoords.h /= atlas_size.h;
-
-        let offset = glyph.bearing_px.map(|x| x as f32) / atlas_size;
-        let mut world_cur = cur.map(|x| x as f32) / atlas_size;
-        world_cur.y = -world_cur.y;
-        world_cur.x += offset.x;
-        world_cur.y -= texcoords.h - offset.y;
-
-        struct Vertex {
-            position: Vec2<f32>,
-            texcoords: Vec2<f32>,
+impl TextMesh {
+    pub fn with_capacity(max_quads: usize) -> Self {
+        fn new_buffer_storage(size: usize) -> gx::Buffer {
+            let buf = gx::Buffer::new();
+            gx::BufferTarget::CopyRead.bind_buffer(buf.gl_id());
+            gx::BufferTarget::CopyRead.set_uninitialized_buffer_storage(size, gx::BufferFlags::DYNAMIC_STORAGE);
+            gx::BufferTarget::CopyRead.unbind_buffer();
+            buf
         }
 
-        let bottom_left = Vertex {
-            position: world_cur,
-            texcoords: texcoords.position() + Vec2::unit_y() * texcoords.h,
-        };
-        let bottom_right = Vertex {
-            position: world_cur + Vec2::unit_x() * texcoords.w,
-            texcoords: texcoords.position() + texcoords.extent(),
-        };
-        let top_left = Vertex {
-            position: world_cur + Vec2::unit_y() * texcoords.h,
-            texcoords: texcoords.position(),
-        };
-        let top_right = Vertex {
-            position: world_cur + texcoords.extent(),
-            texcoords: texcoords.position() + Vec2::unit_x() * texcoords.w,
-        };
-        vertices.push(bottom_left);
-        vertices.push(bottom_right);
-        vertices.push(top_left);
-        vertices.push(top_right);
-        indices.push(i*4 + 0);
-        indices.push(i*4 + 1);
-        indices.push(i*4 + 2);
-        indices.push(i*4 + 3);
-        indices.push(i*4 + 2);
-        indices.push(i*4 + 1);
+        let vbo = new_buffer_storage(max_quads * 4 * mem::size_of::<TextVertex>());
+        let ibo = new_buffer_storage(max_quads * 6 * mem::size_of::<u16>());
 
-        cur += glyph.advance_px;
-        i += 1;
+        let vao = gx::VertexArray::new();
+        unsafe {
+            gl::BindVertexArray(vao.gl_id());
+            gx::BufferTarget::Array.bind_buffer(vbo.gl_id());
+            gl::EnableVertexAttribArray(TextVAttrib::PositionVec2f32 as _);
+            gl::EnableVertexAttribArray(TextVAttrib::UvVec2f32 as _);
+            gl::VertexAttribPointer(TextVAttrib::PositionVec2f32 as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, 0 as _);
+            gl::VertexAttribPointer(TextVAttrib::UvVec2f32 as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, (2*4) as _);
+            gx::BufferTarget::Array.unbind_buffer();
+            gl::BindVertexArray(0);
+        }
+
+        Self {
+            vbo, ibo, vao,
+            nb_quads: 0,
+            max_quads,
+        }
+    }
+    pub fn draw(&self) {
+        unsafe {
+            gl::BindVertexArray(self.vao.gl_id());
+            gx::BufferTarget::ElementArray.bind_buffer(self.ibo.gl_id());
+            gl::DrawElements(gl::TRIANGLES, (self.nb_quads * 6) as _, gl::UNSIGNED_SHORT, ::std::ptr::null_mut());
+            gx::BufferTarget::ElementArray.unbind_buffer();
+            gl::BindVertexArray(0);
+        }
+    }
+    pub fn set_text(&mut self, atlas: &Atlas, font_height_px: u32, string: &str) {
+        let atlas_size = atlas.size().map(|x| x as f32);
+        let mut cur = Vec2::<i16>::zero();
+        let mut i = 0;
+
+        let mut vertices = Vec::<TextVertex>::new();
+        let mut indices = Vec::<u16>::new();
+
+        self.nb_quads = 0;
+
+        for c in string.chars() {
+            match c {
+                '\n' => {
+                    cur.x = 0;
+                    cur.y += font_height_px as i16;
+                    continue;
+                },
+                ' ' => {
+                    cur += atlas.glyphs[&' '].advance_px;
+                    continue;
+                },
+                '\t' => {
+                    cur += atlas.glyphs[&' '].advance_px * 4;
+                    continue;
+                },
+                c if c.is_ascii_control() || c.is_ascii_whitespace() => {
+                    continue;
+                },
+                _ => (),
+            };
+            let c = if atlas.glyphs.contains_key(&c) { c } else { assert!(atlas.glyphs.contains_key(&'?')); '?' };
+            let glyph = &atlas.glyphs[&c];
+            let mut texcoords = glyph.bounds_px.into_rect().map(
+                |p| p as f32,
+                |e| e as f32
+            );
+            texcoords.x /= atlas_size.w;
+            texcoords.y /= atlas_size.h;
+            texcoords.w /= atlas_size.w;
+            texcoords.h /= atlas_size.h;
+
+            let offset = glyph.bearing_px.map(|x| x as f32) / atlas_size;
+            let mut world_cur = cur.map(|x| x as f32) / atlas_size;
+            world_cur.y = -world_cur.y;
+            world_cur.x += offset.x;
+            world_cur.y -= texcoords.h - offset.y;
+
+            let bottom_left = TextVertex {
+                position: world_cur,
+                texcoords: texcoords.position() + Vec2::unit_y() * texcoords.h,
+            };
+            let bottom_right = TextVertex {
+                position: world_cur + Vec2::unit_x() * texcoords.w,
+                texcoords: texcoords.position() + texcoords.extent(),
+            };
+            let top_left = TextVertex {
+                position: world_cur + Vec2::unit_y() * texcoords.h,
+                texcoords: texcoords.position(),
+            };
+            let top_right = TextVertex {
+                position: world_cur + texcoords.extent(),
+                texcoords: texcoords.position() + Vec2::unit_x() * texcoords.w,
+            };
+
+            assert!(self.nb_quads < self.max_quads);
+            self.nb_quads += 1;
+
+            vertices.push(bottom_left);
+            vertices.push(bottom_right);
+            vertices.push(top_left);
+            vertices.push(top_right);
+            indices.push(i*4 + 0);
+            indices.push(i*4 + 1);
+            indices.push(i*4 + 2);
+            indices.push(i*4 + 3);
+            indices.push(i*4 + 2);
+            indices.push(i*4 + 1);
+
+            cur += glyph.advance_px;
+            i += 1;
+        }
+
+        gx::BufferTarget::Array.bind_buffer(self.vbo.gl_id());
+        gx::BufferTarget::Array.set_buffer_subdata::<TextVertex>(&vertices, 0);
+        gx::BufferTarget::Array.unbind_buffer();
+
+        gx::BufferTarget::ElementArray.bind_buffer(self.ibo.gl_id());
+        gx::BufferTarget::ElementArray.set_buffer_subdata::<u16>(&indices, 0);
+        gx::BufferTarget::ElementArray.unbind_buffer();
     }
 }
 
@@ -422,6 +498,7 @@ impl GLSystem {
             color_program:  unwrap_or_display_error(new_gl_color_program()),
             skybox_program: unwrap_or_display_error(new_gl_skybox_program  ()),
             cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
+            text_mesh: TextMesh::with_capacity(512),
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
@@ -439,7 +516,30 @@ impl GLSystem {
             }
             self.render_scene_with_camera(scene, draw, camera);
             self.render_skybox(scene, draw, camera);
+            self.render_text(draw);
         }
+    }
+
+    fn render_text(&mut self, _draw: &Draw) {
+        // TODO:
+        // - Set up blending
+        // - Set up text program
+        // - Set up uniforms
+        /*
+        gl::UseProgram(g.text_gl_program.program().gl_id());
+        let command_text_position = Vec2::new(0, g.fonts.fonts[&FontID::Debug].height as i32);
+        let mvp = {
+            let Extent2 { w, h } = g.fonts.fonts[&FontID::Debug].texture_size.map(|x| x as f32) * 2. / self.camera.viewport_size().map(|x| x as f32);
+            let t = self.camera.viewport_to_ugly_ndc(command_text_position);
+            Mat4::<f32>::translation_3d(t) * Mat4::scaling_3d(Vec3::new(w, h, 1.))
+        };
+        g.text_gl_program.set_uniform_mvp(&mvp);
+        g.text_gl_program.set_uniform_font_atlas_via_font_id(FontID::Debug);
+        g.text_gl_program.set_uniform_color(Rgba::white());
+        */
+
+        unimplemented!();
+        self.text_mesh.draw();
     }
 
     fn render_skybox(&mut self, scene: &Scene, _draw: &Draw, camera: &Camera) {

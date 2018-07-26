@@ -123,9 +123,9 @@ impl BufferFlags {
 }
 
 impl BufferTarget {
-    pub fn bind_buffer(&self, buf: &Buffer) {
+    pub fn bind_buffer(&self, buf: GLuint) {
         unsafe {
-            gl::BindBuffer(*self as _, buf.gl_id());
+            gl::BindBuffer(*self as _, buf);
         }
     }
     pub fn unbind_buffer(&self) {
@@ -244,6 +244,7 @@ impl VertexIndex for u32 { const GL_TYPE: GLenum = gl::UNSIGNED_INT; }
 // Proposals:
 // - OneshotBuffer (no DYNAMIC_STORAGE);
 // - FlexBuffer (BufferData, Usage);
+// - FixedSizeBuffer (BufferStorage)
 // - AzdoBuffer (Write | Persistent | Coherent + FenceSwapChain);
 // > N.B: NOT paired with a CPU buffer. The CPU data may come from anywhere.
 //   Also, splitting them is important to make sure we visually separate *building* the data on
