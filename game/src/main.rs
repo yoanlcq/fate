@@ -10,19 +10,30 @@ extern crate env_logger;
 extern crate backtrace;
 
 // TODO list:
-// - Text
+// - Debug (immediate) draw (commands pushed to Scene);
+//   - PushMatrix/PopMatrix;
+//   - 2D:
+//     - Text;
+//     - Gradiant quads;
+//   - 3D:
+//     - Lines, lines strips;
+//     - Triangles;
+// - Async load:
+//   - Resources;
 // - ECS.
 //   - Les meshs qui veulent tourner doivent opter pour un component
 // - Materials & pipelines
 //   - Basic lighting
 //   - PBR lighting
 // - Debug draw (using SceneCmds. Draw texture, draw text, draw debug mesh, draw wireframe, draw normals.....)
-// - Hot async reloading of:
+// - Hot reloading:
 //   - Shaders
 //   - Resources
 // - GUI
 // - Load meshes (obj and GLTF)
 // - Instanced rendering
+// - Sound (OpenAL?)
+// - WebGL port (porting to OpenGL ES 2, gonna hurt)
 
 pub mod early;
 pub mod platform;

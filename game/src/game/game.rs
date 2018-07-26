@@ -125,7 +125,8 @@ impl MainSystem for Game {
         shared.frame_time_manager.end_main_loop_iteration();
         let fps_stats = self.fps_manager.end_main_loop_iteration(&mut self.fps_ceil);
         if let Some(fps_stats) = fps_stats {
-            println!("{}", fps_stats);
+            shared.push_fps_stats(fps_stats);
+            // info!("{}", fps_stats);
         }
     }
     fn pump_events(&mut self) {

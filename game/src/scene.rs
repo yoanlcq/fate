@@ -328,6 +328,7 @@ pub enum SceneCommand {
 #[derive(Debug)]
 pub struct Scene {
     pub cameras: HashMap<CameraID, Camera>,
+    pub gui_camera: Camera,
     pub skybox_selector: SkyboxSelector,
     pub skybox_min_mag_filter: GLenum,
     pub meshes: HashMap<MeshID, Mesh>,
@@ -361,6 +362,16 @@ impl Scene {
             near: 0.001,
             far: 10000.,
         });
+        let gui_camera = Camera {
+            position: Vec3::new(0., 0., -0.001),
+            target: Vec3::new(0., 0., 1.),
+            scale: Vec3::one(),
+            viewport_size,
+            projection_mode: CameraProjectionMode::Ortho,
+            fov_y_radians: 60_f32.to_radians(),
+            near: 0.001,
+            far: 1.,
+        };
 
         meshes.insert(Self::MESHID_SKYBOX, Mesh::new_skybox());
         meshes.insert(Self::MESHID_CUBE, Mesh::new_cube_triangles(0.5));
@@ -417,6 +428,7 @@ impl Scene {
             skybox_min_mag_filter: gl::LINEAR,
             skybox_selector,
             cameras,
+            gui_camera,
             meshes,
             mesh_instances,
             draw_commands_queue,
@@ -454,6 +466,7 @@ impl System for SceneLogicSystem {
         for camera in g.scene.cameras.values_mut() {
             camera.viewport_size = size;
         }
+        g.scene.gui_camera.viewport_size = size;
     }
     fn on_key(&mut self, g: &mut G, key: Key, state: KeyState) {
         match key.sym {

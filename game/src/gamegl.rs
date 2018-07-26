@@ -1,10 +1,11 @@
 use std::mem;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
+use std::rc::Rc;
 use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
 use fate::gx::{self, Object, gl, GLSLType};
 use fate::img::{self, AsSlice};
-use fate::font::Atlas;
+use fate::font::{Font, Atlas, AtlasGlyphInfo};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use game::SharedGame;
 use system::*;
@@ -32,19 +33,13 @@ pub fn gl_debug_message_callback(msg: &gx::DebugMessage) {
 
 #[repr(u32)]
 pub enum VAttrib {
-    PositionVec4f32 = 0,
-    NormalVec4f32 = 1,
-    TangentVec4f32 = 2,
-    BiTangentVec4f32 = 3,
-    ColorRgbau8 = 4,
+    Position = 0,
+    Normal = 1,
+    Tangent = 2,
+    BiTangent = 3,
+    Color = 4,
+    Uv = 5,
 }
-
-#[repr(u32)]
-pub enum TextVAttrib {
-    PositionVec2f32 = 0,
-    UvVec2f32 = 1,
-}
-
 
 static VS_SRC: &'static [u8] = b"
 #version 450 core
@@ -109,6 +104,7 @@ uniform mat4 u_proj_matrix;
 uniform mat4 u_modelview_matrix;
 
 layout(location = 0) in vec4 a_position;
+layout(location = 5) in vec4 a_texcoords;
 
 out vec3 v_tex_coords;
 
@@ -139,6 +135,44 @@ void main() {
 }
 ";
 
+static TEXT_VS_SRC: &'static [u8] = b"
+#version 450 core
+
+uniform mat4 u_mvp;
+
+layout(location = 0) in vec2 a_position;
+layout(location = 5) in vec2 a_tex_coords;
+
+out vec2 v_tex_coords;
+
+void main() {
+    v_tex_coords = a_tex_coords;
+    gl_Position = u_mvp * vec4(a_position, 0.0, 1.0);
+}
+";
+
+static TEXT_FS_SRC: &'static [u8] = b"
+#version 450 core
+
+uniform sampler2DArray u_atlas_array;
+uniform float u_atlas_index;
+uniform vec4 u_color;
+
+in vec2 v_tex_coords;
+
+out vec4 f_color;
+
+void main() {
+    float alpha = texture(u_atlas_array, vec3(v_tex_coords, u_atlas_index)).r;
+
+    if (alpha <= 0.01)
+        discard;
+
+    f_color = vec4(u_color.rgb, u_color.a * alpha);
+}
+";
+
+
 fn new_gl_color_program() -> Result<gx::ProgramEx, String> {
     let vs = gx::VertexShader::try_from_source(VS_SRC)?;
     let fs = gx::FragmentShader::try_from_source(FS_SRC)?;
@@ -151,6 +185,13 @@ fn new_gl_skybox_program() -> Result<gx::ProgramEx, String> {
     let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
     Ok(gx::ProgramEx::new(prog))
 }
+fn new_gl_text_program() -> Result<gx::ProgramEx, String> {
+    let vs = gx::VertexShader::try_from_source(TEXT_VS_SRC)?;
+    let fs = gx::FragmentShader::try_from_source(TEXT_FS_SRC)?;
+    let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
+    Ok(gx::ProgramEx::new(prog))
+}
+
 fn unwrap_or_display_error(r: Result<gx::ProgramEx, String>) -> gx::ProgramEx {
     match r {
         Ok(p) => p,
@@ -180,8 +221,10 @@ pub struct GLSystem {
     viewport_size: Extent2<u32>,
     color_program: gx::ProgramEx,
     skybox_program: gx::ProgramEx,
+    text_program: gx::ProgramEx,
 	cube_map_tabs: [gx::Texture; 2],
-    basis33_atlas_tex: gx::Texture,
+    atlas_array: gx::Texture,
+    basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
@@ -303,29 +346,49 @@ struct TextVertex {
 }
 
 
-fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
+fn create_gl_font_atlas_array(atlas: &Atlas) -> gx::Texture {
     let levels = 1;
     let internal_format = gl::R8;
     let (w, h) = (atlas.img.width(), atlas.img.height());
     assert!(w.is_power_of_two());
     assert!(h.is_power_of_two());
     assert_eq!(w, h);
+
+    let depth = 1; // How many elems in the array
+
     unsafe {
         let tex = check_gl!(gx::Texture::new());
-        check_gl!(gl::BindTexture(gl::TEXTURE_2D, tex.gl_id()));
-        check_gl!(gl::TexStorage2D(gl::TEXTURE_2D, levels, internal_format, w as _, h as _));
+        check_gl!(gl::BindTexture(gl::TEXTURE_2D_ARRAY, tex.gl_id()));
+        check_gl!(gl::TexStorage3D(gl::TEXTURE_2D_ARRAY, levels, internal_format, w as _, h as _, depth));
         {
             let format = gl::RED;
             let type_ = gl::UNSIGNED_BYTE;
             let level = 0;
-            check_gl!(gl::TexSubImage2D(gl::TEXTURE_2D, level, 0, 0, w as _, h as _, format, type_, atlas.img.as_ptr() as _));
-            info!("GL: Created font atlas for basis33.");
+            let (x, y, z) = (0, 0, 0);
+            check_gl!(gl::TexSubImage3D(gl::TEXTURE_2D_ARRAY, level, x, y, z, w as _, h as _, 1, format, type_, atlas.img.as_ptr() as _));
+            info!("GL: Created font atlas array with basis33 as the first element.");
         }
-        check_gl!(gl::BindTexture(gl::TEXTURE_2D, 0));
+        check_gl!(gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0));
         tex
     }
 }
 
+#[derive(Debug)]
+struct AtlasInfo {
+    glyphs: HashMap<char, AtlasGlyphInfo>,
+    font_height_px: u32,
+    atlas_size: Extent2<u32>,
+}
+
+impl AtlasInfo {
+    pub fn new(font: &Font, atlas: &Atlas) -> Self {
+        Self {
+            glyphs: atlas.glyphs.clone(),
+            font_height_px: font.height_px(),
+            atlas_size: atlas.size(),
+        }
+    }
+}
 
 #[derive(Debug)]
 struct TextMesh {
@@ -334,10 +397,11 @@ struct TextMesh {
     ibo: gx::Buffer,
     nb_quads: usize,
     max_quads: usize,
+    atlas_info: Rc<AtlasInfo>,
 }
 
 impl TextMesh {
-    pub fn with_capacity(max_quads: usize) -> Self {
+    pub fn with_capacity(max_quads: usize, atlas_info: Rc<AtlasInfo>) -> Self {
         fn new_buffer_storage(size: usize) -> gx::Buffer {
             let buf = gx::Buffer::new();
             gx::BufferTarget::CopyRead.bind_buffer(buf.gl_id());
@@ -353,10 +417,10 @@ impl TextMesh {
         unsafe {
             gl::BindVertexArray(vao.gl_id());
             gx::BufferTarget::Array.bind_buffer(vbo.gl_id());
-            gl::EnableVertexAttribArray(TextVAttrib::PositionVec2f32 as _);
-            gl::EnableVertexAttribArray(TextVAttrib::UvVec2f32 as _);
-            gl::VertexAttribPointer(TextVAttrib::PositionVec2f32 as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, 0 as _);
-            gl::VertexAttribPointer(TextVAttrib::UvVec2f32 as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, (2*4) as _);
+            gl::EnableVertexAttribArray(VAttrib::Position as _);
+            gl::EnableVertexAttribArray(VAttrib::Uv as _);
+            gl::VertexAttribPointer(VAttrib::Position as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, 0 as _);
+            gl::VertexAttribPointer(VAttrib::Uv as _, 2, gl::FLOAT, gl::FALSE, mem::size_of::<TextVertex>() as _, (2*4) as _);
             gx::BufferTarget::Array.unbind_buffer();
             gl::BindVertexArray(0);
         }
@@ -365,6 +429,7 @@ impl TextMesh {
             vbo, ibo, vao,
             nb_quads: 0,
             max_quads,
+            atlas_info,
         }
     }
     pub fn draw(&self) {
@@ -376,8 +441,12 @@ impl TextMesh {
             gl::BindVertexArray(0);
         }
     }
-    pub fn set_text(&mut self, atlas: &Atlas, font_height_px: u32, string: &str) {
-        let atlas_size = atlas.size().map(|x| x as f32);
+    pub fn set_text(&mut self, string: &str) {
+        let &AtlasInfo {
+            atlas_size, ref glyphs, font_height_px,
+        } = &*self.atlas_info;
+
+        let atlas_size = atlas_size.map(|x| x as f32);
         let mut cur = Vec2::<i16>::zero();
         let mut i = 0;
 
@@ -394,11 +463,11 @@ impl TextMesh {
                     continue;
                 },
                 ' ' => {
-                    cur += atlas.glyphs[&' '].advance_px;
+                    cur += glyphs[&' '].advance_px;
                     continue;
                 },
                 '\t' => {
-                    cur += atlas.glyphs[&' '].advance_px * 4;
+                    cur += glyphs[&' '].advance_px * 4;
                     continue;
                 },
                 c if c.is_ascii_control() || c.is_ascii_whitespace() => {
@@ -406,8 +475,8 @@ impl TextMesh {
                 },
                 _ => (),
             };
-            let c = if atlas.glyphs.contains_key(&c) { c } else { assert!(atlas.glyphs.contains_key(&'?')); '?' };
-            let glyph = &atlas.glyphs[&c];
+            let c = if glyphs.contains_key(&c) { c } else { assert!(glyphs.contains_key(&'?')); '?' };
+            let glyph = &glyphs[&c];
             let mut texcoords = glyph.bounds_px.into_rect().map(
                 |p| p as f32,
                 |e| e as f32
@@ -492,13 +561,19 @@ impl GLSystem {
             debug!("GL: ARB_pipeline_statistics_query is unsupported.");
             Default::default()
         };
+
+        let basis33_atlas_info = Rc::new(AtlasInfo::new(g.res.basis33(), g.res.basis33_atlas()));
+        let text_mesh = TextMesh::with_capacity(1024, basis33_atlas_info.clone());
+
         Self {
             viewport_size,
-            basis33_atlas_tex: create_gl_font_atlas(g.res.basis33_atlas()),
             color_program:  unwrap_or_display_error(new_gl_color_program()),
-            skybox_program: unwrap_or_display_error(new_gl_skybox_program  ()),
+            skybox_program: unwrap_or_display_error(new_gl_skybox_program()),
+            text_program:   unwrap_or_display_error(new_gl_text_program()),
+            atlas_array: create_gl_font_atlas_array(g.res.basis33_atlas()),
             cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
-            text_mesh: TextMesh::with_capacity(512),
+            basis33_atlas_info,
+            text_mesh,
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
@@ -516,30 +591,53 @@ impl GLSystem {
             }
             self.render_scene_with_camera(scene, draw, camera);
             self.render_skybox(scene, draw, camera);
-            self.render_text(draw);
         }
+        // Alpha-blended; do last
+        self.render_text(draw, &scene.gui_camera);
     }
 
-    fn render_text(&mut self, _draw: &Draw) {
-        // TODO:
-        // - Set up blending
-        // - Set up text program
-        // - Set up uniforms
-        /*
-        gl::UseProgram(g.text_gl_program.program().gl_id());
-        let command_text_position = Vec2::new(0, g.fonts.fonts[&FontID::Debug].height as i32);
-        let mvp = {
-            let Extent2 { w, h } = g.fonts.fonts[&FontID::Debug].texture_size.map(|x| x as f32) * 2. / self.camera.viewport_size().map(|x| x as f32);
-            let t = self.camera.viewport_to_ugly_ndc(command_text_position);
-            Mat4::<f32>::translation_3d(t) * Mat4::scaling_3d(Vec3::new(w, h, 1.))
-        };
-        g.text_gl_program.set_uniform_mvp(&mvp);
-        g.text_gl_program.set_uniform_font_atlas_via_font_id(FontID::Debug);
-        g.text_gl_program.set_uniform_color(Rgba::white());
-        */
+    fn render_text(&mut self, _draw: &Draw, camera: &Camera) {
+        let texture_unit: i32 = 9;
+        unsafe {
+            gl::UseProgram(self.text_program.inner().gl_id());
+            gl::ActiveTexture(gl::TEXTURE0 + texture_unit as u32);
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.atlas_array.gl_id());
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MAG_FILTER, gl::NEAREST as _);
+            gl::TexParameteri(gl::TEXTURE_2D_ARRAY, gl::TEXTURE_MIN_FILTER, gl::NEAREST as _);
+            //gl::Disable(gl::DEPTH_TEST);
+        }
 
-        unimplemented!();
-        self.text_mesh.draw();
+        self.text_program.set_uniform_primitive("u_atlas_index", &[0 as f32]);
+        self.text_program.set_uniform("u_atlas_array", GLSLType::Sampler2DArray, &[texture_unit]);
+
+        for i in 0..2 {
+            let mvp = {
+                let position_viewport_space = Vec2::new(4, self.basis33_atlas_info.font_height_px as i32) + i;
+                let Extent2 { w, h } = self.basis33_atlas_info.atlas_size
+                    .map(|x| x as f32) * 2. / camera.viewport_size.map(|x| x as f32);
+                let t = camera.viewport_to_ugly_ndc(position_viewport_space);
+                Mat4::<f32>::translation_3d(t) * Mat4::scaling_3d(Vec3::new(w, h, 1.))
+            };
+
+            let color = if i == 0 {
+                Rgba::new(1., 4., 0., 1_f32)
+            } else {
+                Rgba::black()
+            };
+
+            self.text_program.set_uniform_primitive("u_mvp", &[mvp]);
+            self.text_program.set_uniform_primitive("u_color", &[color]);
+
+            self.text_mesh.draw();
+        }
+
+
+        unsafe {
+            //gl::Enable(gl::DEPTH_TEST);
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::UseProgram(0);
+        }
     }
 
     fn render_skybox(&mut self, scene: &Scene, _draw: &Draw, camera: &Camera) {
@@ -637,8 +735,8 @@ impl GLSystem {
         let pos_buffer = self.mesh_position_buffers.get(mesh_id).expect("Meshes must have a position buffer (for now)!");
         unsafe {
             gl::BindBuffer(gx::BufferTarget::Array as _, pos_buffer.gl_id());
-            gl::EnableVertexAttribArray(VAttrib::PositionVec4f32 as _);
-            gl::VertexAttribPointer(VAttrib::PositionVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
+            gl::EnableVertexAttribArray(VAttrib::Position as _);
+            gl::VertexAttribPointer(VAttrib::Position as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
             gl::BindBuffer(gx::BufferTarget::Array as _, 0);
         }
     }
@@ -647,16 +745,16 @@ impl GLSystem {
         let norm_buffer = self.mesh_normal_buffers.get(mesh_id).expect("Meshes must have a normals buffer (for now)!");
         unsafe {
             gl::BindBuffer(gx::BufferTarget::Array as _, norm_buffer.gl_id());
-            gl::EnableVertexAttribArray(VAttrib::NormalVec4f32 as _);
-            gl::VertexAttribPointer(VAttrib::NormalVec4f32 as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
+            gl::EnableVertexAttribArray(VAttrib::Normal as _);
+            gl::VertexAttribPointer(VAttrib::Normal as _, 4, gl::FLOAT, gl::FALSE, 4*4, 0 as _);
             gl::BindBuffer(gx::BufferTarget::Array as _, 0);
         }
     }
     fn gl_update_mesh_color_attrib(&self, mesh_id: &MeshID, mesh: &Mesh) {
         let set_default_color = |rgba: Rgba<u8>| unsafe {
             let rgba = rgba.map(|x| x as f32) / 255.;
-            gl::DisableVertexAttribArray(VAttrib::ColorRgbau8 as _);
-            gl::VertexAttrib4f(VAttrib::ColorRgbau8 as _, rgba.r, rgba.g, rgba.b, rgba.a);
+            gl::DisableVertexAttribArray(VAttrib::Color as _);
+            gl::VertexAttrib4f(VAttrib::Color as _, rgba.r, rgba.g, rgba.b, rgba.a);
         };
         match self.mesh_color_buffers.get(mesh_id) {
             None => set_default_color(Rgba::white()),
@@ -666,8 +764,8 @@ impl GLSystem {
                     1 => set_default_color(mesh.vcolor[0]),
                     _ => unsafe {
                         gl::BindBuffer(gx::BufferTarget::Array as _, col_buffer.gl_id());
-                        gl::EnableVertexAttribArray(VAttrib::ColorRgbau8 as _);
-                        gl::VertexAttribPointer(VAttrib::ColorRgbau8 as _, 4, gl::FLOAT, gl::TRUE, 4, 0 as _);
+                        gl::EnableVertexAttribArray(VAttrib::Color as _);
+                        gl::VertexAttribPointer(VAttrib::Color as _, 4, gl::FLOAT, gl::TRUE, 4, 0 as _);
                         gl::BindBuffer(gx::BufferTarget::Array as _, 0);
                     },
                 }
@@ -734,6 +832,13 @@ impl System for GLSystem {
         for (target, query) in self.pipeline_statistics_arb_queries.iter() {
             target.begin(query);
         }
+
+        let mut text = match g.last_fps_stats() {
+            Some(fps_stats) => format!("{} FPS", fps_stats.fps()),
+            None => String::new(),
+        };
+        text += "\nHello, text world!";
+        self.text_mesh.set_text(&text);
 
         self.pump_scene_draw_commands(&mut g.scene);
         self.render_scene(&mut g.scene, d);
