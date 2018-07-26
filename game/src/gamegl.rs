@@ -1,7 +1,7 @@
 use std::mem;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Aabr};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
 use fate::gx::{self, Object, gl, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::Atlas;
@@ -310,7 +310,7 @@ fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
     }
 }
 
- pub fn draw_text_gl(atlas: &Atlas, string: &str) {
+ pub fn draw_text_gl(atlas: &Atlas, font_height_px: u32, string: &str) {
     let atlas_size = atlas.size().map(|x| x as f32);
     let mut cur = Vec2::<i16>::zero();
     let mut i = 0;
@@ -322,7 +322,7 @@ fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
         match c {
             '\n' => {
                 cur.x = 0;
-                cur.y += font_height as i16;
+                cur.y += font_height_px as i16;
                 continue;
             },
             ' ' => {
@@ -338,7 +338,7 @@ fn create_gl_font_atlas(atlas: &Atlas) -> gx::Texture {
             },
             _ => (),
         };
-        let c = if atlas.glyphs.contains_key(&c) { c } else { '?' };
+        let c = if atlas.glyphs.contains_key(&c) { c } else { assert!(atlas.glyphs.contains_key(&'?')); '?' };
         let glyph = &atlas.glyphs[&c];
         let mut texcoords = glyph.bounds_px.into_rect().map(
             |p| p as f32,

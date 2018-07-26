@@ -1,4 +1,8 @@
 pub extern crate gl;
+
+#[macro_use]
+extern crate bitflags;
+
 extern crate fate_math as math;
 
 pub mod attrib;

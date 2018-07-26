@@ -5,14 +5,6 @@ use gl::{self, types::*};
 use gx::{self, Object};
 use grx;
 
-pub trait VertexIndex {
-    const GL_TYPE: GLenum;
-}
-
-impl VertexIndex for u8  { const GL_TYPE: GLenum = gl::UNSIGNED_BYTE; }
-impl VertexIndex for u16 { const GL_TYPE: GLenum = gl::UNSIGNED_SHORT; }
-impl VertexIndex for u32 { const GL_TYPE: GLenum = gl::UNSIGNED_INT; }
-
 #[derive(Debug)]
 pub struct IndexArray<T: VertexIndex> {
     buffer_usage: gx::BufferUsage,
