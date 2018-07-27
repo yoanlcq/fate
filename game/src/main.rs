@@ -47,6 +47,7 @@ pub mod gamegl;
 pub mod scene;
 pub mod input;
 pub mod resources;
+pub mod async;
 
 fn main() {
     early::setup_log();

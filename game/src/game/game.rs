@@ -1,12 +1,15 @@
 use std::time::Duration;
 use std::cell::RefCell;
 use std::env;
-use std::collections::VecDeque;
+use std::thread;
+use std::sync::{Arc, Mutex, atomic::{Ordering, AtomicBool}};
+use std::collections::{VecDeque, HashMap};
 use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
 use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::gx::{self, gl};
 use super::SharedGame;
+use async::{file_io::{self, LoadingFile}};
 use scene::{SceneLogicSystem, SceneCommandClearerSystem};
 use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
@@ -16,7 +19,7 @@ use event::Event;
 use gamegl::{gl_error_hook, GLSystem, gl_debug_message_callback};
 
 
-
+// Can't derive anything :/
 pub struct Game {
     platform: Box<Platform>,
     shared: RefCell<SharedGame>,
@@ -24,7 +27,44 @@ pub struct Game {
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
     fps_ceil: Option<f64>,
+    threads: HashMap<ThreadID, thread::JoinHandle<()>>,
+    mt_shared: Arc<MtShared>,
 }
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ThreadID {
+    pub name: String,
+    pub i: usize,
+}
+#[derive(Debug)]
+pub struct ThreadContext {
+    pub id: ThreadID,
+    pub mt_shared: Arc<MtShared>,
+}
+#[derive(Debug)]
+pub struct MtShared {
+    pub quit: AtomicBool,
+    pub file_io_tasks_queue: Mutex<VecDeque<LoadingFile>>,
+}
+
+impl MtShared {
+    pub fn new() -> Self {
+        Self {
+            quit: Default::default(),
+            file_io_tasks_queue: Default::default(),
+        }
+    }
+}
+
+impl Drop for Game {
+    fn drop(&mut self) {
+        self.mt_shared.quit.store(true, Ordering::SeqCst);
+        for (id, t) in self.threads.drain() {
+            debug!("Waiting for thread `{}` to complete", id.name);
+            t.join().unwrap();
+        }
+    }
+}
+
 
 impl Game {
     pub fn new() -> Self {
@@ -63,6 +103,24 @@ impl Game {
             enable_fixing_broken_vsync: true,
         };
 
+        let (mt_shared, threads) = {
+            let mt_shared = Arc::new(MtShared::new());
+            let mut threads = HashMap::new();
+            for i in 1..4 {
+                let id = ThreadID {
+                    name: format!("Extra thread {}", i),
+                    i,
+                };
+                let cx = ThreadContext {
+                    id: id.clone(),
+                    mt_shared: mt_shared.clone(),
+                };
+                debug!("Spawned thread `{}`", id.name);
+                threads.insert(id, thread::spawn(move || thread_proc(cx)));
+            }
+            (mt_shared, threads)
+        };
+
         platform.show_window();
  
         Self {
@@ -72,6 +130,8 @@ impl Game {
             systems,
             fps_manager,
             fps_ceil: None,
+            mt_shared,
+            threads,
         }
     }
     pub fn poll_event(&mut self) -> Option<Event> {
@@ -174,6 +234,20 @@ impl MainSystem for Game {
             sys.draw(&mut shared, &draw);
         }
         self.platform.gl_swap_buffers();
+    }
+}
+
+
+pub fn thread_proc(cx: ThreadContext) {
+    while !cx.mt_shared.quit.load(Ordering::SeqCst) {
+        let task = {
+            let mut lock = cx.mt_shared.file_io_tasks_queue.lock().unwrap();
+            lock.pop_front()
+        };
+        // FIXME: Sleep if there are no more tasks
+        if let Some(task) = task {
+            file_io::process_file_io_task(&cx, task);
+        }
     }
 }
 

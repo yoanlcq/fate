@@ -14,7 +14,7 @@ pub fn setup_panic_hook() {
         if let Some(payload) = info.payload().downcast_ref::<&str>() {
             msg += payload;
         } else {
-            msg += "<unknown reason>";
+            msg += &format!("<unknown reason>. Debug: {:?}", info);
         }
 
         error!("{}", &msg);
