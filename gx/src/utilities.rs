@@ -17,6 +17,9 @@ pub fn init_reasonable_default_gl_state() {
         gl::CullFace(gl::BACK);
         gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
 
+
+        ::error::SHOULD_TEMPORARILY_IGNORE_ERRORS = true;
+
         // Enable POINT_SPRITE for proprietary NVIDIA Linux drivers, otherwise:
         // - Points would be round by default (which is wrong; there are square);
         // - Point sprites just wouldn't work.
@@ -25,6 +28,8 @@ pub fn init_reasonable_default_gl_state() {
 
         gl::Enable(gl::TEXTURE_CUBE_MAP_SEAMLESS); // Since 3.2 or ARB_seamless_cube_map
         gl::GetError(); // Eat any errors caused by the line above
+
+        ::error::SHOULD_TEMPORARILY_IGNORE_ERRORS = false;
 
         gl::ClearColor(1., 0., 1., 1.);
     }

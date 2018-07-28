@@ -1,0 +1,11 @@
+[package]
+name = "fate-gl"
+description = "Custom gl crate providing an optional post-api-call hook."
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+
+[build-dependencies]
+gl_generator = { version = "0.9.0", features = ["unstable_generator_utils"] }
+
+[features]
+post-hook = []

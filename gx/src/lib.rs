@@ -1,9 +1,9 @@
-pub extern crate gl;
-
 #[macro_use]
 extern crate bitflags;
-
+extern crate fate_gl;
 extern crate fate_math as math;
+
+pub use fate_gl::gl45_core as gl;
 
 pub mod attrib;
 pub use attrib::{Attrib, ProgramAttribs};
