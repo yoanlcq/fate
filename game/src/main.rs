@@ -1,3 +1,5 @@
+#![feature(panic_info_message)]
+
 #[macro_use]
 extern crate fate;
 #[allow(unused_imports)]
@@ -6,7 +8,7 @@ extern crate dmc;
 extern crate sdl2;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+extern crate pretty_env_logger;
 extern crate backtrace;
 
 // TODO list:
