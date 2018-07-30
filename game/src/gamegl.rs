@@ -9,6 +9,7 @@ use fate::font::{Font, Atlas, AtlasGlyphInfo};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use game::SharedGame;
 use system::*;
+use gltf;
 
 static mut NB_ERRORS: usize = 0;
 
@@ -226,6 +227,7 @@ pub struct GLSystem {
     atlas_array: gx::Texture,
     basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
+    gltf_mesh: GltfMesh,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -537,6 +539,61 @@ impl TextMesh {
     }
 }
 
+#[derive(Debug)]
+struct GltfMesh {
+
+}
+
+impl GltfMesh {
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let (document, buffers, images) = gltf::import(path).unwrap();
+
+        for scene in document.scenes() {
+            for node in scene.nodes() {
+                let (position, orientation, scale) = node.transform().decomposed();
+                debug!("GLTF: {:?}, {:?}, {:?}", position, orientation, scale);
+                if let Some(mesh) = node.mesh() {
+                    for prim in mesh.primitives() {
+                        for (semantic, data) in prim.attributes() {
+                            match semantic {
+                                gltf::Semantic::Positions => (),
+                                gltf::Semantic::Normals => (),
+                                gltf::Semantic::Tangents => (),
+                                gltf::Semantic::Colors(attr) => (),
+                                gltf::Semantic::TexCoords(attr) => (),
+                                gltf::Semantic::Joints(attr) => (),
+                                gltf::Semantic::Weights(attr) => (),
+                            }
+                            debug!("GLTF: {:?} => {:?}", semantic, data);
+                            // ...
+                        }
+                        match prim.mode() {
+                            gltf::mesh::Mode::Points => (),
+                            gltf::mesh::Mode::Lines => (),
+                            gltf::mesh::Mode::LineLoop => (),
+                            gltf::mesh::Mode::LineStrip => (),
+                            gltf::mesh::Mode::Triangles => (),
+                            gltf::mesh::Mode::TriangleStrip => (),
+                            gltf::mesh::Mode::TriangleFan => (),
+                        }
+                        if let Some(indices) = prim.indices() {
+                            // ...
+                        }
+                    }
+                }
+                for children in node.children() {
+                    // ...
+                }
+            }
+        }
+        assert_eq!(buffers.len(), document.buffers().count());
+        assert_eq!(images.len(), document.images().count());
+        unimplemented!()
+    }
+}
+
+
+
 impl GLSystem {
     pub fn new(viewport_size: Extent2<u32>, g: &SharedGame) -> Self {
         let pipeline_statistics_arb_targets = [
@@ -574,6 +631,7 @@ impl GLSystem {
             cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
             basis33_atlas_info,
             text_mesh,
+            gltf_mesh: GltfMesh::load(g.res.data_path().join(PathBuf::from("art/3rdparty/gltf2/Box.gltf"))).unwrap(),
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
