@@ -2,7 +2,7 @@ use std::mem;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use std::rc::Rc;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Quaternion, Transform};
 use fate::gx::{self, Object, gl, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::{Font, Atlas, AtlasGlyphInfo};
@@ -227,7 +227,7 @@ pub struct GLSystem {
     atlas_array: gx::Texture,
     basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
-    gltf_mesh: GltfMesh,
+    gltf: LoadedGltf,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -539,56 +539,103 @@ impl TextMesh {
     }
 }
 
-#[derive(Debug)]
-struct GltfMesh {
+pub type NodeID = u32;
 
+#[derive(Debug, Default)]
+struct LoadedGltf {
+    xforms: HashMap<NodeID, Transform<f32, f32, f32>>,
+    parents: HashMap<NodeID, NodeID>,
+    meshes: HashMap<NodeID, GltfMesh>,
 }
 
-impl GltfMesh {
-    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
-        let (document, buffers, images) = gltf::import(path).unwrap();
+#[derive(Debug)]
+struct GltfMesh {
+}
 
-        for scene in document.scenes() {
-            for node in scene.nodes() {
-                let (position, orientation, scale) = node.transform().decomposed();
-                debug!("GLTF: {:?}, {:?}, {:?}", position, orientation, scale);
-                if let Some(mesh) = node.mesh() {
-                    for prim in mesh.primitives() {
-                        for (semantic, data) in prim.attributes() {
-                            match semantic {
-                                gltf::Semantic::Positions => (),
-                                gltf::Semantic::Normals => (),
-                                gltf::Semantic::Tangents => (),
-                                gltf::Semantic::Colors(attr) => (),
-                                gltf::Semantic::TexCoords(attr) => (),
-                                gltf::Semantic::Joints(attr) => (),
-                                gltf::Semantic::Weights(attr) => (),
-                            }
-                            debug!("GLTF: {:?} => {:?}", semantic, data);
-                            // ...
-                        }
-                        match prim.mode() {
-                            gltf::mesh::Mode::Points => (),
-                            gltf::mesh::Mode::Lines => (),
-                            gltf::mesh::Mode::LineLoop => (),
-                            gltf::mesh::Mode::LineStrip => (),
-                            gltf::mesh::Mode::Triangles => (),
-                            gltf::mesh::Mode::TriangleStrip => (),
-                            gltf::mesh::Mode::TriangleFan => (),
-                        }
-                        if let Some(indices) = prim.indices() {
-                            // ...
-                        }
-                    }
+impl LoadedGltf {
+    fn parse_mesh(&mut self, gltf: &gltf::Document, node_id: NodeID, mesh: &gltf::Mesh) {
+        for prim in mesh.primitives() {
+            if let Some(indices) = prim.indices() {
+                match (indices.dimensions(), indices.data_type()) {
+                    (gltf::accessor::Dimensions::Scalar, gltf::accessor::DataType::U16) => {
+                        assert_eq!(indices.size(), 2);
+                    },
+                    _ => unimplemented!(),
                 }
-                for children in node.children() {
-                    // ...
+                let mut offset = indices.offset(); // In bytes
+                {
+                    let view = indices.view(); // Buffer view
+                    assert_eq!(view.stride(), None);
+                    offset += view.offset();
+                    // TODO: Find data from pre-loaded buffers. We probably only care about the index, not the source
+                    /*
+                    let data = match view.buffer().source() {
+                        gltf::buffer::Source::Bin => (),
+                        gltf::buffer::Source::Uri(uri) => (),
+                    };
+                    */
+                }
+                indices.count(); // Nb components
+                // TODO: Index into data.
+            }
+            for (semantic, data) in prim.attributes() {
+                match semantic {
+                    gltf::Semantic::Positions => (),
+                    gltf::Semantic::Normals => (),
+                    gltf::Semantic::Tangents => unimplemented!(),
+                  | gltf::Semantic::Colors(attr)
+                  | gltf::Semantic::TexCoords(attr)
+                  | gltf::Semantic::Joints(attr)
+                  | gltf::Semantic::Weights(attr)
+                        => unimplemented!(),
                 }
             }
+            match prim.mode() {
+                gltf::mesh::Mode::Triangles => (),
+              | gltf::mesh::Mode::Points
+              | gltf::mesh::Mode::Lines
+              | gltf::mesh::Mode::LineLoop
+              | gltf::mesh::Mode::LineStrip
+              | gltf::mesh::Mode::TriangleStrip
+              | gltf::mesh::Mode::TriangleFan
+                    => unimplemented!(),
+            }
         }
+    }
+    fn node_transform(node: &gltf::Node) -> Transform<f32, f32, f32> {
+        let (position, orientation, scale) = node.transform().decomposed();
+        Transform {
+            position: position.into(),
+            orientation: Vec4::from(orientation).into(),
+            scale: scale.into(),
+        }
+    }
+    fn parse_node(&mut self, gltf: &gltf::Document, node: &gltf::Node, parent: Option<NodeID>) {
+        let node_id = node.index() as NodeID;
+        self.xforms.insert(node_id, Self::node_transform(node));
+        if let Some(parent) = parent {
+            self.parents.insert(node_id, parent);
+        }
+        if let Some(mesh) = node.mesh() {
+            self.parse_mesh(gltf, node_id, &mesh);
+        }
+        for child in node.children() {
+            self.parse_node(gltf, &child, Some(node_id));
+        }
+    }
+    // Order:
+    // - Hierarchy
+    // - Vertex buffers + topology
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let (document, buffers, images) = gltf::import(path).unwrap();
         assert_eq!(buffers.len(), document.buffers().count());
         assert_eq!(images.len(), document.images().count());
-        unimplemented!()
+
+        let mut slf = Self::default();
+        for node in document.default_scene().unwrap().nodes() {
+            slf.parse_node(&document, &node, None);
+        }
+        Ok(slf)
     }
 }
 
@@ -631,7 +678,7 @@ impl GLSystem {
             cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
             basis33_atlas_info,
             text_mesh,
-            gltf_mesh: GltfMesh::load(g.res.data_path().join(PathBuf::from("art/3rdparty/gltf2/Box.gltf"))).unwrap(),
+            gltf: LoadedGltf::load(g.res.data_path().join(PathBuf::from("art/3rdparty/gltf2/Box.gltf"))).unwrap(),
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
