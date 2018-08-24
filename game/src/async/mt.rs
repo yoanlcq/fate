@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use std::sync::{Arc, Mutex, atomic::{self, AtomicBool, AtomicIsize, Ordering}};
 use std::collections::{HashMap, VecDeque};
 use std::thread;
 
@@ -72,13 +72,7 @@ impl MtShared {
     pub fn do_async<T, E, F>(&self, f: Box<F>) -> Async<T, E>
         where F: FnOnce() -> Result<T, E> + Send + 'static
     {
-        let task_data = Arc::new(AsyncTaskData {
-            thread_id: AtomicIsize::new(-1),
-            is_complete: AtomicBool::new(false),
-            f,
-        });
-        self.gp_tasks_queue.lock().unwrap().push_back(Async(task_data.clone()));
-        Async(task_data)
+        unimplemented!()
     }
 }
 
@@ -87,12 +81,11 @@ impl MtShared {
 struct AsyncTaskData<T, E> {
     pub thread_id: AtomicIsize,
     pub is_complete: AtomicBool,
-    f: ????,
     pub result: Option<Result<T, E>>,
 }
 
 #[derive(Debug)]
-pub struct Async<T, E>(Arc<AsyncTaskData>);
+pub struct Async<T, E>(Arc<AsyncTaskData<T, E>>);
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct AsyncProgress { is_complete: bool }
@@ -111,13 +104,7 @@ impl<T, E> Loading for Async<T, E> {
         }
     }
     fn wait(self) -> Result<Self::Item, Self::Error> {
-        loop {
-            match Arc::try_unwrap(self.0) {
-                Err(arc) => self.0 = arc,
-                Ok(data) => break data.result.unwrap(),
-            }
-            atomic::spin_loop_hint();
-        }
+        unimplemented!()
     }
     fn cancel(self) { drop(self) }
 }

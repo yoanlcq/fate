@@ -1,8 +1,8 @@
 use std::mem;
-use std::path::{PathBuf};
+use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use std::rc::Rc;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Quaternion, Transform};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Transform};
 use fate::gx::{self, Object, gl::{self, types::*}, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::{Font, Atlas, AtlasGlyphInfo};
