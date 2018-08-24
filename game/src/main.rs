@@ -1,3 +1,5 @@
+#![feature(panic_info_message)]
+
 #[macro_use]
 extern crate fate;
 #[allow(unused_imports)]
@@ -6,10 +8,12 @@ extern crate dmc;
 extern crate sdl2;
 #[macro_use]
 extern crate log;
-extern crate env_logger;
+extern crate pretty_env_logger;
 extern crate backtrace;
+extern crate gltf;
 
 // TODO list:
+// - Load meshes (obj and GLTF)
 // - Debug (immediate) draw (commands pushed to Scene);
 //   - PushMatrix/PopMatrix;
 //   - 2D:
@@ -30,7 +34,6 @@ extern crate backtrace;
 //   - Shaders
 //   - Resources
 // - GUI
-// - Load meshes (obj and GLTF)
 // - Instanced rendering
 // - Sound (OpenAL?)
 // - WebGL port (porting to OpenGL ES 2, gonna hurt)

@@ -54,10 +54,15 @@ pub fn pump_gl_errors(s: &str) {
     (error_hook)(None, s);
 }
 
-pub fn set_error_hook(f: fn(Option<Error>, &str)) {
+pub type ErrorHook = fn(Option<Error>, &str);
+
+/// Sets the error hook, returning the previous one, if any.
+pub fn set_error_hook(f: ErrorHook) -> Option<ErrorHook> {
     unsafe {
-        ERROR_HOOK = Some(f);
+        ::std::mem::replace(&mut ERROR_HOOK, Some(f))
     }
 }
 
-static mut ERROR_HOOK: Option<fn(Option<Error>, &str)> = None;
+static mut ERROR_HOOK: Option<ErrorHook> = None;
+
+pub static mut SHOULD_TEMPORARILY_IGNORE_ERRORS: bool = false;

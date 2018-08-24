@@ -1,7 +1,8 @@
 use std::env;
+use std::fmt;
 use std::panic;
 use log::LevelFilter;
-use env_logger;
+use pretty_env_logger;
 use backtrace;
 
 pub fn setup_panic_hook() {
@@ -13,6 +14,10 @@ pub fn setup_panic_hook() {
 
         if let Some(payload) = info.payload().downcast_ref::<&str>() {
             msg += payload;
+        } else if let Some(payload) = info.payload().downcast_ref::<&String>() {
+            msg += payload.as_str();
+        } else if let Some(args) = info.message() {
+            msg += &fmt::format(*args);
         } else {
             msg += &format!("<unknown reason>. Debug: {:?}", info);
         }
@@ -47,11 +52,11 @@ pub fn setup_env() {
 pub fn setup_log() {
     use ::std::io::Write;
 
-    let mut builder = env_logger::Builder::new();
+    let mut builder = pretty_env_logger::formatted_builder().unwrap();
     builder.format(|buf, record| {
         let s = format!("{}", record.level());
         let s = s.chars().next().unwrap();
-        writeln!(buf, "[{}] {}", s, record.args())
+        writeln!(buf, "[{}] [{}] {}", s, record.target(), record.args())
     }).filter(None, LevelFilter::Debug);
 
     if let Ok(rust_log) = env::var("RUST_LOG") {

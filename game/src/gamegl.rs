@@ -2,7 +2,7 @@ use std::mem;
 use std::path::{PathBuf};
 use std::collections::HashMap;
 use std::rc::Rc;
-use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
+use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Quaternion, Transform};
 use fate::gx::{self, Object, gl::{self, types::*}, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::{Font, Atlas, AtlasGlyphInfo};
@@ -10,6 +10,7 @@ use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use game::SharedGame;
 use async::{Loading, Progress, Async, fs::{LoadingFile, LoadingFileProgress}};
 use system::*;
+use gltf;
 
 static mut NB_ERRORS: usize = 0;
 
@@ -231,6 +232,7 @@ pub struct GLSystem {
     atlas_array: gx::Texture,
     basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
+    gltf: LoadedGltf,
     mesh_vaos: HashMap<MeshID, gx::VertexArray>,
     mesh_position_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
@@ -532,6 +534,108 @@ impl TextMesh {
     }
 }
 
+pub type NodeID = u32;
+
+#[derive(Debug, Default)]
+struct LoadedGltf {
+    xforms: HashMap<NodeID, Transform<f32, f32, f32>>,
+    parents: HashMap<NodeID, NodeID>,
+    meshes: HashMap<NodeID, GltfMesh>,
+}
+
+#[derive(Debug)]
+struct GltfMesh {
+}
+
+impl LoadedGltf {
+    fn parse_mesh(&mut self, gltf: &gltf::Document, node_id: NodeID, mesh: &gltf::Mesh) {
+        for prim in mesh.primitives() {
+            if let Some(indices) = prim.indices() {
+                match (indices.dimensions(), indices.data_type()) {
+                    (gltf::accessor::Dimensions::Scalar, gltf::accessor::DataType::U16) => {
+                        assert_eq!(indices.size(), 2);
+                    },
+                    _ => unimplemented!(),
+                }
+                let mut offset = indices.offset(); // In bytes
+                {
+                    let view = indices.view(); // Buffer view
+                    assert_eq!(view.stride(), None);
+                    offset += view.offset();
+                    // TODO: Find data from pre-loaded buffers. We probably only care about the index, not the source
+                    /*
+                    let data = match view.buffer().source() {
+                        gltf::buffer::Source::Bin => (),
+                        gltf::buffer::Source::Uri(uri) => (),
+                    };
+                    */
+                }
+                indices.count(); // Nb components
+                // TODO: Index into data.
+            }
+            for (semantic, data) in prim.attributes() {
+                match semantic {
+                    gltf::Semantic::Positions => (),
+                    gltf::Semantic::Normals => (),
+                    gltf::Semantic::Tangents => unimplemented!(),
+                  | gltf::Semantic::Colors(attr)
+                  | gltf::Semantic::TexCoords(attr)
+                  | gltf::Semantic::Joints(attr)
+                  | gltf::Semantic::Weights(attr)
+                        => unimplemented!(),
+                }
+            }
+            match prim.mode() {
+                gltf::mesh::Mode::Triangles => (),
+              | gltf::mesh::Mode::Points
+              | gltf::mesh::Mode::Lines
+              | gltf::mesh::Mode::LineLoop
+              | gltf::mesh::Mode::LineStrip
+              | gltf::mesh::Mode::TriangleStrip
+              | gltf::mesh::Mode::TriangleFan
+                    => unimplemented!(),
+            }
+        }
+    }
+    fn node_transform(node: &gltf::Node) -> Transform<f32, f32, f32> {
+        let (position, orientation, scale) = node.transform().decomposed();
+        Transform {
+            position: position.into(),
+            orientation: Vec4::from(orientation).into(),
+            scale: scale.into(),
+        }
+    }
+    fn parse_node(&mut self, gltf: &gltf::Document, node: &gltf::Node, parent: Option<NodeID>) {
+        let node_id = node.index() as NodeID;
+        self.xforms.insert(node_id, Self::node_transform(node));
+        if let Some(parent) = parent {
+            self.parents.insert(node_id, parent);
+        }
+        if let Some(mesh) = node.mesh() {
+            self.parse_mesh(gltf, node_id, &mesh);
+        }
+        for child in node.children() {
+            self.parse_node(gltf, &child, Some(node_id));
+        }
+    }
+    // Order:
+    // - Hierarchy
+    // - Vertex buffers + topology
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, String> {
+        let (document, buffers, images) = gltf::import(path).unwrap();
+        assert_eq!(buffers.len(), document.buffers().count());
+        assert_eq!(images.len(), document.images().count());
+
+        let mut slf = Self::default();
+        for node in document.default_scene().unwrap().nodes() {
+            slf.parse_node(&document, &node, None);
+        }
+        Ok(slf)
+    }
+}
+
+
+
 impl GLSystem {
     pub fn new(viewport_size: Extent2<u32>, g: &SharedGame) -> Self {
         let basis33_atlas_info = Rc::new(AtlasInfo::new(g.res.basis33(), g.res.basis33_atlas()));
@@ -550,6 +654,7 @@ impl GLSystem {
             cube_map_tabs: [create_1st_cube_map_tab(), cube_map_tab_2],
             basis33_atlas_info,
             text_mesh,
+            gltf: LoadedGltf::load(g.res.data_path().join(PathBuf::from("art/3rdparty/gltf2/Box.gltf"))).unwrap(),
             mesh_vaos: Default::default(),
             mesh_position_buffers: Default::default(),
             mesh_normal_buffers: Default::default(),
@@ -861,3 +966,125 @@ impl System for GLSystem {
     }
 }
 
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum FramebufferStatus {
+     UnknownError                = 0,
+     Complete                    = gl::FRAMEBUFFER_COMPLETE,
+     Undefined                   = gl::FRAMEBUFFER_UNDEFINED,
+     IncompleteAttachment        = gl::FRAMEBUFFER_INCOMPLETE_ATTACHMENT,
+     IncompleteMissingAttachment = gl::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT,
+     IncompleteDrawBuffer        = gl::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER,
+     IncompleteReadBuffer        = gl::FRAMEBUFFER_INCOMPLETE_READ_BUFFER,
+     Unsupported                 = gl::FRAMEBUFFER_UNSUPPORTED,
+     IncompleteMultisample       = gl::FRAMEBUFFER_INCOMPLETE_MULTISAMPLE,
+     IncompleteLayerTargets      = gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS,
+}
+
+impl FramebufferStatus {
+    pub fn try_from_glenum(e: GLenum) -> Option<Self> {
+        match e {
+            0                                             => Some(FramebufferStatus::UnknownError               ),
+            gl::FRAMEBUFFER_COMPLETE                      => Some(FramebufferStatus::Complete                   ),
+            gl::FRAMEBUFFER_UNDEFINED                     => Some(FramebufferStatus::Undefined                  ),
+            gl::FRAMEBUFFER_INCOMPLETE_ATTACHMENT         => Some(FramebufferStatus::IncompleteAttachment       ),
+            gl::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT => Some(FramebufferStatus::IncompleteMissingAttachment),
+            gl::FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER        => Some(FramebufferStatus::IncompleteDrawBuffer       ),
+            gl::FRAMEBUFFER_INCOMPLETE_READ_BUFFER        => Some(FramebufferStatus::IncompleteReadBuffer       ),
+            gl::FRAMEBUFFER_UNSUPPORTED                   => Some(FramebufferStatus::Unsupported                ),
+            gl::FRAMEBUFFER_INCOMPLETE_MULTISAMPLE        => Some(FramebufferStatus::IncompleteMultisample      ),
+            gl::FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS      => Some(FramebufferStatus::IncompleteLayerTargets     ),
+            _ => None,
+        }
+    }
+    pub fn is_complete(&self) -> bool {
+        *self == FramebufferStatus::Complete
+    }
+    pub fn to_result(&self) -> Result<(), Self> {
+        if self.is_complete() { Ok(()) } else { Err(*self) }
+    }
+}
+
+fn init_gbuffer() {
+    let gbuffer_texture_formats = [
+        gl::RGB32F, gl::RGB32F, gl::RGB32F, gl::RGB32F, gl::RGBA32F, gl::DEPTH_COMPONENT32F
+    ];
+    let gbuffer_textures = [0, 0, 0, 0, 0, 0];
+    let draw_buffers = [
+        gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1, gl::COLOR_ATTACHMENT2, gl::COLOR_ATTACHMENT3, gl::COLOR_ATTACHMENT4
+    ];
+
+
+    let mut fbo = 0;
+    unsafe {
+        gl::GenFramebuffers(1, &mut fbo);
+        gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, fbo);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, gbuffer_textures[0], 0);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::COLOR_ATTACHMENT1, gl::TEXTURE_2D, gbuffer_textures[1], 0);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::COLOR_ATTACHMENT2, gl::TEXTURE_2D, gbuffer_textures[2], 0);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::COLOR_ATTACHMENT3, gl::TEXTURE_2D, gbuffer_textures[3], 0);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::COLOR_ATTACHMENT4, gl::TEXTURE_2D, gbuffer_textures[4], 0);
+        gl::FramebufferTexture2D(gl::DRAW_FRAMEBUFFER, gl::DEPTH_ATTACHMENT,  gl::TEXTURE_2D, gbuffer_textures[5], 0);
+        gl::DrawBuffers(draw_buffers.len() as _, draw_buffers.as_ptr());
+        gl::CheckFramebufferStatus(gl::DRAW_FRAMEBUFFER);
+        gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, 0);
+    }
+
+    /*
+     * shader.vert
+layout(location = 0) out vec3 fPosition;
+layout(location = 1) out vec3 fNormal;
+layout(location = 2) out vec3 fAmbient;
+layout(location = 3) out vec3 fDiffuse;
+layout(location = 4) out vec4 fGlossyShininess;
+    */
+}
+
+fn draw_to_fbo(fbo: u32, w: i32, h: i32) {
+    unsafe {
+        gl::BindFramebuffer(gl::DRAW_FRAMEBUFFER, fbo);
+        gl::Viewport(0, 0, w, h);
+        gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    }
+    // render
+}
+
+// NOTE: Blitting also works with FBO 0 as destination (the screen!)
+fn blit_fbos(src_fbo: u32, w: i32, h: i32) {
+    unsafe {
+        gl::BindFramebuffer(gl::READ_FRAMEBUFFER, src_fbo);
+        gl::ReadBuffer(gl::COLOR_ATTACHMENT0);
+        gl::BlitFramebuffer(0, 0, 0, 0, w, h, w, h, gl::COLOR_BUFFER_BIT, gl::NEAREST);
+    }
+}
+
+/*
+fn cs() {
+    gl::MAX_COMPUTE_WORK_GROUP_COUNT // Number of dispatches
+    gl::MAX_COMPUTE_WORK_GROUP_SIZE // Individual max local_size in X, Y and Z 
+    gl::MAX_COMPUTE_WORK_GROUP_INVOCATIONS // Max total product of local_size X, Y and Z.
+/*
+#ifdef NVIDIA
+layout(local_size_x = 4, local_size_y = 4) in;
+#elif defined AMD
+layout(local_size_x = 8, local_size_y = 8) in;
+#else
+layout(local_size_x = 32, local_size_y = 32) in;
+#endif
+layout(rgba32f) uniform  readonly restrict image2D u_src;
+                uniform writeonly restrict image2D u_dst;
+
+// imageSize(u_src);
+// gl_GlobalInvocationID.xy;
+*/
+
+
+    prog.set_uniform("u_src", 0);
+    prog.set_uniform("u_dst", 1);
+    gl::BindImageTexture(0, src_tex.gl_id(), 0, gl::FALSE, 0, gl::READ_ONLY , gl::RGBA32F);
+    gl::BindImageTexture(1, dst_tex.gl_id(), 0, gl::FALSE, 0, gl::WRITE_ONLY, gl::RGBA32F);
+    // NOTE!!!! 32 = local_size dans le compute shader. 
+    gl::DispatchCompute(1 + w / 32, 1 + h / 32, 1);
+    gl::MemoryBarrier(gl::TEXTURE_FETCH_BARRIER_BIT | gl::SHADER_IMAGE_ACCESS_BARRIER_BIT | gl::FRAMEBUFFER_BARRIER_BIT);
+}
+*/

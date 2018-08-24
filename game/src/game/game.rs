@@ -58,6 +58,17 @@ impl Game {
         });
         info!("OpenGL context summary:\n{}", gx::ContextSummary::new());
         gx::set_error_hook(gl_error_hook);
+        fn gl_post_hook(name: &str) {
+            if name == "GetError" {
+                return;
+            }
+            trace!("gl{}()", name);
+            if unsafe { gx::SHOULD_TEMPORARILY_IGNORE_ERRORS } {
+                return;
+            }
+            check_gl!(name);
+        }
+        unsafe { gl::POST_HOOK = gl_post_hook; }
         gx::boot_gl();
         gx::set_debug_message_callback(Some(gl_debug_message_callback));
         gx::log_debug_message("OpenGL debug logging is enabled.");
