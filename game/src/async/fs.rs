@@ -1,15 +1,12 @@
-use std::thread;
-use std::sync::{Arc, Mutex, atomic::{self, AtomicBool, AtomicUsize, AtomicIsize, Ordering}};
-use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, atomic::{self, AtomicUsize, AtomicIsize, Ordering}};
 use std::mem;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
-use game::game::{MtShared, ThreadContext};
-use super::{Progress, Loading};
+use super::{Progress, Loading, MtShared, ThreadContext};
 
 #[derive(Debug)]
-pub enum LoadingFileTaskState {
+enum LoadingFileTaskState {
     Pending,
     Reading { file: File, buf: Vec<u8>, nb_bytes_read: usize, total_nb_bytes: usize, },
     Succeeded(Vec<u8>),
@@ -17,7 +14,7 @@ pub enum LoadingFileTaskState {
 }
 
 #[derive(Debug)]
-pub struct LoadingFileTaskData {
+struct LoadingFileTaskData {
     // Lightweight part, so poll() is super responsive
     pub thread_id: AtomicIsize,
     pub nb_bytes_read: AtomicUsize,
@@ -37,7 +34,17 @@ pub enum LoadingFileProgress {
 #[derive(Debug)]
 pub struct LoadingFile(Arc<LoadingFileTaskData>);
 
-impl MtShared {
+#[derive(Debug)]
+pub struct AsyncFS {
+    mt_shared: Arc<MtShared>,
+}
+
+impl AsyncFS {
+    pub fn new(mt_shared: Arc<MtShared>) -> Self {
+        Self {
+            mt_shared
+        }
+    }
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> LoadingFile {
         let task_data = Arc::new(LoadingFileTaskData {
             thread_id: AtomicIsize::new(-1),
@@ -46,7 +53,7 @@ impl MtShared {
             file_path: Box::from(path.as_ref()),
             state: Mutex::new(LoadingFileTaskState::Pending),
         });
-        self.file_io_tasks_queue.lock().unwrap().push_back(LoadingFile(task_data.clone()));
+        self.mt_shared.file_io_tasks_queue.lock().unwrap().push_back(LoadingFile(task_data.clone()));
         LoadingFile(task_data)
     }
 }
@@ -59,6 +66,13 @@ impl Progress for LoadingFileProgress {
         }
     }
 }
+
+impl LoadingFile {
+    pub fn path(&self) -> &Path {
+        &self.0.file_path
+    }
+}
+
 impl Loading for LoadingFile {
     type Item = Vec<u8>;
     type Error = String;
@@ -99,7 +113,7 @@ impl Loading for LoadingFile {
     fn cancel(self) { drop(self) }
 }
 
-pub fn process_file_io_task(cx: &ThreadContext, task: LoadingFile) {
+pub(super) fn process_file_io_task(cx: &ThreadContext, task: LoadingFile) {
     while Arc::strong_count(&task.0) > 1 { // If the client is not interested anymore, we might as well not do it
         // Make it progress a bit !
         let mut state = task.0.state.lock().unwrap();

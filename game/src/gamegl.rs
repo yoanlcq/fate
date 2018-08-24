@@ -1,13 +1,14 @@
 use std::mem;
-use std::path::{PathBuf, Path};
+use std::path::{PathBuf};
 use std::collections::HashMap;
 use std::rc::Rc;
 use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4};
-use fate::gx::{self, Object, gl, GLSLType};
+use fate::gx::{self, Object, gl::{self, types::*}, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::{Font, Atlas, AtlasGlyphInfo};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use game::SharedGame;
+use async::{Loading, Progress, Async, fs::{LoadingFile, LoadingFileProgress}};
 use system::*;
 
 static mut NB_ERRORS: usize = 0;
@@ -216,6 +217,8 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
     }
 }
 
+type LoadingImg = Async<(img::Metadata, img::AnyImage), img::Error>;
+
 #[derive(Debug)]
 pub struct GLSystem {
     viewport_size: Extent2<u32>,
@@ -223,6 +226,8 @@ pub struct GLSystem {
     skybox_program: gx::ProgramEx,
     text_program: gx::ProgramEx,
 	cube_map_tabs: [gx::Texture; 2],
+    files_for_2nd_cube_map_tab: HashMap<GLsizei, LoadingFile>,
+    images_for_2nd_cube_map_tab: HashMap<GLsizei, LoadingImg>,
     atlas_array: gx::Texture,
     basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
@@ -231,7 +236,6 @@ pub struct GLSystem {
     mesh_normal_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_color_buffers: HashMap<MeshID, gx::Buffer>,
     mesh_index_buffers: HashMap<MeshID, gx::Buffer>,
-    pipeline_statistics_arb_queries: HashMap<gx::QueryTarget, gx::Query>,
 }
 
 fn create_1st_cube_map_tab() -> gx::Texture {
@@ -287,16 +291,13 @@ fn create_1st_cube_map_tab() -> gx::Texture {
     }
 }
 
-fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
+fn create_2nd_cube_map_tab(g: &G) -> (gx::Texture, HashMap<GLsizei, LoadingFile>) {
     let levels = 1;
-    let level = 0;
     let internal_format = gl::RGB8;
     let w = 1024_u32;
     let h = 1024_u32;
-	let x = 0;
-	let y = 0;
 
-    let dir = data_path.join(PathBuf::from("art/3rdparty/mayhem"));
+    let dir = g.res.data_path().join(PathBuf::from("art/3rdparty/mayhem"));
     let suffixes = [ "ft", "bk", "up", "dn", "rt", "lf" ];
     let extension = "jpg";
     let mut paths = vec![];
@@ -315,27 +316,21 @@ fn create_2st_cube_map_tab(data_path: &Path) -> gx::Texture {
         assert_eq!(metadata.pixel_format.bits(), 24);
     }
 
-    unsafe {
+    let files = paths.iter().enumerate().map(|(z, path)| {
+        info!("A loading job has started for `{}`", path.display());
+        (z as GLsizei, g.fs.load_file(path))
+    }).collect();
+
+    let tex = unsafe {
         let tex = check_gl!(gx::Texture::new());
         check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, tex.gl_id()));
         check_gl!(gl::TexStorage3D(gl::TEXTURE_CUBE_MAP_ARRAY, levels, internal_format, w as _, h as _, paths.len() as _));
-
-        for (z, path) in paths.iter().enumerate() {
-            info!("Loading `{}`", path.display());
-            let img = img::load(&path);
-            match img {
-                Ok((_, img::AnyImage::Rgb8(img))) => {
-                    let format = gl::RGB;
-                    let type_ = gl::UNSIGNED_BYTE;
-                    check_gl!(gl::TexSubImage3D(gl::TEXTURE_CUBE_MAP_ARRAY, level, x, y, z as _, w as _, h as _, 1, format, type_, img.as_ptr() as _));
-                },
-                _ => unimplemented!{},
-            }
-        }
-
+        check_gl!(gl::ClearTexImage(tex.gl_id(), 0, gl::RGB, gl::UNSIGNED_BYTE, Rgb::<u8>::new(32, 110, 255).as_ptr() as _));
         check_gl!(gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0));
         tex
-    }
+    };
+
+    (tex, files)
 }
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
@@ -539,31 +534,10 @@ impl TextMesh {
 
 impl GLSystem {
     pub fn new(viewport_size: Extent2<u32>, g: &SharedGame) -> Self {
-        let pipeline_statistics_arb_targets = [
-            gx::QueryTarget::VerticesSubmittedARB              ,
-            gx::QueryTarget::PrimitivesSubmittedARB            ,
-            gx::QueryTarget::VertexShaderInvocationsARB        ,
-            gx::QueryTarget::TessControlShaderPatchesARB       ,
-            gx::QueryTarget::TessEvaluationShaderInvocationsARB,
-            gx::QueryTarget::GeometryShaderInvocations         ,
-            gx::QueryTarget::GeometryShaderPrimitivesEmittedARB,
-            gx::QueryTarget::FragmentShaderInvocationsARB      ,
-            gx::QueryTarget::ComputeShaderInvocationsARB       ,
-            gx::QueryTarget::ClippingInputPrimitivesARB        ,
-            gx::QueryTarget::ClippingOutputPrimitivesARB       ,
-        ];
-        let pipeline_statistics_arb_queries = if pipeline_statistics_arb_targets[0].is_supported() {
-            debug!("GL: ARB_pipeline_statistics_query is supported.");
-            pipeline_statistics_arb_targets.into_iter()
-                .map(|target| (*target, gx::Query::new()))
-                .collect()
-        } else {
-            debug!("GL: ARB_pipeline_statistics_query is unsupported.");
-            Default::default()
-        };
-
         let basis33_atlas_info = Rc::new(AtlasInfo::new(g.res.basis33(), g.res.basis33_atlas()));
         let text_mesh = TextMesh::with_capacity(1024, basis33_atlas_info.clone());
+
+        let (cube_map_tab_2, files_for_2nd_cube_map_tab) = create_2nd_cube_map_tab(g);
 
         Self {
             viewport_size,
@@ -571,7 +545,9 @@ impl GLSystem {
             skybox_program: unwrap_or_display_error(new_gl_skybox_program()),
             text_program:   unwrap_or_display_error(new_gl_text_program()),
             atlas_array: create_gl_font_atlas_array(g.res.basis33_atlas()),
-            cube_map_tabs: [create_1st_cube_map_tab(), create_2st_cube_map_tab(g.res.data_path())],
+            files_for_2nd_cube_map_tab,
+            images_for_2nd_cube_map_tab: HashMap::new(),
+            cube_map_tabs: [create_1st_cube_map_tab(), cube_map_tab_2],
             basis33_atlas_info,
             text_mesh,
             mesh_vaos: Default::default(),
@@ -579,7 +555,6 @@ impl GLSystem {
             mesh_normal_buffers: Default::default(),
             mesh_color_buffers: Default::default(),
             mesh_index_buffers: Default::default(),
-            pipeline_statistics_arb_queries,
         }
     }
 
@@ -829,28 +804,60 @@ impl System for GLSystem {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        for (target, query) in self.pipeline_statistics_arb_queries.iter() {
-            target.begin(query);
-        }
-
         let mut text = match g.last_fps_stats() {
             Some(fps_stats) => format!("{} FPS", fps_stats.fps()),
-            None => String::new(),
+            None => format!("(No FPS stats available yet)"),
         };
-        text += "\nHello, text world!";
+        text += "\nHello, text world!\n\n";
+
+        let mut completed = vec![];
+        for (z, file) in self.files_for_2nd_cube_map_tab.iter() {
+            match file.poll() {
+                LoadingFileProgress::Pending => continue,
+                LoadingFileProgress::Loading { nb_bytes_read, total_nb_bytes, thread_id } => {
+                    let progress = nb_bytes_read as f32 / total_nb_bytes as f32;
+                    text += &format!("Loading `{}`... {}% (Thread {})\n", file.path().display(), (100. * progress).round() as u32, thread_id);
+                },
+                LoadingFileProgress::Complete { .. } => {
+                    completed.push(*z);
+                },
+            }
+        }
+        let datas: Vec<_> = completed.into_iter().map(|z| {
+            let file = self.files_for_2nd_cube_map_tab.remove(&z).unwrap();
+            let data = file.wait().unwrap();
+            (z, data)
+        }).collect();
+        self.images_for_2nd_cube_map_tab.extend(datas.into_iter().map(|(z, data)| {
+            (z, g.mt.do_async(Box::new(|| img::load_from_memory(data))))
+        }));
+
+        let mut completed = vec![];
+        for (z, img) in self.images_for_2nd_cube_map_tab.iter() {
+            if img.poll().is_complete() {
+                completed.push(*z);
+            }
+        }
+        let cube_map_tab_2 = self.cube_map_tabs[1].gl_id();
+        for (z, img) in completed.into_iter().map(|z| (z, self.images_for_2nd_cube_map_tab.remove(&z).unwrap())) {
+            match img.wait() {
+                Ok((_, img::AnyImage::Rgb8(img))) => {
+                    let level = 0;
+                    let format = gl::RGB;
+                    let type_ = gl::UNSIGNED_BYTE;
+                    let (x, y, w, h) = (0, 0, 1024, 1024); // XXX
+                    unsafe {
+                        check_gl!(gl::TextureSubImage3D(cube_map_tab_2, level, x, y, z, w, h, 1, format, type_, img.as_ptr() as _));
+                    }
+                },
+                _ => unimplemented!{},
+            }
+        }
+
         self.text_mesh.set_text(&text);
 
         self.pump_scene_draw_commands(&mut g.scene);
         self.render_scene(&mut g.scene, d);
-
-        for target in self.pipeline_statistics_arb_queries.keys() {
-            target.end();
-        }
-        // FIXME: No, we don't wanna wait!!
-        for (target, query) in self.pipeline_statistics_arb_queries.iter() {
-            let result = query.wait_result();
-            info!("Pipeline statistics ARB: {:?} = {}", target, result);
-        }
     }
 }
 
