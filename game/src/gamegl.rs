@@ -2,13 +2,14 @@ use std::mem;
 use std::path::{PathBuf, Path};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::io;
 use fate::math::{Rgba, Rgb, Mat4, Extent2, Vec3, Vec4, Transform};
 use fate::gx::{self, Object, gl::{self, types::*}, GLSLType};
 use fate::img::{self, AsSlice};
 use fate::font::{Font, Atlas, AtlasGlyphInfo};
+use fate::mt::{self, TaskExt};
 use scene::{Scene, MeshID, Mesh, MeshInstance, SceneCommand, Camera};
 use game::SharedGame;
-use async::{Loading, Progress, Async, fs::{LoadingFile, LoadingFileProgress}};
 use system::*;
 use gltf;
 
@@ -218,8 +219,6 @@ fn gx_buffer_data_dsa<T>(buf: &gx::Buffer, data: &[T], usage: gx::BufferUsage) {
     }
 }
 
-type LoadingImg = Async<(img::Metadata, img::AnyImage), img::Error>;
-
 #[derive(Debug)]
 pub struct GLSystem {
     viewport_size: Extent2<u32>,
@@ -227,8 +226,7 @@ pub struct GLSystem {
     skybox_program: gx::ProgramEx,
     text_program: gx::ProgramEx,
 	cube_map_tabs: [gx::Texture; 2],
-    files_for_2nd_cube_map_tab: HashMap<GLsizei, LoadingFile>,
-    images_for_2nd_cube_map_tab: HashMap<GLsizei, LoadingImg>,
+    images_for_2nd_cube_map_tab: HashMap<GLsizei, ImgFuture>,
     atlas_array: gx::Texture,
     basis33_atlas_info: Rc<AtlasInfo>,
     text_mesh: TextMesh,
@@ -293,7 +291,9 @@ fn create_1st_cube_map_tab() -> gx::Texture {
     }
 }
 
-fn create_2nd_cube_map_tab(g: &G) -> (gx::Texture, HashMap<GLsizei, LoadingFile>) {
+type ImgFuture = mt::Future<mt::Then<mt::ReadFile, mt::Async<io::Result<img::Result<(img::Metadata, img::AnyImage)>>>>>;
+
+fn create_2nd_cube_map_tab(g: &G) -> (gx::Texture, HashMap<GLsizei, ImgFuture>) {
     let levels = 1;
     let internal_format = gl::RGB8;
     let w = 1024_u32;
@@ -319,8 +319,10 @@ fn create_2nd_cube_map_tab(g: &G) -> (gx::Texture, HashMap<GLsizei, LoadingFile>
     }
 
     let files = paths.iter().enumerate().map(|(z, path)| {
-        info!("A loading job has started for `{}`", path.display());
-        (z as GLsizei, g.fs.load_file(path))
+        let future = g.mt.schedule(mt::ReadFile::new(path).then(|result: io::Result<Vec<u8>>| {
+            mt::Async::new(move || result.map(|data| img::load_from_memory(data)))
+        }));
+        (z as GLsizei, future)
     }).collect();
 
     let tex = unsafe {
@@ -506,7 +508,7 @@ impl TextMesh {
                 texcoords: texcoords.position() + Vec2::unit_x() * texcoords.w,
             };
 
-            assert!(self.nb_quads < self.max_quads);
+            assert!(self.nb_quads < self.max_quads, "This 2D text buffer only has enough memory for up to {} quads", self.max_quads);
             self.nb_quads += 1;
 
             vertices.push(bottom_left);
@@ -639,9 +641,9 @@ impl LoadedGltf {
 impl GLSystem {
     pub fn new(viewport_size: Extent2<u32>, g: &SharedGame) -> Self {
         let basis33_atlas_info = Rc::new(AtlasInfo::new(g.res.basis33(), g.res.basis33_atlas()));
-        let text_mesh = TextMesh::with_capacity(1024, basis33_atlas_info.clone());
+        let text_mesh = TextMesh::with_capacity(2048, basis33_atlas_info.clone());
 
-        let (cube_map_tab_2, files_for_2nd_cube_map_tab) = create_2nd_cube_map_tab(g);
+        let (cube_map_tab_2, images_for_2nd_cube_map_tab) = create_2nd_cube_map_tab(g);
 
         Self {
             viewport_size,
@@ -649,8 +651,7 @@ impl GLSystem {
             skybox_program: unwrap_or_display_error(new_gl_skybox_program()),
             text_program:   unwrap_or_display_error(new_gl_text_program()),
             atlas_array: create_gl_font_atlas_array(g.res.basis33_atlas()),
-            files_for_2nd_cube_map_tab,
-            images_for_2nd_cube_map_tab: HashMap::new(),
+            images_for_2nd_cube_map_tab,
             cube_map_tabs: [create_1st_cube_map_tab(), cube_map_tab_2],
             basis33_atlas_info,
             text_mesh,
@@ -756,8 +757,8 @@ impl GLSystem {
             assert_eq!(tabs.array_len, 4);
             self.skybox_program.set_uniform_unchecked(tabs.location, &[funny, funny+1, funny, funny+1]);
 
-            assert!((scene.skybox_selector.tab as i32) < tabs.array_len);
-            self.skybox_program.set_uniform_primitive("u_skybox.tab", &[scene.skybox_selector.tab as u32]);
+            let tab = ::std::cmp::min(scene.skybox_selector.tab as i32, tabs.array_len - 1);
+            self.skybox_program.set_uniform_primitive("u_skybox.tab", &[tab as u32]);
             self.skybox_program.set_uniform_primitive("u_skybox.layer", &[scene.skybox_selector.layer as f32]);
         }
 
@@ -909,44 +910,45 @@ impl System for GLSystem {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
+
+        // ---- Text
+
         let mut text = match g.last_fps_stats() {
             Some(fps_stats) => format!("{} FPS", fps_stats.fps()),
             None => format!("(No FPS stats available yet)"),
         };
         text += "\nHello, text world!\n\n";
 
-        let mut completed = vec![];
-        for (z, file) in self.files_for_2nd_cube_map_tab.iter() {
-            match file.poll() {
-                LoadingFileProgress::Pending => continue,
-                LoadingFileProgress::Loading { nb_bytes_read, total_nb_bytes, thread_id } => {
-                    let progress = nb_bytes_read as f32 / total_nb_bytes as f32;
-                    text += &format!("Loading `{}`... {}% (Thread {})\n", file.path().display(), (100. * progress).round() as u32, thread_id);
-                },
-                LoadingFileProgress::Complete { .. } => {
-                    completed.push(*z);
-                },
+
+        // ---- Thread statuses
+
+        for i in 0 .. 32 {
+            if let Some(status) = g.mt.thread_status(i) {
+                text += &format!("Thread {} status: {:?}\n", i, status);
             }
         }
-        let datas: Vec<_> = completed.into_iter().map(|z| {
-            let file = self.files_for_2nd_cube_map_tab.remove(&z).unwrap();
-            let data = file.wait().unwrap();
-            (z, data)
-        }).collect();
-        self.images_for_2nd_cube_map_tab.extend(datas.into_iter().map(|(z, data)| {
-            (z, g.mt.do_async(Box::new(|| img::load_from_memory(data))))
-        }));
+        text += "\n";
+
+
+        // ---- Loading images async
 
         let mut completed = vec![];
-        for (z, img) in self.images_for_2nd_cube_map_tab.iter() {
-            if img.poll().is_complete() {
+        for (z, future) in self.images_for_2nd_cube_map_tab.iter() {
+            if future.is_complete() {
                 completed.push(*z);
+            } else {
+                let progress = match future.poll() {
+                    mt::Either::Left(fp) => format!("{}%", if fp.nsize == 0 { 0. } else { fp.nread as f32 / fp.nsize as f32 }),
+                    mt::Either::Right(_) => format!("Converting..."),
+                };
+                text += &format!("Loading {} (z = {}): {}\n", future.as_ref().first().path().display(), z, progress);
             }
         }
+
         let cube_map_tab_2 = self.cube_map_tabs[1].gl_id();
-        for (z, img) in completed.into_iter().map(|z| (z, self.images_for_2nd_cube_map_tab.remove(&z).unwrap())) {
-            match img.wait() {
-                Ok((_, img::AnyImage::Rgb8(img))) => {
+        for (z, future) in completed.into_iter().map(|z| (z, self.images_for_2nd_cube_map_tab.remove(&z).unwrap())) {
+            match future.wait() {
+                Ok(Ok((_, img::AnyImage::Rgb8(img)))) => {
                     let level = 0;
                     let format = gl::RGB;
                     let type_ = gl::UNSIGNED_BYTE;

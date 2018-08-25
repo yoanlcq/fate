@@ -6,8 +6,8 @@ use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
 use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::gx::{self, gl};
+use fate::mt;
 use super::SharedGame;
-use async;
 use scene::{SceneLogicSystem, SceneCommandClearerSystem};
 use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
@@ -25,20 +25,8 @@ pub struct Game {
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
     fps_ceil: Option<f64>,
-    threads: async::mt::ThreadPool,
+    threads: mt::ThreadPool,
 }
-
-impl Drop for Game {
-    fn drop(&mut self) {
-        self.shared.borrow().mt.quit.store(true, ::std::sync::atomic::Ordering::SeqCst);
-        for (id, t) in self.threads.drain() {
-            debug!("Waiting for thread `{}` to exit", id.name);
-            let status = t.join().unwrap();
-            debug!("Thread `{}` has exited with status {:?}", id.name, status);
-        }
-    }
-}
-
 
 impl Game {
     pub fn new() -> Self {
@@ -74,7 +62,7 @@ impl Game {
         gx::log_debug_message("OpenGL debug logging is enabled.");
 
         let canvas_size = platform.canvas_size();
-        let (mt, threads) = async::mt::spawn_threads(3);
+        let (mt, threads) = mt::spawn_threads(3);
         let shared = SharedGame::new(canvas_size, mt.clone());
         let systems: Vec<Box<System>> = vec![
             Box::new(InputUpdater::new()),

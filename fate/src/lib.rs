@@ -9,3 +9,4 @@ pub extern crate fate_img as img;
 pub extern crate fate_lab as lab;
 pub extern crate fate_main_loop as main_loop;
 pub extern crate fate_math as math;
+pub extern crate fate_mt as mt;

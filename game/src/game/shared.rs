@@ -6,7 +6,7 @@ use message::Message;
 use scene::Scene;
 use input::Input;
 use resources::Resources;
-use async::{MtShared, AsyncFS};
+use fate::mt;
 use fate::math::Extent2;
 use fate::lab::fps::FpsStats;
 
@@ -16,8 +16,7 @@ pub struct SharedGame {
     pub frame_time_manager: FrameTimeManager,
     pub pending_messages: VecDeque<Message>,
     fps_stats_history: VecDeque<FpsStats>,
-    pub mt: Arc<MtShared>,
-    pub fs: AsyncFS,
+    pub mt: Arc<mt::SharedThreadContext>,
     pub scene: Scene,
     pub input: Input,
     pub res: Resources,
@@ -27,13 +26,12 @@ pub type G = SharedGame;
 
 
 impl SharedGame {
-    pub fn new(canvas_size: Extent2<u32>, mt: Arc<MtShared>) -> Self {
+    pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
         Self {
             t: Duration::default(),
             frame_time_manager: FrameTimeManager::with_max_len(60),
             pending_messages: VecDeque::new(),
             fps_stats_history: VecDeque::new(),
-            fs: AsyncFS::new(mt.clone()),
             mt,
             scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),

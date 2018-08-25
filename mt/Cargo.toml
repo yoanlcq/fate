@@ -1,0 +1,9 @@
+[package]
+name = "fate-mt"
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "Multi-threading-based modules and utilities."
+
+[dependencies]
+either = "~1.5"
+log = "~0.4.2"

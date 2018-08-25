@@ -16,3 +16,4 @@ fate-img = { path = "../img" }
 fate-lab = { path = "../lab" }
 fate-main-loop = { path = "../main-loop" }
 fate-math = { path = "../math" }
+fate-mt = { path = "../mt" }

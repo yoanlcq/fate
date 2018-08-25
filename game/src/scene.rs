@@ -505,8 +505,10 @@ impl System for SceneLogicSystem {
             // Rotate
             let disp = g.input.mouse_displacement();
             if g.input.mouse_button(MouseButton::Left).is_down() && disp != Vec2::zero() {
-                let degrees_per_pixel = 0.6;
-                let disp = disp.map(|x| (x * degrees_per_pixel).to_radians() as f32);
+
+                let degrees_per_screen_width = 180_f32 * 4.;
+                let disp = disp.map(|x| (x * x * x.signum()) as f32) * degrees_per_screen_width.to_radians() / camera.viewport_size.w as f32;
+
                 let mut self_to_target = camera.target - camera.position;
                 let rx = Quaternion::rotation_3d(disp.y, camera.right());
                 let ry = Quaternion::rotation_3d(disp.x, camera.up());
