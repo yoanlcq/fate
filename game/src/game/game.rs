@@ -14,6 +14,7 @@ use quit::{Quit, Quitter};
 use input::InputUpdater;
 use event::Event;
 use gamegl::{self, GLSystem};
+use dc;
 
 
 // Can't derive anything :/
@@ -38,7 +39,7 @@ impl Game {
             _ => Box::new(DmcPlatform::new(&platform_settings)) as Box<Platform>,
         };
 
-        gamegl::init_gl(platform.as_ref());
+        gamegl::gl_setup::gl_setup(platform.as_ref());
 
         let canvas_size = platform.canvas_size();
         let (mt, threads) = mt::spawn_threads(3);
@@ -48,6 +49,7 @@ impl Game {
             Box::new(Quitter::default()),
             Box::new(SceneLogicSystem::new()),
             Box::new(GLSystem::new(canvas_size, &shared)),
+            Box::new(dc::DeviceContextCommandClearerSystem::new()),
             Box::new(SceneCommandClearerSystem::new()),
         ];
         let fps_manager = FpsManager {

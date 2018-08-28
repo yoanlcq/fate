@@ -1,14 +1,18 @@
 use std::time::Duration;
 use std::collections::VecDeque;
 use std::sync::Arc;
+
+use fate::mt;
+use fate::math::Extent2;
+use fate::lab::fps::FpsStats;
+
 use frame_time::FrameTimeManager;
 use message::Message;
 use scene::Scene;
 use input::Input;
 use resources::Resources;
-use fate::mt;
-use fate::math::Extent2;
-use fate::lab::fps::FpsStats;
+use dc;
+
 
 #[derive(Debug)]
 pub struct SharedGame {
@@ -20,6 +24,7 @@ pub struct SharedGame {
     pub scene: Scene,
     pub input: Input,
     pub res: Resources,
+    pub dc: dc::DeviceContext,
 }
 
 pub type G = SharedGame;
@@ -36,6 +41,7 @@ impl SharedGame {
             scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),
             res: Resources::new().unwrap(),
+            dc: dc::DeviceContext::with_capacity(512),
         }
     }
     #[allow(dead_code)]
