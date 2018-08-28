@@ -5,7 +5,6 @@ use std::collections::VecDeque;
 use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
 use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
-use fate::gx::{self, gl};
 use fate::mt;
 use super::SharedGame;
 use scene::{SceneLogicSystem, SceneCommandClearerSystem};
@@ -14,7 +13,7 @@ use platform::{self, Platform, DmcPlatform, Sdl2Platform};
 use quit::{Quit, Quitter};
 use input::InputUpdater;
 use event::Event;
-use gamegl::{gl_error_hook, GLSystem, gl_debug_message_callback};
+use gamegl::{self, GLSystem};
 
 
 // Can't derive anything :/
@@ -39,27 +38,7 @@ impl Game {
             _ => Box::new(DmcPlatform::new(&platform_settings)) as Box<Platform>,
         };
 
-        gl::load_with(|s| {
-            let f = platform.gl_get_proc_address(s);
-            trace!("GL: {}: {}", if f.is_null() { "Failed" } else { "Loaded" }, s);
-            f
-        });
-        info!("OpenGL context summary:\n{}", gx::ContextSummary::new());
-        gx::set_error_hook(gl_error_hook);
-        fn gl_post_hook(name: &str) {
-            if name == "GetError" {
-                return;
-            }
-            trace!("gl{}()", name);
-            if unsafe { gx::SHOULD_TEMPORARILY_IGNORE_ERRORS } {
-                return;
-            }
-            check_gl!(name);
-        }
-        unsafe { gl::POST_HOOK = gl_post_hook; }
-        gx::boot_gl();
-        gx::set_debug_message_callback(Some(gl_debug_message_callback));
-        gx::log_debug_message("OpenGL debug logging is enabled.");
+        gamegl::init_gl(platform.as_ref());
 
         let canvas_size = platform.canvas_size();
         let (mt, threads) = mt::spawn_threads(3);
