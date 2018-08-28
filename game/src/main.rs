@@ -51,6 +51,7 @@ pub mod scene;
 pub mod input;
 pub mod resources;
 pub mod dc;
+pub mod stock;
 
 fn main() {
     early::setup_log();

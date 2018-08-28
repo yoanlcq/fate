@@ -24,7 +24,7 @@ pub struct SharedGame {
     pub scene: Scene,
     pub input: Input,
     pub res: Resources,
-    pub dc: dc::DeviceContext,
+    pub dc: dc::DC,
 }
 
 pub type G = SharedGame;
@@ -41,7 +41,7 @@ impl SharedGame {
             scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),
             res: Resources::new().unwrap(),
-            dc: dc::DeviceContext::with_capacity(512),
+            dc: dc::DC::with_capacity(512),
         }
     }
     #[allow(dead_code)]

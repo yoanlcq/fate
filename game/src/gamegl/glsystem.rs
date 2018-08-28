@@ -26,7 +26,7 @@ impl System for GLSystem {
 }
 
 impl GLSystem {
-    fn process_dc_cmds(&mut self, dc: &dc::DeviceContext) {
+    fn process_dc_cmds(&mut self, dc: &dc::DC) {
         for cmd in dc.cmd_queue.iter() {
             self.execute_dc_cmd(cmd);
         }
@@ -42,7 +42,6 @@ impl GLSystem {
         unsafe {
             let Extent2 { w, h } = self.viewport_size;
             gl::Viewport(0, 0, w as _, h as _);
-            gl::ClearColor(1., 0., 1., 1.);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
     }
