@@ -24,6 +24,8 @@ impl System for GLSystem {
         let Extent2 { w, h } = g.input.canvas_size();
         unsafe {
             gl::Viewport(0, 0, w as _, h as _);
+            let Rgba { r, g, b, a } = g.viewport_border_color();
+            gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
@@ -52,15 +54,25 @@ impl GLSystem {
         match *node {
             ViewportNode::Whole { ref info, .. } => unsafe {
                 let Rect { x, y, w, h } = rect;
-                let Rgba { r, g, b, a } = info.clear_color;
-
                 gl::Viewport(x as _, y as _, w as _, h as _);
 
-                // Temprary
+                // Temporary
                 gl::Enable(gl::SCISSOR_TEST);
+
+                let (bx, by) = if id == g.root_viewport_node_id() { 
+                    (0, 0)
+                } else { 
+                    (g.viewport_border_px(), g.viewport_border_px())
+                };
+                if w < bx+bx || h < by+by {
+                    return;
+                }
+                let (x, y, w, h) = (x+bx, y+by, w-bx-bx, h-by-by);
+                let Rgba { r, g, b, a } = info.clear_color;
                 gl::Scissor(x as _, y as _, w as _, h as _);
                 gl::ClearColor(r, g, b, a);
-                gl::Clear(gl::COLOR_BUFFER_BIT);
+                gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
+
                 gl::Disable(gl::SCISSOR_TEST);
             },
             ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction }, .. } => {

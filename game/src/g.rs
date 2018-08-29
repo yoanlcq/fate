@@ -99,6 +99,8 @@ pub struct G {
 
     // "singletons"
     clear_color: Rgba<f32>,
+    viewport_border_color: Rgba<f32>,
+    viewport_border_px: u32,
     _highest_viewport_node_id: ViewportNodeID, // Do not keep; Replace by SlotMap!
     root_viewport_node_id: ViewportNodeID,
     focused_viewport_node_id: ViewportNodeID,
@@ -155,6 +157,8 @@ impl G {
             root_viewport_node_id,
             focused_viewport_node_id: root_viewport_node_id,
             hovered_viewport_node_id: root_viewport_node_id,
+            viewport_border_px: 1,
+            viewport_border_color: Rgba::grey(0.96),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -179,6 +183,12 @@ impl G {
     }
     pub fn clear_color(&self) -> Rgba<f32> {
         self.clear_color
+    }
+    pub fn viewport_border_color(&self) -> Rgba<f32> {
+        self.viewport_border_color
+    }
+    pub fn viewport_border_px(&self) -> u32 {
+        self.viewport_border_px
     }
     pub fn root_viewport_node_id(&self) -> ViewportNodeID {
         self.root_viewport_node_id
