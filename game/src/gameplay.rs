@@ -14,6 +14,7 @@ impl System for Gameplay {
         match key.sym {
             Some(Keysym::V) if state.is_down() => g.viewport_split_v(),
             Some(Keysym::H) if state.is_down() => g.viewport_split_h(),
+            Some(Keysym::M) if state.is_down() => g.viewport_merge(),
             _ => {},
         }
     }

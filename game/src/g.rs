@@ -39,8 +39,12 @@ pub struct Split {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ViewportNode {
-    Whole { info: ViewportInfo },
+    Whole {
+        parent: Option<ViewportNodeID>,
+        info: ViewportInfo
+    },
     Split {
+        parent: Option<ViewportNodeID>,
         split: Split,
         children: (ViewportNodeID, ViewportNodeID),
     }
@@ -54,7 +58,10 @@ pub struct ViewportInfo {
 
 impl Default for ViewportNode {
     fn default() -> Self {
-        ViewportNode::Whole { info: Default::default() }
+        ViewportNode::Whole {
+            parent: None,
+            info: Default::default(),
+        }
     }
 }
 
@@ -202,11 +209,12 @@ impl G {
 
         let info = {
             let node = self.viewport_node_mut(id).unwrap();
-            let info = match node {
+            let (parent, info) = match *node {
                 ViewportNode::Split { .. } => panic!("A non-leaf viewport node cannot be focused"),
-                ViewportNode::Whole { info } => info,
+                ViewportNode::Whole { ref info, parent, .. } => (parent, info.clone()),
             };
             *node = ViewportNode::Split {
+                parent,
                 children: (c0_id, c1_id),
                 split: Split {
                     direction,
@@ -215,20 +223,51 @@ impl G {
                     value: 0.,
                 }
             };
-            info.clone()
+            info
         };
 
         self._highest_viewport_node_id.0 += 2;
-        let mut c0_info = info.clone();
+        let c0_info = info.clone();
         let mut c1_info = info;
 
-        c0_info.clear_color = Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.);
+        self.focused_viewport_node_id = c0_id;
         c1_info.clear_color = Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.);
 
-        let c0_node = ViewportNode::Whole { info: c0_info };
-        let c1_node = ViewportNode::Whole { info: c1_info };
+        let c0_node = ViewportNode::Whole { info: c0_info, parent: Some(id) };
+        let c1_node = ViewportNode::Whole { info: c1_info, parent: Some(id) };
         self.viewport_nodes.insert(c0_id, c0_node);
         self.viewport_nodes.insert(c1_id, c1_node);
-        self.focused_viewport_node_id = c0_id;
+    }
+    /// Merges the focused viewport node into its neighbour.
+    pub fn viewport_merge(&mut self) {
+        let focus_id = self.focused_viewport_node_id();
+
+        let (merge_id, info) = {
+            let focus = self.viewport_node_mut(focus_id).unwrap();
+            let (parent, info) = match *focus {
+                ViewportNode::Split { .. } => panic!("A non-leaf viewport node cannot be focused"),
+                ViewportNode::Whole { parent, ref info } => (parent, info.clone()),
+            };
+            (parent, info)
+        };
+
+        let merge_id = match merge_id {
+            None => return,
+            Some(x) => x,
+        };
+
+        let (c0_id, c1_id) = {
+            let merge = self.viewport_node_mut(merge_id).unwrap();
+            let (parent, c0_id, c1_id) = match *merge {
+                ViewportNode::Whole { .. } => panic!("A parent node can't be whole"),
+                ViewportNode::Split { parent, children, .. } => (parent, children.0, children.1),
+            };
+            *merge = ViewportNode::Whole { info, parent };
+            (c0_id, c1_id)
+        };
+
+        self.viewport_nodes.remove(&c0_id).unwrap();
+        self.viewport_nodes.remove(&c1_id).unwrap();
+        self.focused_viewport_node_id = merge_id;
     }
 }

@@ -50,7 +50,7 @@ impl GLSystem {
     fn draw_viewport(&mut self, g: &G, rect: Rect<u32, u32>, id: ViewportNodeID, d: &Draw) {
         let node = g.viewport_node(id).unwrap();
         match *node {
-            ViewportNode::Whole { ref info } => unsafe {
+            ViewportNode::Whole { ref info, .. } => unsafe {
                 let Rect { x, y, w, h } = rect;
                 let Rgba { r, g, b, a } = info.clear_color;
 
@@ -63,20 +63,20 @@ impl GLSystem {
                 gl::Clear(gl::COLOR_BUFFER_BIT);
                 gl::Disable(gl::SCISSOR_TEST);
             },
-            ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction } } => {
+            ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction }, .. } => {
                 // assume value is relative to middle
                 let mut r0 = rect;
                 let mut r1 = rect;
                 match direction {
                     SplitDirection::Horizontal => {
                         r0.h /= 2;
-                        r1.h /= 2;
-                        r1.y += r0.h;
+                        r1.h = rect.h - r0.h;
+                        r1.y = rect.y + r0.h;
                     },
                     SplitDirection::Vertical => {
                         r0.w /= 2;
-                        r1.w /= 2;
-                        r1.x += r0.w;
+                        r1.w = rect.w - r0.w;
+                        r1.x = rect.x + r0.w;
                     },
                 }
                 self.draw_viewport(g, r0, c0, d);
