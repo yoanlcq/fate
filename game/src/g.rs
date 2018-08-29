@@ -5,7 +5,7 @@ use std::sync::Arc;
 use rand::random;
 
 use fate::mt;
-use fate::math::{Extent2, Rgba};
+use fate::math::{Extent2, Rgba, Rect};
 use fate::lab::fps::FpsStats;
 
 use frame_time::FrameTimeManager;
@@ -13,6 +13,8 @@ use message::Message;
 use input::Input;
 use resources::Resources;
 use gpu::GpuCmd;
+use mouse_cursor::MouseCursor;
+
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum SplitOrigin {
@@ -98,13 +100,14 @@ pub struct G {
     gpu_cmd_queue: VecDeque<GpuCmd>,
 
     // "singletons"
+    pub mouse_cursor: MouseCursor,
     clear_color: Rgba<f32>,
     viewport_border_color: Rgba<f32>,
     viewport_border_px: u32,
     _highest_viewport_node_id: ViewportNodeID, // Do not keep; Replace by SlotMap!
     root_viewport_node_id: ViewportNodeID,
     focused_viewport_node_id: ViewportNodeID,
-    hovered_viewport_node_id: ViewportNodeID,
+    hovered_viewport_node_id: Option<ViewportNodeID>,
     viewport_nodes: HashMap<ViewportNodeID, ViewportNode>,
     /*
     skybox_is_enabled: bool,
@@ -156,9 +159,10 @@ impl G {
             _highest_viewport_node_id,
             root_viewport_node_id,
             focused_viewport_node_id: root_viewport_node_id,
-            hovered_viewport_node_id: root_viewport_node_id,
+            hovered_viewport_node_id: Some(root_viewport_node_id),
             viewport_border_px: 1,
             viewport_border_color: Rgba::grey(0.96),
+            mouse_cursor: MouseCursor::default(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -196,8 +200,16 @@ impl G {
     pub fn focused_viewport_node_id(&self) -> ViewportNodeID {
         self.focused_viewport_node_id
     }
-    pub fn hovered_viewport_node_id(&self) -> ViewportNodeID {
+    pub fn hovered_viewport_node_id(&self) -> Option<ViewportNodeID> {
         self.hovered_viewport_node_id
+    }
+    pub fn set_hovered_viewport_node_id(&mut self, id: Option<ViewportNodeID>) {
+        debug!("Now hovering {:?}", id);
+        self.hovered_viewport_node_id = id;
+    }
+    pub fn focus_viewport(&mut self, id: ViewportNodeID) {
+        debug!("Now focusing {:?}", id);
+        self.focused_viewport_node_id = id;
     }
     pub fn viewport_node(&self, id: ViewportNodeID) -> Option<&ViewportNode> {
         self.viewport_nodes.get(&id)
@@ -280,4 +292,50 @@ impl G {
         self.viewport_nodes.remove(&c1_id).unwrap();
         self.focused_viewport_node_id = merge_id;
     }
+    pub fn visit_viewports(&mut self, f: &mut ViewportVisitor) {
+        let Extent2 { w, h } = self.input.canvas_size();
+        let rect = Rect { x: 0, y: 0, w, h };
+        let root_id = self.root_viewport_node_id();
+        let border_px = self.viewport_border_px();
+        self.visit_viewport(root_id, rect, f, border_px);
+    }
+    fn visit_viewport(&mut self, id: ViewportNodeID, rect: Rect<u32, u32>, f: &mut ViewportVisitor, border_px: u32) {
+        let (c0, c1, r0, r1) = {
+            let node = self.viewport_node_mut(id).unwrap();
+            match *node {
+                ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction }, .. } => {
+                    // FIXME: assuming value is relative to middle
+                    let mut r0 = rect;
+                    let mut r1 = rect;
+                    match direction {
+                        SplitDirection::Horizontal => {
+                            r0.h /= 2;
+                            r1.h = rect.h - r0.h;
+                            r1.y = rect.y + r0.h;
+                        },
+                        SplitDirection::Vertical => {
+                            r0.w /= 2;
+                            r1.w = rect.w - r0.w;
+                            r1.x = rect.x + r0.w;
+                        },
+                    }
+                    (c0, c1, r0, r1)
+                },
+                ViewportNode::Whole { ref mut info, parent } => {
+                    let border_px = if parent.is_some() {
+                        border_px
+                    } else {
+                        0
+                    };
+                    return f.accept_viewport(id, rect, info, parent, border_px);
+                },
+            }
+        };
+        self.visit_viewport(c0, r0, f, border_px);
+        self.visit_viewport(c1, r1, f, border_px);
+    }
+}
+
+pub trait ViewportVisitor {
+    fn accept_viewport(&mut self, id: ViewportNodeID, r: Rect<u32, u32>, info: &mut ViewportInfo, parent: Option<ViewportNodeID>, border_px: u32);
 }

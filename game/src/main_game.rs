@@ -17,11 +17,14 @@ use event::Event;
 use r_gl45::{self, GLSystem};
 use gpu::GpuEndFrame;
 use gameplay::Gameplay;
+use mouse_cursor::MouseCursor;
+use viewport::ViewportInputHandler;
 
 
 // Can't derive anything :/
 pub struct MainGame {
     platform: Box<Platform>,
+    mouse_cursor: MouseCursor,
     g: RefCell<G>,
     event_queue: VecDeque<Event>,
     systems: Vec<Box<System>>,
@@ -50,6 +53,7 @@ impl MainGame {
         let systems: Vec<Box<System>> = vec![
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
+            Box::new(ViewportInputHandler::new()),
             Box::new(Gameplay::new()),
             Box::new(GLSystem::new(canvas_size, &g)),
             Box::new(GpuEndFrame::new()),
@@ -64,6 +68,7 @@ impl MainGame {
  
         Self {
             platform,
+            mouse_cursor: MouseCursor::default(),
             g: RefCell::new(g),
             event_queue: VecDeque::with_capacity(2047),
             systems,
@@ -167,6 +172,11 @@ impl MainSystem for MainGame {
             smooth_dt: smooth_dt_as_duration.to_f64_seconds() as _,
             tick_progress: draw.tick_progress,
         };
+
+        if self.mouse_cursor != g.mouse_cursor {
+            self.mouse_cursor = g.mouse_cursor;
+            self.platform.set_mouse_cursor(&g.mouse_cursor);
+        }
 
         for sys in self.systems.iter_mut() {
             sys.draw(&mut g, &draw);

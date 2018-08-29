@@ -53,6 +53,8 @@ pub mod input;
 pub mod resources;
 pub mod gpu;
 pub mod gameplay;
+pub mod mouse_cursor;
+pub mod viewport;
 
 fn main() {
     early::setup_log();

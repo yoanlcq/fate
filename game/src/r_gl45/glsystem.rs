@@ -2,7 +2,7 @@ use fate::math::{Extent2, Rgba, Rect};
 use fate::gx::gl;
 
 use gpu::GpuCmd;
-use g::{ViewportNodeID, ViewportNode, ViewportInfo, Split, SplitDirection, SplitOrigin, SplitUnit};
+use g::{ViewportVisitor, ViewportNodeID, ViewportNode, ViewportInfo, Split, SplitDirection, SplitOrigin, SplitUnit};
 use system::*;
 
 
@@ -29,7 +29,7 @@ impl System for GLSystem {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        self.draw_viewport(g, Rect { x: 0, y: 0, w, h }, g.root_viewport_node_id(), d);
+        g.visit_viewports(self);
     }
 }
 
@@ -49,51 +49,28 @@ impl GLSystem {
             }
         }
     }
-    fn draw_viewport(&mut self, g: &G, rect: Rect<u32, u32>, id: ViewportNodeID, d: &Draw) {
-        let node = g.viewport_node(id).unwrap();
-        match *node {
-            ViewportNode::Whole { ref info, .. } => unsafe {
-                let Rect { x, y, w, h } = rect;
-                gl::Viewport(x as _, y as _, w as _, h as _);
+}
 
-                // Temporary
-                gl::Enable(gl::SCISSOR_TEST);
+impl ViewportVisitor for GLSystem {
+    fn accept_viewport(&mut self, id: ViewportNodeID, rect: Rect<u32, u32>, info: &mut ViewportInfo, parent: Option<ViewportNodeID>, border_px: u32) {
+        unsafe {
+            let Rect { x, y, w, h } = rect;
+            gl::Viewport(x as _, y as _, w as _, h as _);
 
-                let (bx, by) = if id == g.root_viewport_node_id() { 
-                    (0, 0)
-                } else { 
-                    (g.viewport_border_px(), g.viewport_border_px())
-                };
-                if w < bx+bx || h < by+by {
-                    return;
-                }
-                let (x, y, w, h) = (x+bx, y+by, w-bx-bx, h-by-by);
-                let Rgba { r, g, b, a } = info.clear_color;
-                gl::Scissor(x as _, y as _, w as _, h as _);
-                gl::ClearColor(r, g, b, a);
-                gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
+            // Temporary
+            gl::Enable(gl::SCISSOR_TEST);
 
-                gl::Disable(gl::SCISSOR_TEST);
-            },
-            ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction }, .. } => {
-                // assume value is relative to middle
-                let mut r0 = rect;
-                let mut r1 = rect;
-                match direction {
-                    SplitDirection::Horizontal => {
-                        r0.h /= 2;
-                        r1.h = rect.h - r0.h;
-                        r1.y = rect.y + r0.h;
-                    },
-                    SplitDirection::Vertical => {
-                        r0.w /= 2;
-                        r1.w = rect.w - r0.w;
-                        r1.x = rect.x + r0.w;
-                    },
-                }
-                self.draw_viewport(g, r0, c0, d);
-                self.draw_viewport(g, r1, c1, d);
-            },
+            let (bx, by) = (border_px, border_px);
+            if w < bx+bx || h < by+by {
+                return;
+            }
+            let (x, y, w, h) = (x+bx, y+by, w-bx-bx, h-by-by);
+            let Rgba { r, g, b, a } = info.clear_color;
+            gl::Scissor(x as _, y as _, w as _, h as _);
+            gl::ClearColor(r, g, b, a);
+            gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
+
+            gl::Disable(gl::SCISSOR_TEST);
         }
     }
 }

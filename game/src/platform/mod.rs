@@ -2,6 +2,7 @@ use std::os::raw::c_void;
 use fate::math::Extent2;
 use dmc;
 use event::Event;
+use mouse_cursor::MouseCursor;
 
 pub mod sdl2_platform;
 pub use self::sdl2_platform::Sdl2Platform;
@@ -14,6 +15,7 @@ pub trait Platform {
     fn gl_get_proc_address(&self, proc: &str) -> *const c_void;
     fn gl_swap_buffers(&mut self);
     fn poll_event(&mut self) -> Option<Event>;
+    fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor);
 }
 
 #[derive(Debug, Clone)]

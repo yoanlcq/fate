@@ -2,6 +2,7 @@ use std::os::raw::c_void;
 use std::collections::VecDeque;
 use super::{Platform, Settings};
 use event::Event;
+use mouse_cursor::MouseCursor;
 use dmc;
 use fate::math::{Vec2, Extent2};
 
@@ -62,6 +63,11 @@ impl Platform for DmcPlatform {
     fn poll_event(&mut self) -> Option<Event> {
         self.pump_events();
         self.pending_events.pop_front()
+    }
+    fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor) {
+        match *mouse_cursor {
+            MouseCursor::System(c) => self.window.set_cursor(self.dmc.create_system_cursor(c).as_ref().unwrap()).unwrap(),
+        }
     }
 }
 

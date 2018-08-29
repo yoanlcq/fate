@@ -2,6 +2,7 @@ use std::os::raw::c_void;
 use super::{Platform, Settings};
 use fate::math::Extent2;
 use event::Event;
+use mouse_cursor::MouseCursor;
 use dmc;
 use sdl2::{self, Sdl, EventPump};
 use sdl2::event::{Event as Sdl2Event, WindowEvent};
@@ -114,6 +115,9 @@ impl Platform for Sdl2Platform {
     }
     fn gl_get_proc_address(&self, proc: &str) -> *const c_void {
         self.sdl2.video().unwrap().gl_get_proc_address(proc) as *const _
+    }
+    fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor) {
+        unimplemented!{}
     }
     fn poll_event(&mut self) -> Option<Event> {
         match self.event_pump.poll_event()? {
