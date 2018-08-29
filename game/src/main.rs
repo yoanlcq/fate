@@ -40,23 +40,21 @@ extern crate gltf;
 
 pub mod early;
 pub mod platform;
-pub mod game;
+pub mod main_game;
+pub mod g;
 pub mod quit;
 pub mod frame_time;
 pub mod event;
 pub mod message;
 pub mod system;
-pub mod gamegl;
-pub mod scene;
+pub mod r_gl45;
 pub mod input;
 pub mod resources;
-pub mod dc;
-pub mod stock;
 
 fn main() {
     early::setup_log();
     early::setup_panic_hook();
     early::setup_env();
-    fate::main_loop::run(&mut game::Game::new())
+    fate::main_loop::run(&mut main_game::MainGame::new())
 }
 

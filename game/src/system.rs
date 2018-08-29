@@ -8,7 +8,7 @@ pub use fate::math::{Vec2, Extent2};
 pub use fate::lab::duration_ext::DurationExt;
 pub use dmc::device::{Key, KeyState, MouseButton, ButtonState, Keysym};
 pub use quit::Quit;
-pub use game::G;
+pub use g::G;
 pub use message::Message;
 
 #[derive(Debug, Copy, Clone, PartialEq)]

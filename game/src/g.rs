@@ -8,10 +8,8 @@ use fate::lab::fps::FpsStats;
 
 use frame_time::FrameTimeManager;
 use message::Message;
-use scene::Scene;
 use input::Input;
 use resources::Resources;
-use dc;
 
 
 #[derive(Debug)]
@@ -21,10 +19,8 @@ pub struct SharedGame {
     pub pending_messages: VecDeque<Message>,
     fps_stats_history: VecDeque<FpsStats>,
     pub mt: Arc<mt::SharedThreadContext>,
-    pub scene: Scene,
     pub input: Input,
     pub res: Resources,
-    pub dc: dc::DC,
 }
 
 pub type G = SharedGame;
@@ -38,10 +34,8 @@ impl SharedGame {
             pending_messages: VecDeque::new(),
             fps_stats_history: VecDeque::new(),
             mt,
-            scene: Scene::new(canvas_size),
             input: Input::new(canvas_size),
             res: Resources::new().unwrap(),
-            dc: dc::DC::with_capacity(512),
         }
     }
     #[allow(dead_code)]

@@ -2,33 +2,34 @@ use std::time::Duration;
 use std::cell::RefCell;
 use std::env;
 use std::collections::VecDeque;
+
 use fate::main_loop::{MainSystem, Tick as MainLoopTick, Draw as MainLoopDraw};
 use fate::lab::duration_ext::DurationExt;
 use fate::lab::fps::{FpsManager, FpsCounter};
 use fate::mt;
-use super::SharedGame;
-use scene::{SceneLogicSystem, SceneCommandClearerSystem};
+
+use g::G;
 use system::{System, Tick, Draw};
 use platform::{self, Platform, DmcPlatform, Sdl2Platform};
 use quit::{Quit, Quitter};
 use input::InputUpdater;
 use event::Event;
-use gamegl::{self, GLSystem};
-use dc;
+use r_gl45::{self, GLSystem};
 
 
 // Can't derive anything :/
-pub struct Game {
+pub struct MainGame {
     platform: Box<Platform>,
-    shared: RefCell<SharedGame>,
+    g: RefCell<G>,
     event_queue: VecDeque<Event>,
     systems: Vec<Box<System>>,
     fps_manager: FpsManager,
     fps_ceil: Option<f64>,
+    #[allow(dead_code)]
     threads: mt::ThreadPool,
 }
 
-impl Game {
+impl MainGame {
     pub fn new() -> Self {
         let platform_settings = platform::Settings::new();
         info!("Using GL pixel format settings: {:#?}", platform_settings.gl_pixel_format_settings);
@@ -39,18 +40,15 @@ impl Game {
             _ => Box::new(DmcPlatform::new(&platform_settings)) as Box<Platform>,
         };
 
-        gamegl::gl_setup::gl_setup(platform.as_ref());
+        r_gl45::gl_setup::gl_setup(platform.as_ref());
 
         let canvas_size = platform.canvas_size();
         let (mt, threads) = mt::spawn_threads(3);
-        let shared = SharedGame::new(canvas_size, mt.clone());
+        let g = G::new(canvas_size, mt.clone());
         let systems: Vec<Box<System>> = vec![
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
-            Box::new(SceneLogicSystem::new()),
-            Box::new(GLSystem::new(canvas_size, &shared)),
-            Box::new(dc::DcCmdClearerSystem::new()),
-            Box::new(SceneCommandClearerSystem::new()),
+            Box::new(GLSystem::new(canvas_size, &g)),
         ];
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
@@ -62,7 +60,7 @@ impl Game {
  
         Self {
             platform,
-            shared: RefCell::new(shared),
+            g: RefCell::new(g),
             event_queue: VecDeque::with_capacity(2047),
             systems,
             fps_manager,
@@ -80,14 +78,14 @@ impl Game {
         ev
     }
     pub fn pump_messages(&mut self) {
-        while let Some(msg) = self.shared.borrow_mut().pending_messages.pop_front() {
+        while let Some(msg) = self.g.borrow_mut().pending_messages.pop_front() {
             for sys in self.systems.iter_mut() {
-                sys.on_message(&mut self.shared.borrow_mut(), &msg);
+                sys.on_message(&mut self.g.borrow_mut(), &msg);
             }
         }
     }
 }
-impl MainSystem for Game {
+impl MainSystem for MainGame {
     fn quit(&self) -> bool {
         let mut should_quit = 0;
         let mut dont_quit = 0;
@@ -107,21 +105,21 @@ impl MainSystem for Game {
     fn frame_time_ceil(&self) -> Duration { Duration::from_millis(250) }
 
     fn begin_main_loop_iteration(&mut self) {
-        let mut shared = self.shared.borrow_mut();
-        shared.frame_time_manager.begin_main_loop_iteration();
+        let mut g = self.g.borrow_mut();
+        g.frame_time_manager.begin_main_loop_iteration();
         for sys in self.systems.iter_mut() {
-            sys.begin_main_loop_iteration(&mut shared);
+            sys.begin_main_loop_iteration(&mut g);
         }
     }
     fn end_main_loop_iteration  (&mut self) {
-        let mut shared = self.shared.borrow_mut();
+        let mut g = self.g.borrow_mut();
         for sys in self.systems.iter_mut() {
-            sys.end_main_loop_iteration(&mut shared);
+            sys.end_main_loop_iteration(&mut g);
         }
-        shared.frame_time_manager.end_main_loop_iteration();
+        g.frame_time_manager.end_main_loop_iteration();
         let fps_stats = self.fps_manager.end_main_loop_iteration(&mut self.fps_ceil);
         if let Some(fps_stats) = fps_stats {
-            shared.push_fps_stats(fps_stats);
+            g.push_fps_stats(fps_stats);
             // info!("{}", fps_stats);
         }
     }
@@ -132,33 +130,33 @@ impl MainSystem for Game {
         }
         while let Some(ev) = self.event_queue.pop_front() {
             for sys in self.systems.iter_mut() {
-                ev.dispatch(sys.as_mut(), &mut self.shared.borrow_mut());
+                ev.dispatch(sys.as_mut(), &mut self.g.borrow_mut());
             }
             self.pump_messages();
         }
     } 
     fn tick(&mut self, tick: &MainLoopTick) {
-        let mut shared = self.shared.borrow_mut();
-        shared.t += tick.dt;
+        let mut g = self.g.borrow_mut();
+        g.t += tick.dt;
 
         let dt_as_duration = tick.dt;
         let tick = Tick {
-            t: shared.t,
+            t: g.t,
             dt_as_duration,
             dt: dt_as_duration.to_f64_seconds() as _,
         };
 
         for sys in self.systems.iter_mut() {
-            sys.tick(&mut shared, &tick);
+            sys.tick(&mut g, &tick);
         }
     }
     fn draw(&mut self, draw: &MainLoopDraw) {
-        let mut shared = self.shared.borrow_mut();
+        let mut g = self.g.borrow_mut();
 
-        let dt_as_duration = shared.frame_time_manager.dt();
-        let smooth_dt_as_duration = shared.frame_time_manager.smooth_dt();
+        let dt_as_duration = g.frame_time_manager.dt();
+        let smooth_dt_as_duration = g.frame_time_manager.smooth_dt();
         let draw = Draw {
-            t: shared.t,
+            t: g.t,
             dt_as_duration,
             smooth_dt_as_duration,
             dt: dt_as_duration.to_f64_seconds() as _,
@@ -167,7 +165,7 @@ impl MainSystem for Game {
         };
 
         for sys in self.systems.iter_mut() {
-            sys.draw(&mut shared, &draw);
+            sys.draw(&mut g, &draw);
         }
         self.platform.gl_swap_buffers();
     }
