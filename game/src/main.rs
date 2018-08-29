@@ -50,6 +50,7 @@ pub mod system;
 pub mod r_gl45;
 pub mod input;
 pub mod resources;
+pub mod gpu;
 
 fn main() {
     early::setup_log();

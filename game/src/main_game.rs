@@ -15,6 +15,7 @@ use quit::{Quit, Quitter};
 use input::InputUpdater;
 use event::Event;
 use r_gl45::{self, GLSystem};
+use gpu::GpuCmdQueueClearer;
 
 
 // Can't derive anything :/
@@ -49,6 +50,7 @@ impl MainGame {
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
             Box::new(GLSystem::new(canvas_size, &g)),
+            Box::new(GpuCmdQueueClearer::new()),
         ];
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),

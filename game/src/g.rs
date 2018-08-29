@@ -3,32 +3,70 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use fate::mt;
-use fate::math::Extent2;
+use fate::math::{Extent2, Rgba};
 use fate::lab::fps::FpsStats;
 
 use frame_time::FrameTimeManager;
 use message::Message;
 use input::Input;
 use resources::Resources;
+use gpu::GpuCmd;
 
 
 #[derive(Debug)]
-pub struct SharedGame {
-    pub t: Duration, // Total physics time since the game started (accumulation of per-tick delta times)
+pub struct G {
+    /// Total physics time since the game started (accumulation of per-tick delta times)
+    pub t: Duration, 
+
     pub frame_time_manager: FrameTimeManager,
-    pub pending_messages: VecDeque<Message>,
     fps_stats_history: VecDeque<FpsStats>,
+
     pub mt: Arc<mt::SharedThreadContext>,
-    pub input: Input,
+
     pub res: Resources,
+
+    pub pending_messages: VecDeque<Message>,
+    pub input: Input,
+
+    //
+    // Main "world"
+    //
+
+    gpu_cmd_queue: VecDeque<GpuCmd>,
+
+    // "singletons"
+    clear_color: Rgba<f32>,
+    /*
+    skybox_is_enabled: bool,
+    skybox_cubemap_selector: CubemapSelector,
+
+    // "entities"
+    xforms: HashMap<EID, Xform>,
+    cameras: HashMap<EID, Camera>,
+    models: HashMap<EID, ModelInstance>,
+    planes: HashMap<EID, PlaneInstance>,
+    visual_layers: HashMap<EID, VisualLayerID>,
+    physics_layers: HashMap<EID, PhysicsLayerID>,
+    visual_space: HashMap<EID, VisualSpace>,
+
+    //
+    model_infos: HashMap<ModelID, ModelInfo>,
+    plane_infos: HashMap<PlaneID, PlaneInfo>,
+
+    //
+    cubemap_arrays: HashMap<CubemapArrayID, CubemapArrayInfo>,
+
+    //
+    texture2d_arrays: HashMap<Texture2DArrayID, Texture2DArrayInfo>,
+
+    viewport_nodes: HashMap<ViewportNodeID, ViewportNode>,
+    */
 }
 
-pub type G = SharedGame;
 
-
-impl SharedGame {
+impl G {
     pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
-        Self {
+        let mut g = Self {
             t: Duration::default(),
             frame_time_manager: FrameTimeManager::with_max_len(60),
             pending_messages: VecDeque::new(),
@@ -36,7 +74,11 @@ impl SharedGame {
             mt,
             input: Input::new(canvas_size),
             res: Resources::new().unwrap(),
-        }
+            gpu_cmd_queue: VecDeque::with_capacity(1024),
+            clear_color: Rgba::new(0., 1., 1., 1.),
+        };
+        g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
+        g
     }
     #[allow(dead_code)]
     pub fn push_message(&mut self, msg: Message) {
@@ -49,5 +91,11 @@ impl SharedGame {
     }
     pub fn last_fps_stats(&self) -> Option<FpsStats> {
         self.fps_stats_history.back().map(Clone::clone)
+    }
+    pub fn gpu_cmd_queue(&self) -> &VecDeque<GpuCmd> {
+        &self.gpu_cmd_queue
+    }
+    pub fn gpu_cmd_queue_clear(&mut self) {
+        self.gpu_cmd_queue.clear()
     }
 }
