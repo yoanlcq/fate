@@ -11,6 +11,7 @@ extern crate log;
 extern crate pretty_env_logger;
 extern crate backtrace;
 extern crate gltf;
+extern crate rand;
 
 // TODO list:
 // - Load meshes (obj and GLTF)
@@ -51,6 +52,7 @@ pub mod r_gl45;
 pub mod input;
 pub mod resources;
 pub mod gpu;
+pub mod gameplay;
 
 fn main() {
     early::setup_log();

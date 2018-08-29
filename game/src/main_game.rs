@@ -15,7 +15,8 @@ use quit::{Quit, Quitter};
 use input::InputUpdater;
 use event::Event;
 use r_gl45::{self, GLSystem};
-use gpu::GpuCmdQueueClearer;
+use gpu::GpuEndFrame;
+use gameplay::Gameplay;
 
 
 // Can't derive anything :/
@@ -49,8 +50,9 @@ impl MainGame {
         let systems: Vec<Box<System>> = vec![
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
+            Box::new(Gameplay::new()),
             Box::new(GLSystem::new(canvas_size, &g)),
-            Box::new(GpuCmdQueueClearer::new()),
+            Box::new(GpuEndFrame::new()),
         ];
         let fps_manager = FpsManager {
             fps_counter: FpsCounter::with_interval(Duration::from_secs(1)),
