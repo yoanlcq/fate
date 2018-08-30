@@ -2,7 +2,7 @@ use fate::math::{Extent2, Rgba, Rect};
 use fate::gx::gl;
 
 use gpu::GpuCmd;
-use viewport::{ViewportVisitor, ViewportNodeID, ViewportNode, ViewportInfo, Split, SplitDirection, SplitOrigin, SplitUnit};
+use viewport::{ViewportVisitor, ViewportNodeID, ViewportInfo};
 use system::*;
 
 
@@ -24,7 +24,7 @@ impl System for GLSystem {
         let Extent2 { w, h } = g.input.canvas_size();
         unsafe {
             gl::Viewport(0, 0, w as _, h as _);
-            let Rgba { r, g, b, a } = g.viewport_db().viewport_border_color();
+            let Rgba { r, g, b, a } = g.viewport_db().border_color();
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
@@ -52,7 +52,7 @@ impl GLSystem {
 }
 
 impl ViewportVisitor for GLSystem {
-    fn accept_viewport(&mut self, id: ViewportNodeID, rect: Rect<u32, u32>, info: &mut ViewportInfo, parent: Option<ViewportNodeID>, border_px: u32) {
+    fn accept_viewport(&mut self, _id: ViewportNodeID, rect: Rect<u32, u32>, info: &mut ViewportInfo, _parent: Option<ViewportNodeID>, border_px: u32) {
         unsafe {
             let Rect { x, y, w, h } = rect;
             gl::Viewport(x as _, y as _, w as _, h as _);

@@ -114,6 +114,6 @@ impl G {
     }
     pub fn visit_viewports(&mut self, f: &mut ViewportVisitor) {
         let Extent2 { w, h } = self.input.canvas_size();
-        self.viewport_db_mut().visit_viewports(Rect { x: 0, y: 0, w, h }, f);
-   }
+        self.viewport_db_mut().visit(Rect { x: 0, y: 0, w, h }, f);
+    }
 }
