@@ -57,8 +57,8 @@ impl Platform for DmcPlatform {
     fn gl_swap_buffers(&mut self) {
         self.window.gl_swap_buffers().unwrap();
     }
-    fn gl_get_proc_address(&self, proc: &str) -> *const c_void {
-        self.gl_context.proc_address(proc)
+    fn gl_get_proc_address(&self, proc_name: &str) -> *const c_void {
+        self.gl_context.proc_address(proc_name)
     }
     fn poll_event(&mut self) -> Option<Event> {
         self.pump_events();
@@ -67,6 +67,13 @@ impl Platform for DmcPlatform {
     fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor) {
         match *mouse_cursor {
             MouseCursor::System(c) => self.window.set_cursor(self.dmc.create_system_cursor(c).as_ref().unwrap()).unwrap(),
+        }
+    }
+    fn set_mouse_cursor_visible(&mut self, visible: bool) {
+        if visible {
+            self.window.show_cursor().unwrap();
+        } else {
+            self.window.hide_cursor().unwrap();
         }
     }
 }

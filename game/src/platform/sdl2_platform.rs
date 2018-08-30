@@ -7,6 +7,7 @@ use dmc;
 use sdl2::{self, Sdl, EventPump};
 use sdl2::event::{Event as Sdl2Event, WindowEvent};
 use sdl2::video::{Window, GLContext};
+use sdl2::mouse::{Cursor as Sdl2Cursor, SystemCursor as Sdl2SystemCursor};
 
 pub struct Sdl2Platform {
     sdl2: Sdl,
@@ -113,11 +114,20 @@ impl Platform for Sdl2Platform {
     fn gl_swap_buffers(&mut self) {
         self.window.gl_swap_window();
     }
-    fn gl_get_proc_address(&self, proc: &str) -> *const c_void {
-        self.sdl2.video().unwrap().gl_get_proc_address(proc) as *const _
+    fn gl_get_proc_address(&self, proc_name: &str) -> *const c_void {
+        self.sdl2.video().unwrap().gl_get_proc_address(proc_name) as *const _
     }
     fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor) {
-        unimplemented!{}
+        match *mouse_cursor {
+            MouseCursor::System(c) => {
+                let s = dmc_to_sdl2_system_cursor(c).expect("SDL2 doesn't support this cursor");
+                let c = Sdl2Cursor::from_system(s).expect("Failed to create SDL2 cursor");
+                c.set()
+            },
+        }
+    }
+    fn set_mouse_cursor_visible(&mut self, visible: bool) {
+        self.sdl2.mouse().show_cursor(visible)
     }
     fn poll_event(&mut self) -> Option<Event> {
         match self.event_pump.poll_event()? {
@@ -131,4 +141,22 @@ impl Platform for Sdl2Platform {
             _ => None,
         }
     }
+}
+
+fn dmc_to_sdl2_system_cursor(s: dmc::SystemCursor) -> Option<Sdl2SystemCursor> {
+    Some(match s {
+        dmc::SystemCursor::Arrow => Sdl2SystemCursor::Arrow,
+        dmc::SystemCursor::Ibeam => Sdl2SystemCursor::IBeam,
+        dmc::SystemCursor::Wait => Sdl2SystemCursor::Wait,
+        dmc::SystemCursor::Crosshair => Sdl2SystemCursor::Crosshair,
+        dmc::SystemCursor::WaitArrow => Sdl2SystemCursor::WaitArrow,
+        dmc::SystemCursor::ResizeNWToSE => Sdl2SystemCursor::SizeNWSE,
+        dmc::SystemCursor::ResizeNEToSW => Sdl2SystemCursor::SizeNESW,
+        dmc::SystemCursor::ResizeH => Sdl2SystemCursor::SizeWE,
+        dmc::SystemCursor::ResizeV => Sdl2SystemCursor::SizeNS,
+        dmc::SystemCursor::ResizeHV => Sdl2SystemCursor::SizeAll,
+        dmc::SystemCursor::Deny => Sdl2SystemCursor::No,
+        dmc::SystemCursor::Hand => Sdl2SystemCursor::Hand,
+        _ => return None,
+    })
 }

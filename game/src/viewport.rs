@@ -174,7 +174,6 @@ impl ViewportVisitor for ViewportPicker {
         }
     }
     fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
-        unimplemented!()
     }
 }
 

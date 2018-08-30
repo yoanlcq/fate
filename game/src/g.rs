@@ -36,6 +36,7 @@ pub struct G {
     gpu_cmd_queue: VecDeque<GpuCmd>,
 
     // "singletons"
+    pub is_mouse_cursor_visible: bool,
     pub mouse_cursor: MouseCursor,
     clear_color: Rgba<f32>,
     viewport_db: ViewportDB,
@@ -80,6 +81,7 @@ impl G {
             gpu_cmd_queue: VecDeque::with_capacity(1024),
             clear_color: Rgba::new(0., 1., 1., 1.),
             mouse_cursor: MouseCursor::default(),
+            is_mouse_cursor_visible: true,
             viewport_db: ViewportDB::new(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);

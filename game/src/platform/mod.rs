@@ -16,6 +16,7 @@ pub trait Platform {
     fn gl_swap_buffers(&mut self);
     fn poll_event(&mut self) -> Option<Event>;
     fn set_mouse_cursor(&mut self, mouse_cursor: &MouseCursor);
+    fn set_mouse_cursor_visible(&mut self, visible: bool);
 }
 
 #[derive(Debug, Clone)]

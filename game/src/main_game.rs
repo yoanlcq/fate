@@ -25,6 +25,7 @@ use viewport::ViewportInputHandler;
 pub struct MainGame {
     platform: Box<Platform>,
     mouse_cursor: MouseCursor,
+    is_mouse_cursor_visible: bool,
     g: RefCell<G>,
     event_queue: VecDeque<Event>,
     systems: Vec<Box<System>>,
@@ -69,6 +70,7 @@ impl MainGame {
         Self {
             platform,
             mouse_cursor: MouseCursor::default(),
+            is_mouse_cursor_visible: true,
             g: RefCell::new(g),
             event_queue: VecDeque::with_capacity(2047),
             systems,
@@ -176,6 +178,10 @@ impl MainSystem for MainGame {
         if self.mouse_cursor != g.mouse_cursor {
             self.mouse_cursor = g.mouse_cursor;
             self.platform.set_mouse_cursor(&g.mouse_cursor);
+        }
+        if self.is_mouse_cursor_visible != g.is_mouse_cursor_visible {
+            self.is_mouse_cursor_visible = g.is_mouse_cursor_visible;
+            self.platform.set_mouse_cursor_visible(g.is_mouse_cursor_visible);
         }
 
         for sys in self.systems.iter_mut() {
