@@ -125,7 +125,7 @@ impl ViewportDB {
             highest_id,
             root,
             focused: root,
-            hovered: Some(root),
+            hovered: None,
             border_px: 1,
             border_color: Rgba::grey(0.96),
         }
