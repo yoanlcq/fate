@@ -18,7 +18,7 @@ impl GLSystem {
 }
 
 impl System for GLSystem {
-    fn draw(&mut self, g: &mut G, d: &Draw) {
+    fn draw(&mut self, g: &mut G, _d: &Draw) {
         self.process_gpu_cmd_queue(g);
 
         let Extent2 { w, h } = g.input.canvas_size();

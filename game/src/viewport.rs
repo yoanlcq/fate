@@ -149,7 +149,7 @@ impl System for ViewportInputHandler {
 }
 
 impl ViewportVisitor for ViewportPicker {
-    fn accept_viewport(&mut self, id: ViewportNodeID, r: Rect<u32, u32>, info: &mut ViewportInfo, parent: Option<ViewportNodeID>, border_px: u32) {
+    fn accept_viewport(&mut self, id: ViewportNodeID, r: Rect<u32, u32>, _info: &mut ViewportInfo, _parent: Option<ViewportNodeID>, _border_px: u32) {
         if r.contains_point(self.pos) {
             self.found = Some(id);
         }
