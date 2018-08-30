@@ -2,7 +2,7 @@ use fate::math::{Extent2, Rgba, Rect};
 use fate::gx::gl;
 
 use gpu::GpuCmd;
-use viewport::{ViewportVisitor, ViewportNodeID, ViewportInfo};
+use viewport::{ViewportVisitor, AcceptLeafViewport, AcceptSplitViewport};
 use system::*;
 
 
@@ -52,25 +52,27 @@ impl GLSystem {
 }
 
 impl ViewportVisitor for GLSystem {
-    fn accept_viewport(&mut self, _id: ViewportNodeID, rect: Rect<u32, u32>, info: &mut ViewportInfo, _parent: Option<ViewportNodeID>, border_px: u32) {
+    fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
         unsafe {
-            let Rect { x, y, w, h } = rect;
+            let Rect { x, y, w, h } = args.rect;
             gl::Viewport(x as _, y as _, w as _, h as _);
 
             // Temporary
             gl::Enable(gl::SCISSOR_TEST);
 
-            let (bx, by) = (border_px, border_px);
+            let (bx, by) = (args.border_px, args.border_px);
             if w < bx+bx || h < by+by {
                 return;
             }
             let (x, y, w, h) = (x+bx, y+by, w-bx-bx, h-by-by);
-            let Rgba { r, g, b, a } = info.clear_color;
+            let Rgba { r, g, b, a } = args.info.clear_color;
             gl::Scissor(x as _, y as _, w as _, h as _);
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
 
             gl::Disable(gl::SCISSOR_TEST);
         }
+    }
+    fn accept_split_viewport(&mut self, _args: AcceptSplitViewport) {
     }
 }

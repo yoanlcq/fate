@@ -64,7 +64,26 @@ pub enum SplitDirection {
 }
 
 pub trait ViewportVisitor {
-    fn accept_viewport(&mut self, id: ViewportNodeID, r: Rect<u32, u32>, info: &mut ViewportInfo, parent: Option<ViewportNodeID>, border_px: u32);
+    fn accept_leaf_viewport(&mut self, AcceptLeafViewport);
+    fn accept_split_viewport(&mut self, AcceptSplitViewport);
+}
+
+#[derive(Debug)]
+pub struct AcceptLeafViewport<'a> {
+    pub id: ViewportNodeID,
+    pub rect: Rect<u32, u32>, 
+    pub info: &'a mut ViewportInfo,
+    pub parent: Option<ViewportNodeID>,
+    pub border_px: u32,
+}
+#[derive(Debug)]
+pub struct AcceptSplitViewport<'a> {
+    pub id: ViewportNodeID,
+    pub rect: Rect<u32, u32>, 
+    pub split_direction: SplitDirection,
+    pub distance_from_left_or_bottom_px: &'a mut u32,
+    pub parent: Option<ViewportNodeID>,
+    pub border_px: u32,
 }
 
 #[derive(Debug)]
@@ -149,17 +168,13 @@ impl System for ViewportInputHandler {
 }
 
 impl ViewportVisitor for ViewportPicker {
-    fn accept_viewport(&mut self, id: ViewportNodeID, r: Rect<u32, u32>, _info: &mut ViewportInfo, _parent: Option<ViewportNodeID>, _border_px: u32) {
-        if r.contains_point(self.pos) {
-            self.found = Some(id);
+    fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
+        if args.rect.contains_point(self.pos) {
+            self.found = Some(args.id);
         }
-        /*
-        if let (Some(parent), Some(found)) = (parent, found) {
-            if self.pos.x < r.x + border_px {
-                self.on_border = Some(parent)
-            }
-        }
-        */
+    }
+    fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
+        unimplemented!()
     }
 }
 
@@ -278,22 +293,26 @@ impl ViewportDB {
         let (c0, c1, r0, r1) = {
             let node = self.node_mut(id).unwrap();
             match *node {
-                ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, value, direction }, .. } => {
+                ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, ref mut value, direction }, parent } => {
                     // FIXME: assuming value is relative to middle
                     let mut r0 = rect;
                     let mut r1 = rect;
-                    match direction {
+                    let mut distance_from_left_or_bottom_px = match direction {
                         SplitDirection::Horizontal => {
                             r0.h /= 2;
                             r1.h = rect.h - r0.h;
                             r1.y = rect.y + r0.h;
+                            r1.y
                         },
                         SplitDirection::Vertical => {
                             r0.w /= 2;
                             r1.w = rect.w - r0.w;
                             r1.x = rect.x + r0.w;
+                            r1.x
                         },
-                    }
+                    };
+                    f.accept_split_viewport(AcceptSplitViewport{ id, rect, split_direction: direction, distance_from_left_or_bottom_px: &mut distance_from_left_or_bottom_px, parent, border_px });
+                    // FIXME: Take mutations of distance_... into account
                     (c0, c1, r0, r1)
                 },
                 ViewportNode::Whole { ref mut info, parent } => {
@@ -302,7 +321,7 @@ impl ViewportDB {
                     } else {
                         0
                     };
-                    return f.accept_viewport(id, rect, info, parent, border_px);
+                    return f.accept_leaf_viewport(AcceptLeafViewport{ id, rect, info, parent, border_px });
                 },
             }
         };
