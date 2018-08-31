@@ -15,6 +15,8 @@ pub struct ViewportDB {
     root: ViewportNodeID,
     focused: ViewportNodeID,
     hovered: Option<ViewportNodeID>,
+    hovered_border: Option<ViewportNodeID>,
+    dragged: Option<ViewportNodeID>,
     nodes: HashMap<ViewportNodeID, ViewportNode>,
 }
 
@@ -131,6 +133,8 @@ impl ViewportDB {
             root,
             focused: root,
             hovered: None,
+            hovered_border: None,
+            dragged: None,
             border_px: 1,
             border_color: Rgba::grey(0.96),
         }
@@ -140,14 +144,30 @@ impl ViewportDB {
 
 impl System for ViewportInputHandler {
     fn on_mouse_motion(&mut self, g: &mut G, pos: Vec2<f64>) {
-        // TODO: Update g.hovered_viewport_node and g.focused_viewport_node.
-        g.mouse_cursor = MouseCursor::System(SystemCursor::Hand);
-
         let mut pos = pos.map(|x| x.round() as u32);
         pos.y = g.input.canvas_size().h.saturating_sub(pos.y);
-        let mut visitor = ViewportHoverer { pos, found: None, on_border: None, };
-        g.visit_viewports(&mut visitor);
-        g.viewport_db_mut().hover(visitor.found);
+
+        if let Some(id) = g.viewport_db().dragged() {
+            let mut visitor = ViewportDragger { pos, id };
+            g.visit_viewports(&mut visitor);
+        } else {
+            let mut visitor = ViewportHoverer { pos, found: None, on_border: None, };
+            g.visit_viewports(&mut visitor);
+            g.viewport_db_mut().hover(visitor.found);
+            g.viewport_db_mut().hover_border(visitor.on_border);
+
+            let cursor = match visitor.on_border {
+                None => SystemCursor::Arrow,
+                Some(id) => match g.viewport_db().node(id) {
+                    Some(ViewportNode::Split { split, .. }) => match split.direction {
+                        SplitDirection::Horizontal => SystemCursor::ResizeV,
+                        SplitDirection::Vertical => SystemCursor::ResizeH,
+                    },
+                    _ => unreachable!(),
+                },
+            };
+            g.mouse_cursor = MouseCursor::System(cursor);
+        }
     }
     fn on_mouse_leave(&mut self, g: &mut G) {
         g.viewport_db_mut().hover(None);
@@ -155,9 +175,14 @@ impl System for ViewportInputHandler {
     fn on_mouse_button(&mut self, g: &mut G, btn: MouseButton, state: ButtonState) {
         match btn {
             MouseButton::Left if state.is_down() => {
-                if let Some(hovered) = g.viewport_db().hovered() {
+                if let Some(border) = g.viewport_db().hovered_border() {
+                    g.viewport_db_mut().drag(Some(border));
+                } else if let Some(hovered) = g.viewport_db().hovered() {
                     g.viewport_db_mut().focus(hovered);
                 }
+            },
+            MouseButton::Left if state.is_up() => {
+                g.viewport_db_mut().drag(None);
             },
             _ => {},
         }
@@ -182,8 +207,8 @@ impl ViewportVisitor for ViewportHoverer {
         if self.on_border.is_some() {
             return;
         }
-        let x = self.pos.x - args.rect.x;
-        let y = self.pos.y - args.rect.y;
+        let x = self.pos.x.saturating_sub(args.rect.x);
+        let y = self.pos.y.saturating_sub(args.rect.y);
         match args.split_direction {
             SplitDirection::Horizontal => {
                 if (y as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
@@ -207,8 +232,8 @@ impl ViewportVisitor for ViewportDragger {
         if args.id != self.id {
             return;
         }
-        let x = self.pos.x - args.rect.x;
-        let y = self.pos.y - args.rect.y;
+        let x = self.pos.x.saturating_sub(args.rect.x);
+        let y = self.pos.y.saturating_sub(args.rect.y);
         match args.split_direction {
             SplitDirection::Horizontal => *args.distance_from_left_or_bottom_px = y,
             SplitDirection::Vertical => *args.distance_from_left_or_bottom_px = x,
@@ -239,6 +264,18 @@ impl ViewportDB {
     pub fn focus(&mut self, id: ViewportNodeID) {
         debug!("Now focusing {:?}", id);
         self.focused = id;
+    }
+    pub fn drag(&mut self, id: Option<ViewportNodeID>) {
+        self.dragged = id;
+    }
+    pub fn dragged(&self) -> Option<ViewportNodeID> {
+        self.dragged
+    }
+    pub fn hover_border(&mut self, id: Option<ViewportNodeID>) {
+        self.hovered_border = id;
+    }
+    pub fn hovered_border(&self) -> Option<ViewportNodeID> {
+        self.hovered_border
     }
     pub fn node(&self, id: ViewportNodeID) -> Option<&ViewportNode> {
         self.nodes.get(&id)
