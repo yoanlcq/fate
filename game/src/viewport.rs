@@ -90,12 +90,17 @@ pub struct AcceptSplitViewport<'a> {
 pub struct ViewportInputHandler;
 
 #[derive(Debug)]
-struct ViewportPicker {
+struct ViewportHoverer {
     pos: Vec2<u32>,
     found: Option<ViewportNodeID>,
     on_border: Option<ViewportNodeID>,
 }
 
+#[derive(Debug)]
+pub struct ViewportDragger {
+    pos: Vec2<u32>,
+    id: ViewportNodeID,
+}
 
 
 impl ViewportInputHandler {
@@ -140,7 +145,7 @@ impl System for ViewportInputHandler {
 
         let mut pos = pos.map(|x| x.round() as u32);
         pos.y = g.input.canvas_size().h.saturating_sub(pos.y);
-        let mut visitor = ViewportPicker { pos, found: None, on_border: None, };
+        let mut visitor = ViewportHoverer { pos, found: None, on_border: None, };
         g.visit_viewports(&mut visitor);
         g.viewport_db_mut().hover(visitor.found);
     }
@@ -167,16 +172,49 @@ impl System for ViewportInputHandler {
     }
 }
 
-impl ViewportVisitor for ViewportPicker {
+impl ViewportVisitor for ViewportHoverer {
     fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
         if args.rect.contains_point(self.pos) {
             self.found = Some(args.id);
         }
     }
     fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
+        if self.on_border.is_some() {
+            return;
+        }
+        let x = self.pos.x - args.rect.x;
+        let y = self.pos.y - args.rect.y;
+        match args.split_direction {
+            SplitDirection::Horizontal => {
+                if (y as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
+                    self.on_border = Some(args.id);
+                }
+            },
+            SplitDirection::Vertical => {
+                if (x as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
+                    self.on_border = Some(args.id);
+                }
+            },
+        }
     }
 }
 
+
+impl ViewportVisitor for ViewportDragger {
+    fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
+    }
+    fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
+        if args.id != self.id {
+            return;
+        }
+        let x = self.pos.x - args.rect.x;
+        let y = self.pos.y - args.rect.y;
+        match args.split_direction {
+            SplitDirection::Horizontal => *args.distance_from_left_or_bottom_px = y,
+            SplitDirection::Vertical => *args.distance_from_left_or_bottom_px = x,
+        }
+    }
+}
 
 impl ViewportDB {
     pub fn border_color(&self) -> Rgba<f32> {
@@ -293,25 +331,53 @@ impl ViewportDB {
             let node = self.node_mut(id).unwrap();
             match *node {
                 ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, ref mut value, direction }, parent } => {
-                    // FIXME: assuming value is relative to middle
+                    let v = *value;
+                    let mut distance_from_left_or_bottom_px = match (origin, unit, direction) {
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Px, _) => v as u32,
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Horizontal) => (v * rect.h as f32).round() as u32,
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Vertical)   => (v * rect.w as f32).round() as u32,
+                        (SplitOrigin::Middle, SplitUnit::Px, SplitDirection::Horizontal) => (rect.h / 2 + v as u32),
+                        (SplitOrigin::Middle, SplitUnit::Px, SplitDirection::Vertical)   => (rect.w / 2 + v as u32),
+                        (SplitOrigin::Middle, SplitUnit::Ratio, SplitDirection::Horizontal) => (((v + 1.) / 2.) * rect.h as f32).round() as u32,
+                        (SplitOrigin::Middle, SplitUnit::Ratio, SplitDirection::Vertical)   => (((v + 1.) / 2.) * rect.w as f32).round() as u32,
+                        (SplitOrigin::RightOrTop, SplitUnit::Px, SplitDirection::Horizontal) => (rect.h - v as u32),
+                        (SplitOrigin::RightOrTop, SplitUnit::Px, SplitDirection::Vertical)   => (rect.w - v as u32),
+                        (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Horizontal) => ((1. - v) * rect.h as f32).round() as u32,
+                        (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Vertical)   => ((1. - v) * rect.w as f32).round() as u32,
+                    };
+
+                    f.accept_split_viewport(AcceptSplitViewport{ id, rect, split_direction: direction, distance_from_left_or_bottom_px: &mut distance_from_left_or_bottom_px, parent, border_px });
+
+                    let d = distance_from_left_or_bottom_px as f32;
+                    *value = match (origin, unit, direction) {
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Px, _) => d,
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Horizontal) => d / rect.h as f32,
+                        (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Vertical)   => d / rect.w as f32,
+                        (SplitOrigin::Middle, SplitUnit::Px, SplitDirection::Horizontal) => (d - (rect.h / 2) as f32),
+                        (SplitOrigin::Middle, SplitUnit::Px, SplitDirection::Vertical)   => (d - (rect.w / 2) as f32),
+                        (SplitOrigin::Middle, SplitUnit::Ratio, SplitDirection::Horizontal) => 2. * d / rect.h as f32 - 1.,
+                        (SplitOrigin::Middle, SplitUnit::Ratio, SplitDirection::Vertical)   => 2. * d / rect.w as f32 - 1.,
+                        (SplitOrigin::RightOrTop, SplitUnit::Px, SplitDirection::Horizontal) => rect.h as f32 - d,
+                        (SplitOrigin::RightOrTop, SplitUnit::Px, SplitDirection::Vertical)   => rect.w as f32 - d,
+                        (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Horizontal) => 1. - (d / rect.h as f32),
+                        (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Vertical)   => 1. - (d / rect.w as f32),
+                    };
+
                     let mut r0 = rect;
                     let mut r1 = rect;
-                    let mut distance_from_left_or_bottom_px = match direction {
+                    match direction {
                         SplitDirection::Horizontal => {
-                            r0.h /= 2;
+                            r0.h = distance_from_left_or_bottom_px;
                             r1.h = rect.h - r0.h;
                             r1.y = rect.y + r0.h;
-                            r1.y
                         },
                         SplitDirection::Vertical => {
-                            r0.w /= 2;
+                            r0.w = distance_from_left_or_bottom_px;
                             r1.w = rect.w - r0.w;
                             r1.x = rect.x + r0.w;
-                            r1.x
                         },
                     };
-                    f.accept_split_viewport(AcceptSplitViewport{ id, rect, split_direction: direction, distance_from_left_or_bottom_px: &mut distance_from_left_or_bottom_px, parent, border_px });
-                    // FIXME: Take mutations of distance_... into account
+
                     (c0, c1, r0, r1)
                 },
                 ViewportNode::Whole { ref mut info, parent } => {
