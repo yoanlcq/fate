@@ -143,6 +143,31 @@ impl ViewportDB {
 
 
 impl System for ViewportInputHandler {
+    fn draw(&mut self, g: &mut G, _: &Draw) {
+        if g.viewport_db().dragged().is_none() {
+            if let Some(pos) = g.input.mouse_position() {
+                let mut pos = pos.map(|x| x.round() as u32);
+                pos.y = g.input.canvas_size().h.saturating_sub(pos.y);
+
+                let mut visitor = ViewportHoverer { pos, found: None, on_border: None, };
+                g.visit_viewports(&mut visitor);
+                g.viewport_db_mut().hover(visitor.found);
+                g.viewport_db_mut().hover_border(visitor.on_border);
+            }
+        }
+
+        let cursor = match g.viewport_db().hovered_border() {
+            None => SystemCursor::Arrow,
+            Some(id) => match g.viewport_db().node(id) {
+                Some(ViewportNode::Split { split, .. }) => match split.direction {
+                    SplitDirection::Horizontal => SystemCursor::ResizeV,
+                    SplitDirection::Vertical => SystemCursor::ResizeH,
+                },
+                _ => unreachable!(),
+            },
+        };
+        g.mouse_cursor = MouseCursor::System(cursor);
+    }
     fn on_mouse_motion(&mut self, g: &mut G, pos: Vec2<f64>) {
         let mut pos = pos.map(|x| x.round() as u32);
         pos.y = g.input.canvas_size().h.saturating_sub(pos.y);
@@ -150,23 +175,6 @@ impl System for ViewportInputHandler {
         if let Some(id) = g.viewport_db().dragged() {
             let mut visitor = ViewportDragger { pos, id };
             g.visit_viewports(&mut visitor);
-        } else {
-            let mut visitor = ViewportHoverer { pos, found: None, on_border: None, };
-            g.visit_viewports(&mut visitor);
-            g.viewport_db_mut().hover(visitor.found);
-            g.viewport_db_mut().hover_border(visitor.on_border);
-
-            let cursor = match visitor.on_border {
-                None => SystemCursor::Arrow,
-                Some(id) => match g.viewport_db().node(id) {
-                    Some(ViewportNode::Split { split, .. }) => match split.direction {
-                        SplitDirection::Horizontal => SystemCursor::ResizeV,
-                        SplitDirection::Vertical => SystemCursor::ResizeH,
-                    },
-                    _ => unreachable!(),
-                },
-            };
-            g.mouse_cursor = MouseCursor::System(cursor);
         }
     }
     fn on_mouse_leave(&mut self, g: &mut G) {
@@ -255,15 +263,19 @@ impl ViewportDB {
         self.hovered
     }
     pub fn hover(&mut self, id: Option<ViewportNodeID>) {
-        debug!("Now hovering {:?}", id);
-        self.hovered = id;
+        if self.hovered != id {
+            debug!("Now hovering {:?}", id);
+            self.hovered = id;
+        }
     }
     pub fn focused(&self) -> ViewportNodeID {
         self.focused
     }
     pub fn focus(&mut self, id: ViewportNodeID) {
-        debug!("Now focusing {:?}", id);
-        self.focused = id;
+        if self.focused != id {
+            debug!("Now focusing {:?}", id);
+            self.focused = id;
+        }
     }
     pub fn drag(&mut self, id: Option<ViewportNodeID>) {
         self.dragged = id;
