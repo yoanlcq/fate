@@ -155,6 +155,4 @@ impl ViewportVisitor for GLSystem {
             gl::Disable(gl::SCISSOR_TEST);
         }
     }
-    fn accept_split_viewport(&mut self, _args: AcceptSplitViewport) {
-    }
 }
