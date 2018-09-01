@@ -10,7 +10,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
 
     let gl45_core = Registry::new(Api::Gl, (4, 5), Profile::Core, Fallbacks::All, [
-        "GL_NV_command_list", "EXT_texture_compression_s3tc", "EXT_texture_sRGB", "EXT_texture_filter_anisotropic"
+        "GL_NV_command_list", "GL_EXT_texture_compression_s3tc", "GL_EXT_texture_sRGB", "GL_EXT_texture_filter_anisotropic"
     ]);
     let gles2 = Registry::new(Api::Gles2, (2, 0), Profile::Core, Fallbacks::All, []);
 

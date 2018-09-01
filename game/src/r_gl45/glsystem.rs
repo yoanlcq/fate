@@ -46,6 +46,10 @@ impl GLSystem {
                     let Rgba { r, g, b, a } = g.clear_color();
                     gl::ClearColor(r, g, b, a);
                 },
+                GpuCmd::CubemapArrayCreate(id) => { unimplemented!{} },
+                GpuCmd::CubemapArrayDelete(id) => { unimplemented!{} },
+                GpuCmd::CubemapArrayClear(id) => { unimplemented!{} },
+                GpuCmd::CubemapArraySubImage(id, slot, face) => { unimplemented!{} },
             }
         }
     }

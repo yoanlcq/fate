@@ -13,6 +13,7 @@ use resources::Resources;
 use gpu::GpuCmd;
 use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor};
+use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace};
 
 #[derive(Debug)]
 pub struct G {
@@ -40,6 +41,10 @@ pub struct G {
     pub mouse_cursor: MouseCursor,
     clear_color: Rgba<f32>,
     viewport_db: ViewportDB,
+
+    //
+    cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
+
     /*
     skybox_is_enabled: bool,
     skybox_cubemap_selector: CubemapSelector,
@@ -58,13 +63,9 @@ pub struct G {
     plane_infos: HashMap<PlaneID, PlaneInfo>,
 
     //
-    cubemap_arrays: HashMap<CubemapArrayID, CubemapArrayInfo>,
-
-    //
     texture2d_arrays: HashMap<Texture2DArrayID, Texture2DArrayInfo>,
     */
 }
-
 
 impl G {
     pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
@@ -81,6 +82,7 @@ impl G {
             mouse_cursor: MouseCursor::default(),
             is_mouse_cursor_visible: true,
             viewport_db: ViewportDB::new(),
+            cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -115,5 +117,23 @@ impl G {
     pub fn visit_viewports(&mut self, f: &mut ViewportVisitor) {
         let Extent2 { w, h } = self.input.canvas_size();
         self.viewport_db_mut().visit(Rect { x: 0, y: 0, w, h }, f);
+    }
+    pub fn cubemap_array_info(&self, array: CubemapArrayID) -> Option<&CubemapArrayInfo> {
+        self.cubemap_arrays.get(array.0 as usize)
+    }
+    pub fn cubemap_array_info_mut(&mut self, array: CubemapArrayID) -> Option<&mut CubemapArrayInfo> {
+        self.cubemap_arrays.get_mut(array.0 as usize)
+    }
+    pub fn cubemap_array_create(&mut self, array: CubemapArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayCreate(array))
+    }
+    pub fn cubemap_array_delete(&mut self, array: CubemapArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(array))
+    }
+    pub fn cubemap_array_clear(&mut self, array: CubemapArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayClear(array))
+    }
+    pub fn cubemap_array_sub_image(&mut self, array: CubemapArrayID, cubemap: usize, face: CubemapFace) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage(array, cubemap, face))
     }
 }

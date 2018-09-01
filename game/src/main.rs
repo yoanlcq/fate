@@ -39,6 +39,11 @@ extern crate rand;
 // - Sound (OpenAL?)
 // - WebGL port (porting to OpenGL ES 2, gonna hurt)
 
+#[allow(unused_attributes)]
+#[macro_export]
+#[macro_use]
+pub mod array_macro;
+
 pub mod early;
 pub mod platform;
 pub mod main_game;
@@ -55,6 +60,7 @@ pub mod gpu;
 pub mod gameplay;
 pub mod mouse_cursor;
 pub mod viewport;
+pub mod cubemap;
 
 fn main() {
     early::setup_log();
