@@ -62,8 +62,6 @@ pub struct G {
 
     //
     texture2d_arrays: HashMap<Texture2DArrayID, Texture2DArrayInfo>,
-
-    viewport_nodes: HashMap<ViewportNodeID, ViewportNode>,
     */
 }
 

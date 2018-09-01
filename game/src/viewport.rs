@@ -66,8 +66,8 @@ pub enum SplitDirection {
 }
 
 pub trait ViewportVisitor {
-    fn accept_leaf_viewport(&mut self, AcceptLeafViewport);
-    fn accept_split_viewport(&mut self, AcceptSplitViewport);
+    fn accept_leaf_viewport(&mut self, AcceptLeafViewport) {}
+    fn accept_split_viewport(&mut self, AcceptSplitViewport) {}
 }
 
 #[derive(Debug)]
@@ -212,40 +212,33 @@ impl ViewportVisitor for ViewportHoverer {
         }
     }
     fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
-        if self.on_border.is_some() {
+        if self.on_border.is_some() || !args.rect.contains_point(self.pos) {
             return;
         }
         let x = self.pos.x.saturating_sub(args.rect.x);
         let y = self.pos.y.saturating_sub(args.rect.y);
-        match args.split_direction {
-            SplitDirection::Horizontal => {
-                if (y as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
-                    self.on_border = Some(args.id);
-                }
-            },
-            SplitDirection::Vertical => {
-                if (x as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
-                    self.on_border = Some(args.id);
-                }
-            },
+        let v = match args.split_direction {
+            SplitDirection::Horizontal => y,
+            SplitDirection::Vertical => x,
+        };
+        if (v as i32 - *args.distance_from_left_or_bottom_px as i32).abs() <= args.border_px as i32 {
+            self.on_border = Some(args.id);
         }
     }
 }
 
 
 impl ViewportVisitor for ViewportDragger {
-    fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
-    }
     fn accept_split_viewport(&mut self, args: AcceptSplitViewport) {
         if args.id != self.id {
             return;
         }
         let x = self.pos.x.saturating_sub(args.rect.x);
         let y = self.pos.y.saturating_sub(args.rect.y);
-        match args.split_direction {
-            SplitDirection::Horizontal => *args.distance_from_left_or_bottom_px = y,
-            SplitDirection::Vertical => *args.distance_from_left_or_bottom_px = x,
-        }
+        *args.distance_from_left_or_bottom_px = match args.split_direction {
+            SplitDirection::Horizontal => y,
+            SplitDirection::Vertical => x,
+        };
     }
 }
 
