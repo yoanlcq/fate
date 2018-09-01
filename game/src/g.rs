@@ -10,10 +10,11 @@ use frame_time::FrameTimeManager;
 use message::Message;
 use input::Input;
 use resources::Resources;
-use gpu::GpuCmd;
+use gpu::{GpuCmd, CpuSubImage2D};
 use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace};
+use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
 
 #[derive(Debug)]
 pub struct G {
@@ -44,6 +45,7 @@ pub struct G {
 
     //
     cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
+    texture2d_arrays: [Texture2DArrayInfo; Texture2DArrayID::MAX],
 
     /*
     skybox_is_enabled: bool,
@@ -61,9 +63,6 @@ pub struct G {
     //
     model_infos: HashMap<ModelID, ModelInfo>,
     plane_infos: HashMap<PlaneID, PlaneInfo>,
-
-    //
-    texture2d_arrays: HashMap<Texture2DArrayID, Texture2DArrayInfo>,
     */
 }
 
@@ -83,6 +82,7 @@ impl G {
             is_mouse_cursor_visible: true,
             viewport_db: ViewportDB::new(),
             cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
+            texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -108,6 +108,7 @@ impl G {
     pub fn clear_color(&self) -> Rgba<f32> {
         self.clear_color
     }
+
     pub fn viewport_db(&self) -> &ViewportDB {
         &self.viewport_db
     }
@@ -118,6 +119,7 @@ impl G {
         let Extent2 { w, h } = self.input.canvas_size();
         self.viewport_db_mut().visit(Rect { x: 0, y: 0, w, h }, f);
     }
+
     pub fn cubemap_array_info(&self, array: CubemapArrayID) -> Option<&CubemapArrayInfo> {
         self.cubemap_arrays.get(array.0 as usize)
     }
@@ -130,10 +132,29 @@ impl G {
     pub fn cubemap_array_delete(&mut self, array: CubemapArrayID) {
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(array))
     }
-    pub fn cubemap_array_clear(&mut self, array: CubemapArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayClear(array))
+    pub fn cubemap_array_clear(&mut self, array: CubemapArrayID, level: u32, color: Rgba<f32>) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayClear(array, level, color))
     }
-    pub fn cubemap_array_sub_image(&mut self, array: CubemapArrayID, cubemap: usize, face: CubemapFace) {
-        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage(array, cubemap, face))
+    pub fn cubemap_array_sub_image_2d(&mut self, array: CubemapArrayID, cubemap: usize, face: CubemapFace, img: CpuSubImage2D) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage2D(array, cubemap, face, img))
+    }
+
+    pub fn texture2d_array_info(&self, array: Texture2DArrayID) -> Option<&Texture2DArrayInfo> {
+        self.texture2d_arrays.get(array.0 as usize)
+    }
+    pub fn texture2d_array_info_mut(&mut self, array: Texture2DArrayID) -> Option<&mut Texture2DArrayInfo> {
+        self.texture2d_arrays.get_mut(array.0 as usize)
+    }
+    pub fn texture2d_array_create(&mut self, array: Texture2DArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayCreate(array))
+    }
+    pub fn texture2d_array_delete(&mut self, array: Texture2DArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayDelete(array))
+    }
+    pub fn texture2d_array_clear(&mut self, array: Texture2DArrayID, level: u32, color: Rgba<f32>) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayClear(array, level, color))
+    }
+    pub fn texture2d_array_sub_image_2d(&mut self, array: Texture2DArrayID, slot: usize, img: CpuSubImage2D) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySubImage2D(array, slot, img))
     }
 }

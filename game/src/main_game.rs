@@ -56,7 +56,7 @@ impl MainGame {
             Box::new(Quitter::default()),
             Box::new(ViewportInputHandler::new()),
             Box::new(Gameplay::new()),
-            Box::new(GLSystem::new(canvas_size, &g)),
+            Box::new(GLSystem::new()),
             Box::new(GpuEndFrame::new()),
         ];
         let fps_manager = FpsManager {

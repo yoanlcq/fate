@@ -1,24 +1,70 @@
-use std::mem;
 use fate::gx::gl;
 
 // TODO: Also move to GX
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct CpuImg {
-    format: CpuImgFormat,
-    type_: CpuImgPixelType,
-    data: Vec<u8>,
-}
+// This allows for Vec<u8>, but also Rc-based custom containers for sparing memory.
+pub struct CpuPixels(Box<AsRef<[u8]>>);
 
-impl CpuImg {
-    pub fn new<T>(format: CpuImgFormat, type_: CpuImgPixelType, mut pixels: Vec<T>) -> Self {
-        let (ptr, len, cap, sz) = (pixels.as_mut_ptr(), pixels.len(), pixels.capacity(), mem::size_of::<T>());
-        mem::forget(pixels);
-        Self {
-            format, type_, data: unsafe { Vec::from_raw_parts(ptr as *mut u8, len * sz, cap * sz) }
-        }
+impl CpuPixels {
+    pub fn from_vec<T>(v: Vec<T>) -> Self {
+        CpuPixels(Box::new(super::into_bytes_vec(v)))
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_ref().as_ref()
+    }
+    pub fn as_ptr(&self) -> *const u8 {
+        self.as_slice().as_ptr()
     }
 }
+
+use std::fmt::{self, Debug, Formatter};
+
+impl Debug for CpuPixels {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "CpuPixels")
+    }
+}
+
+impl PartialEq for CpuPixels {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+impl Eq for CpuPixels {}
+
+impl Clone for CpuPixels {
+    fn clone(&self) -> Self {
+        Self::from_vec(self.as_slice().to_vec())
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CpuSubImage3D {
+    pub level: u32,
+    pub x: u32,
+    pub y: u32,
+    pub z: u32,
+    pub w: u32,
+    pub h: u32,
+    pub depth: u32,
+    pub format: CpuImgFormat,
+    pub type_: CpuImgPixelType,
+    pub data: CpuPixels,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CpuSubImage2D {
+    pub level: u32,
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
+    pub format: CpuImgFormat,
+    pub type_: CpuImgPixelType,
+    pub data: CpuPixels,
+}
+
 
 #[allow(non_camel_case_types)]
 #[repr(u32)]

@@ -1,5 +1,5 @@
-use fate::math::{Extent2, Rgba};
-use gpu::{CpuImg, GpuTextureInternalFormat};
+use fate::math::{Extent2};
+use gpu::GpuTextureInternalFormat;
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CubemapArrayID(pub u8);
@@ -36,15 +36,10 @@ impl CubemapFace {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CubemapArrayInfo {
     // Parameters at creation
-    levels: u32,
-    internal_format: GpuTextureInternalFormat,
-    size: Extent2<u32>,
-    nb_cubemaps: u32,
-    // For the whole array
-    clear_color: Rgba<u8>,
-    // Cubemaps
-    keep_in_cpu: bool,
-    faces: Vec<[CpuImg; 6]>,
+    pub levels: u32,
+    pub internal_format: GpuTextureInternalFormat,
+    pub size: Extent2<u32>,
+    pub nb_cubemaps: u32,
 }
 
 impl CubemapArrayInfo {
@@ -54,9 +49,7 @@ impl CubemapArrayInfo {
             internal_format: GpuTextureInternalFormat::RGB8,
             size: Extent2::broadcast(1),
             nb_cubemaps: 0,
-            clear_color: Rgba::new_opaque(0.3, 0.8, 1.).map(|x| (x * 255.) as u8),
-            keep_in_cpu: false,
-            faces: Vec::new(),
         }
     }
 }
+
