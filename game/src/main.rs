@@ -62,6 +62,7 @@ pub mod mouse_cursor;
 pub mod viewport;
 pub mod cubemap;
 pub mod texture2d;
+pub mod mesh3d;
 
 fn main() {
     early::setup_log();
