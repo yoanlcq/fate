@@ -16,7 +16,7 @@ use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace};
 use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
-use mesh3d::{Mesh3DID, Mesh3DInfo, Mesh3DChannel};
+use mesh::{MeshID, MeshInfo, MeshChannel};
 
 #[derive(Debug)]
 pub struct G {
@@ -49,7 +49,7 @@ pub struct G {
     cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
     texture2d_arrays: [Texture2DArrayInfo; Texture2DArrayID::MAX],
 
-    mesh3d_infos: HashMap<Mesh3DID, Mesh3DInfo>,
+    mesh_infos: HashMap<MeshID, MeshInfo>,
 
     /*
     skybox_is_enabled: bool,
@@ -86,7 +86,7 @@ impl G {
             viewport_db: ViewportDB::new(),
             cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
             texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
-            mesh3d_infos: HashMap::new(),
+            mesh_infos: HashMap::new(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -162,6 +162,7 @@ impl G {
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySubImage2D(array, slot, img))
     }
 
+    /*
     // 1 mesh3d = 1 VAO
     pub fn mesh3d_info(&self, id: Mesh3DID) -> Option<&Mesh3DInfo> {
         self.mesh3d_infos.get(&id)
@@ -178,4 +179,5 @@ impl G {
     pub fn mesh3d_update_channel(&mut self, id: Mesh3DID, channel: Mesh3DChannel, range: Range<usize>) {
         unimplemented!()
     }
+    */
 }

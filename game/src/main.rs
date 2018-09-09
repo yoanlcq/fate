@@ -12,6 +12,8 @@ extern crate pretty_env_logger;
 extern crate backtrace;
 extern crate gltf;
 extern crate rand;
+#[macro_use]
+extern crate static_assertions;
 
 // TODO list:
 // - Load meshes (obj and GLTF)
@@ -62,7 +64,7 @@ pub mod mouse_cursor;
 pub mod viewport;
 pub mod cubemap;
 pub mod texture2d;
-pub mod mesh3d;
+pub mod mesh;
 
 fn main() {
     early::setup_log();
