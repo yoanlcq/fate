@@ -19,14 +19,36 @@ pub struct GLDrawElementsIndirectCommand {
 }
 
 unsafe fn toast_rendering() {
-    // Create the VAO;
-    let vao = 0;
-    let position_vbo = 0;
-    let normal_vbo = 0;
-    let uv_vbo = 0;
-    let model_matrix_vbo = 0;
-    let material_index_vbo = 0;
-    let ibo = 0;
+    use ::std::ptr;
+
+    // Creating the resources
+    
+    let max_vertices = 0xffffff;
+    let max_indices = 0xffffff;
+    let max_instances = 0xffffff;
+
+    let mut vao = 0;
+    let mut buffers = [0; 6];
+
+    gl::GenVertexArrays(1, &mut vao);
+    gl::GenBuffers(buffers.len() as _, buffers.as_mut_ptr());
+
+    let position_vbo = buffers[0];
+    let normal_vbo = buffers[1];
+    let uv_vbo = buffers[2];
+    let model_matrix_vbo = buffers[3];
+    let material_index_vbo = buffers[4];
+    let ibo = buffers[5];
+
+    let flags = gl::DYNAMIC_STORAGE_BIT;
+    gl::NamedBufferStorage(position_vbo, max_vertices * 3 * 4, ptr::null(), flags);
+    gl::NamedBufferStorage(normal_vbo, max_vertices * 3 * 4, ptr::null(), flags);
+    gl::NamedBufferStorage(uv_vbo, max_vertices * 2 * 4, ptr::null(), flags);
+    gl::NamedBufferStorage(model_matrix_vbo, max_instances * 4 * 4 * 4, ptr::null(), flags);
+    gl::NamedBufferStorage(material_index_vbo, max_instances * 2, ptr::null(), flags);
+    gl::NamedBufferStorage(ibo, max_indices * 4, ptr::null(), flags);
+
+    // Specifying vertex attrib layout
 
     gl::BindVertexArray(vao);
     gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
@@ -63,32 +85,69 @@ unsafe fn toast_rendering() {
     gl::BindBuffer(gl::ARRAY_BUFFER, 0);
     gl::BindVertexArray(0);
 
+    // TODO: Operations:
+    // - Add mesh (grab chunks)
+    // - Remove mesh (release chunks)
+    // - Edit mesh (re-upload data)
+    // - Add instance pack
+    // - Remove instance pack
+    // - Edit instance pack
+    //
+    // i.e
+    // - Allocate N vertices
+    // - Allocate N indices
+    // - Allocate N instances
+    // - Defragment the memory
+
+    // Uploading data
+
+    // gl::NamedBufferSubData(buf, offset, size, data);
+
     // Drawing
 
-    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-    gl::BindVertexArray(vao);
-
+    let m = MemInfo::default();
     let mut cmds = vec![];
-    let mut base_vertex = 0; // Added to each element of `indices`.
-    for _ in 0..1 {
-        let nb_indices = 0; // TODO
-        let nb_instances = 0; // TODO
+
+    for (i, mesh) in m.instance_ranges.iter().zip(m.instance_range_mesh_entry.iter()) {
+        let index_range = &m.index_ranges[*mesh as usize];
+        let vertex_range = &m.vertex_ranges[*mesh as usize];
         cmds.push(GLDrawElementsIndirectCommand {
-            nb_indices,
-            nb_instances,
-            first_index: base_vertex, // Offset into the index buffer
-            base_vertex,
-            base_instance: 0,
+            base_instance: i.start,
+            nb_instances: i.end - i.start,
+            first_index: index_range.start, // Offset into the index buffer
+            nb_indices: index_range.end - index_range.start,
+            base_vertex: vertex_range.start, // Value added to indices for vertex retrieval
         });
-        base_vertex += nb_indices;
     }
+
+    gl::BindVertexArray(vao);
+    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
     gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0); // read from cpu memory
-
     gl::MultiDrawElementsIndirect(gx::Topology::Triangles as _, gl::UNSIGNED_INT, cmds.as_ptr() as _, cmds.len() as _, 0);
-
     gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
     gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
     gl::BindVertexArray(0);
+}
+
+use ::std::ops::Range;
+#[derive(Debug, Default, Clone, Hash, PartialEq)]
+struct MemInfo {
+    // Indexed by mesh
+    pub vertex_ranges: Vec<Range<u32>>,
+    pub index_ranges: Vec<Range<u32>>,
+
+    // Indexed by instancerange
+    pub instance_ranges: Vec<Range<u32>>,
+    pub instance_range_mesh_entry: Vec<u32>,
+}
+
+impl MemInfo {
+    fn mesh_alloc(&mut self, nb_vertices: u32, nb_indices: u32) { unimplemented!{} }
+    fn mesh_dealloc(&mut self, i: u32) { unimplemented!{} }
+    fn mesh_set_data(&mut self, buf (pos, normal, uv, indices), offset, data) { unimplemented!{} }
+    fn instancerange_alloc(&mut self, nb_instances: u32) { unimplemented!{} }
+    fn instancerange_dealloc(&mut self, i: u32) { unimplemented!{} }
+    fn instancerange_set_data(&mut self, buf (model_matrix, mat_id), offset, data) { unimplemented!{} }
 }
 
 

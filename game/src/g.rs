@@ -162,22 +162,90 @@ impl G {
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySubImage2D(array, slot, img))
     }
 
-    /*
-    // 1 mesh3d = 1 VAO
-    pub fn mesh3d_info(&self, id: Mesh3DID) -> Option<&Mesh3DInfo> {
-        self.mesh3d_infos.get(&id)
+    // TODO: These are problems suited for a DenseSlotMap.
+    // Basically, have a singleton GpuMemory internal to G, which info is as follows:
+    // - max_materials
+    // - max_lights
+    // - max_vertices (for vertex data buffers: position, normal, uv)
+    // - max_indices
+    // - max_instances (for instanced data buffers: model matrices, material indices)
+    // -
+    // - Indexed by MeshID (slotmap key):
+    //   - vertex_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these vertices in the range are actually used)
+    //   - index_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these indices in the range are actually used)
+    // - Indexed by InstanceArrayID (slotmap key):
+    //   - instance_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these instances in the range are actually used)
+    //   - instance_array_mesh: DenseSlotMap<MeshID>, (TODO: versus how many of these instances in the range are actually used)
+
+    pub fn mesh_info(&self, mesh: MeshID) -> Option<&MeshInfo> {
+        self.meshes.get(&mesh.0)
     }
-    pub fn mesh3d_info_mut(&mut self, id: Mesh3DID) -> Option<&mut Mesh3DInfo> {
-        self.mesh3d_infos.get_mut(&id)
+    pub fn mesh_info_mut(&mut self, mesh: MeshID) -> Option<&mut MeshInfo> {
+        self.meshes.get_mut(&mesh.0)
     }
-    pub fn mesh3d_create(&mut self, id: Mesh3DID) {
-        unimplemented!()
+    pub fn mesh_create(&mut self, mesh: MeshID) {
+        // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
     }
-    pub fn mesh3d_delete(&mut self, id: Mesh3DID) {
-        unimplemented!()
+    pub fn mesh_delete(&mut self, mesh: MeshID) {
+        // Push a command to free space occupied by this mesh
     }
-    pub fn mesh3d_update_channel(&mut self, id: Mesh3DID, channel: Mesh3DChannel, range: Range<usize>) {
-        unimplemented!()
+    pub fn mesh_set_indices(&mut self, mesh: MeshID, start: usize, data: Box<[u32]>) {
+        // Push a command to call BufferSubData()
     }
-    */
+    pub fn mesh_set_positions(&mut self, mesh: MeshID, start: usize, data: Box<[Vec3<f32>]>) {
+        // Push a command to call BufferSubData()
+    }
+    pub fn mesh_set_normals(&mut self, mesh: MeshID, start: usize, data: Box<[Vec3<f32>]>) {
+        // Push a command to call BufferSubData()
+    }
+    pub fn mesh_set_uvs(&mut self, mesh: MeshID, start: usize, data: Box<[Vec2<f32>]>) {
+        // Push a command to call BufferSubData()
+    }
+
+    pub fn instance_array_info(&self, i: InstanceArrayID) -> Option<&InstanceArrayInfo> {
+        self.instance_arrays.get(&i.0)
+    }
+    pub fn instance_array_info_mut(&mut self, i: InstanceArrayID) -> Option<&mut InstanceArrayInfo> {
+        self.instance_arrays.get_mut(&i.0)
+    }
+    pub fn instance_array_create(&mut self, i: InstanceArrayID) {
+        // Push a command to ask "alloc nb_instances" as specified in the info.
+    }
+    pub fn instance_array_delete(&mut self, i: InstanceArrayID) {
+        // Push a command to free the space occupied by this instance array
+    }
+    pub fn instance_array_set_model_matrices(&mut self, i: InstanceArrayID, start: usize, data: Box<[Mat4<f32>]>) {
+        // Push a command to call BufferSubData()
+    }
+    pub fn instance_array_set_material_indices(&mut self, i: InstanceArrayID, start: usize, data: Box<[u16]>) {
+        // Push a command to call BufferSubData()
+    }
+
+    pub fn drawlist_set_data(&mut self, start: usize, data: Box<[(InstanceArrayID, MeshID)]>) {
+        // Push a command to call BufferSubData() in the GL_DRAW_INDIRECT_BUFFER
+        // TODO: Possibility to create multiple such buffers ? (=> visibility layers!)
+    }
+
+    // TODO: Skyboxes should be specified per-viewport, not one for all viewports
+    pub fn skybox_set_cubemap(&mut self, tex: CubemapSelector) {
+        // Push a command to update the uniform buffer (or not ?)
+    }
+
+    pub fn material_array_set_data(&mut self, start: usize, data: Box<[Material]>) {
+        // Push a command to call BufferSubData();
+    }
+
+    pub fn light_array_set_data(&mut self, start: usize, data: Box<[Light]>) {
+        // Push a command to call BufferSubData();
+    }
+}
+
+#[repr(C)]
+struct Light {
+    pub position: Vec4<f32>,
+    pub color: Vec4<f32>,
+    pub linear: f32,
+    pub quadratic: f32,
+    pub radius: f32,
+    pub padding: f32,
 }
