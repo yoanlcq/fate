@@ -1,53 +1,7 @@
 use fate::math::{Vec3, Rgba, Vec2, Mat4};
 use texture2d::Texture2DSelector as Tex2D;
+use fate::gx::gl;
 
-// GL_POINTS, GL_LINE_STRIP, GL_LINE_LOOP, GL_LINES, GL_LINE_STRIP_ADJACENCY, GL_LINES_ADJACENCY, GL_TRIANGLE_STRIP, GL_TRIANGLE_FAN, GL_TRIANGLES
-// GL_TRIANGLE_STRIP_ADJACENCY, GL_TRIANGLES_ADJACENCY, and GL_PATCHES
-
-#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct MeshID(u32);
-
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct MeshInfo {
-    // --- Info that needs to be know at creation time ---
-    pub nb_vertices: u32,
-    pub nb_indices: u32, // 0 if no indices, non-zero otherwise.
-    // pub topology: Topology,
-    // TODO: Spécifier l'usage de chaque buffer (static ? dynamic ? stream ?) (glBufferStorage: updatable ou pas)
-    // TODO: Spécifier quelles sources de données sont utilisées (en gros: C'est des components !)
-
-    pub keep_in_cpu: bool,
-}
-
-// All of the structs below are components that a mesh opts into.
-// A mesh can be either indxed or non-indexed
-
-// Index components
-pub struct Indices_U32        { pub data: Vec<u32>, }
-pub struct Indices_U16        { pub data: Vec<u16>, }
-pub struct Indices_U8         { pub data: Vec<u8>, }
-// Non-instanced attributes (2D meshes)
-pub struct V_Positions_2_F32  { pub data: Vec<Vec2<f32>>, }
-// Non-instanced attributes (3D meshes)
-pub struct V_Positions_3_F32  { pub data: Vec<Vec3<f32>>, }
-pub struct V_Normals_3_F32    { pub data: Vec<Vec3<f32>>, }
-pub struct V_Tangents_3_F32   { pub data: Vec<Vec3<f32>>, }
-pub struct V_Bitangents_3_F32 { pub data: Vec<Vec3<f32>>, }
-// Non-instanced attributes (any mesh)
-pub struct V_Color_4_U8       { pub data: Vec<Rgba<u8>>, }
-pub struct V_Uv_2_F32         { pub data: Vec<Vec2<f32>>, }
-// Instanced attributes. (Material stuff may be reduced to material IDs later)
-pub struct I_ModelMatrix      { pub data: Vec<Mat4<f32>>, }
-pub struct I_AlbedoMul        { pub data: Vec<f32>, }
-pub struct I_AlbedoMap        { pub data: Vec<Tex2D>,  }
-pub struct I_NormalMul        { pub data: Vec<f32>, }
-pub struct I_NormalMap        { pub data: Vec<Tex2D>, }
-pub struct I_MetallicMul      { pub data: Vec<f32>, }
-pub struct I_MetallicMap      { pub data: Vec<Tex2D>, }
-pub struct I_RoughnessMul     { pub data: Vec<f32>, }
-pub struct I_RoughnessMap     { pub data: Vec<Tex2D>, }
-pub struct I_AoMul            { pub data: Vec<f32>, }
-pub struct I_AoMap            { pub data: Vec<Tex2D>, }
 
 // Rendering the window:
 // - Opaque 2D pass
@@ -62,14 +16,80 @@ pub struct I_AoMap            { pub data: Vec<Tex2D>, }
 //     - For each viewport-layer (camera + visual layers) of the viewport
 //       - glMultiDraw*Indirect([vertex_attributes, instanced_attributes])
 //
+//
+// Making the following assumptions :
+// - Every mesh is a 3D mesh that has position, normal and UVs. We may want to support other kinds of data sets later (e.g for 2D sprites, and 2D vector art).
+// - All meshes use indexed rendering, AND all indices are 32-bit (we may want to support non-indexed rendering later).
+// - The "material index" indexes into a uniform array of PBR materials (implying all 3D meshes are PBR, which might not be true, especially 2D meshes).
+// - Vertex data is kept in the CPU. We may want a GPU-only mode.
+// - Buffers are not resizable (create with glBufferStorage());
+// - Buffers can be updated after creation;
 
+
+#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct MeshID(u32);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeshInfo {
+    // --- Info that needs to be known at creation time ---
+    pub nb_vertices: u32,
+    pub nb_indices: u32,
+    pub topology: Topology,
+
+    pub indices: Vec<u32>,
+    pub v_position: Vec<Vec3<f32>>,
+    pub v_normal: Vec<Vec3<f32>>,
+    pub v_uv: Vec<Vec2<f32>>,
+    pub i_model_matrix: Vec<Mat4<f32>>,
+    pub i_material_index: Vec<u16>,
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(u32)]
+pub enum Topology {
+     Points                 = gl::POINTS,
+     LineStrip              = gl::LINE_STRIP,
+     LineLoop               = gl::LINE_LOOP,
+     Lines                  = gl::LINES,
+     LineStripAdjacency     = gl::LINE_STRIP_ADJACENCY,
+     LinesAdjacency         = gl::LINES_ADJACENCY,
+     TriangleStrip          = gl::TRIANGLE_STRIP,
+     TriangleFan            = gl::TRIANGLE_FAN,
+     Triangles              = gl::TRIANGLES,
+     TriangleStripAdjacency = gl::TRIANGLE_STRIP_ADJACENCY,
+     TrianglesAdjacency     = gl::TRIANGLES_ADJACENCY,
+     Patches                = gl::PATCHES,
+}
+
+/// Vertex attrib indices
+// NOTE: OpenGL mandates a minimum of 16.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum MeshChannel {
+    // Non-instanced
     Position = 0,
     Normal = 1,
     Tangent = 2,
     Bitangent = 3,
     Color = 4,
     UV = 5,
+    UV2 = 6,
+    UV3 = 7,
+    UV4 = 8,
+    // Instanced
+    ModelMatrix = 9,
+    MaterialIndex = 13,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+pub struct Material {
+    pub albedo_mul: Rgba<u8>,
+    pub albedo_map: Tex2D,
+    pub normal_map: Tex2D,
+    pub metallic_mul: f32,
+    pub metallic_map: Tex2D,
+    pub roughness_mul: f32,
+    pub roughness_map: Tex2D,
+    pub ao_map: Tex2D,
 }
