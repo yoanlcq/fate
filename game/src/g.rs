@@ -16,7 +16,7 @@ use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace};
 use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
-use mesh::{MeshID, MeshInfo, MeshChannel};
+use mesh::{MeshID, MeshInfo};
 
 #[derive(Debug)]
 pub struct G {

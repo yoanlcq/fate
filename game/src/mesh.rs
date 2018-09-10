@@ -1,6 +1,6 @@
 use fate::math::{Vec3, Rgba, Vec2, Mat4};
 use texture2d::Texture2DSelector as Tex2D;
-use fate::gx::gl;
+use fate::gx;
 
 
 // Rendering the window:
@@ -34,7 +34,7 @@ pub struct MeshInfo {
     // --- Info that needs to be known at creation time ---
     pub nb_vertices: u32,
     pub nb_indices: u32,
-    pub topology: Topology,
+    pub topology: gx::Topology,
 
     pub indices: Vec<u32>,
     pub v_position: Vec<Vec3<f32>>,
@@ -44,28 +44,11 @@ pub struct MeshInfo {
     pub i_material_index: Vec<u16>,
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-#[repr(u32)]
-pub enum Topology {
-     Points                 = gl::POINTS,
-     LineStrip              = gl::LINE_STRIP,
-     LineLoop               = gl::LINE_LOOP,
-     Lines                  = gl::LINES,
-     LineStripAdjacency     = gl::LINE_STRIP_ADJACENCY,
-     LinesAdjacency         = gl::LINES_ADJACENCY,
-     TriangleStrip          = gl::TRIANGLE_STRIP,
-     TriangleFan            = gl::TRIANGLE_FAN,
-     Triangles              = gl::TRIANGLES,
-     TriangleStripAdjacency = gl::TRIANGLE_STRIP_ADJACENCY,
-     TrianglesAdjacency     = gl::TRIANGLES_ADJACENCY,
-     Patches                = gl::PATCHES,
-}
-
 /// Vertex attrib indices
 // NOTE: OpenGL mandates a minimum of 16.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
-pub enum MeshChannel {
+pub enum VertexAttribIndex {
     // Non-instanced
     Position = 0,
     Normal = 1,

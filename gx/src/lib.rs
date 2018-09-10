@@ -38,4 +38,6 @@ pub mod query;
 pub use query::*;
 pub mod boot;
 pub use boot::*;
+pub mod topology;
+pub use topology::*;
 

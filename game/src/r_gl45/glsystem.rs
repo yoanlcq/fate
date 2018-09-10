@@ -1,11 +1,95 @@
 use fate::math::{Extent2, Rgba, Rect};
-use fate::gx::gl::{self, types::*};
+use fate::gx::{self, gl::{self, types::*}};
 
 use gpu::GpuCmd;
-use viewport::{ViewportVisitor, AcceptLeafViewport, AcceptSplitViewport};
+use viewport::{ViewportVisitor, AcceptLeafViewport};
 use cubemap::{CubemapArrayID};
 use texture2d::Texture2DArrayID;
+use mesh::VertexAttribIndex;
 use system::*;
+
+#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
+#[repr(C)]
+pub struct GLDrawElementsIndirectCommand {
+    pub nb_indices: GLuint,
+    pub nb_instances: GLuint,
+    pub first_index: GLuint,
+    pub base_vertex: GLuint,
+    pub base_instance: GLuint,
+}
+
+unsafe fn toast_rendering() {
+    // Create the VAO;
+    let vao = 0;
+    let position_vbo = 0;
+    let normal_vbo = 0;
+    let uv_vbo = 0;
+    let model_matrix_vbo = 0;
+    let material_index_vbo = 0;
+    let ibo = 0;
+
+    gl::BindVertexArray(vao);
+    gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
+    gl::EnableVertexAttribArray(VertexAttribIndex::Normal as _);
+    gl::EnableVertexAttribArray(VertexAttribIndex::UV as _);
+    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 0);
+    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 1);
+    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 2);
+    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 3);
+    gl::EnableVertexAttribArray(VertexAttribIndex::MaterialIndex as _);
+
+    gl::VertexAttribDivisor(VertexAttribIndex::Position as _, 0);
+    gl::VertexAttribDivisor(VertexAttribIndex::Normal as _, 0);
+    gl::VertexAttribDivisor(VertexAttribIndex::UV as _, 0);
+    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 0, 1);
+    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 1, 1);
+    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 2, 1);
+    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 3, 1);
+    gl::VertexAttribDivisor(VertexAttribIndex::MaterialIndex as _, 1);
+
+    gl::BindBuffer(gl::ARRAY_BUFFER, position_vbo);
+    gl::VertexAttribPointer(VertexAttribIndex::Position as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
+    gl::BindBuffer(gl::ARRAY_BUFFER, normal_vbo);
+    gl::VertexAttribPointer(VertexAttribIndex::Normal as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
+    gl::BindBuffer(gl::ARRAY_BUFFER, uv_vbo);
+    gl::VertexAttribPointer(VertexAttribIndex::UV as _, 2, gl::FLOAT, gl::FALSE, 0, 0 as _);
+    gl::BindBuffer(gl::ARRAY_BUFFER, model_matrix_vbo);
+    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 0, 4, gl::FLOAT, gl::FALSE, 4*4*4, (0*4*4) as _);
+    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 1, 4, gl::FLOAT, gl::FALSE, 4*4*4, (1*4*4) as _);
+    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 2, 4, gl::FLOAT, gl::FALSE, 4*4*4, (2*4*4) as _);
+    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 3, 4, gl::FLOAT, gl::FALSE, 4*4*4, (3*4*4) as _);
+    gl::BindBuffer(gl::ARRAY_BUFFER, material_index_vbo);
+    gl::VertexAttribIPointer(VertexAttribIndex::MaterialIndex as _, 1, gl::UNSIGNED_SHORT, 0, 0 as _);
+    gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+    gl::BindVertexArray(0);
+
+    // Drawing
+
+    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
+    gl::BindVertexArray(vao);
+
+    let mut cmds = vec![];
+    let mut base_vertex = 0; // Added to each element of `indices`.
+    for _ in 0..1 {
+        let nb_indices = 0; // TODO
+        let nb_instances = 0; // TODO
+        cmds.push(GLDrawElementsIndirectCommand {
+            nb_indices,
+            nb_instances,
+            first_index: base_vertex, // Offset into the index buffer
+            base_vertex,
+            base_instance: 0,
+        });
+        base_vertex += nb_indices;
+    }
+    gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0); // read from cpu memory
+
+    gl::MultiDrawElementsIndirect(gx::Topology::Triangles as _, gl::UNSIGNED_INT, cmds.as_ptr() as _, cmds.len() as _, 0);
+
+    gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
+    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+    gl::BindVertexArray(0);
+}
 
 
 #[derive(Debug)]
