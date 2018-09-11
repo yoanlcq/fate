@@ -65,6 +65,7 @@ pub mod viewport;
 pub mod cubemap;
 pub mod texture2d;
 pub mod mesh;
+pub mod light;
 
 fn main() {
     early::setup_log();

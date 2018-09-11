@@ -45,28 +45,32 @@ pub struct G {
     clear_color: Rgba<f32>,
     viewport_db: ViewportDB,
 
+    skybox_is_enabled: bool,
+    skybox_cubemap_selector: CubemapSelector,
+
     //
     cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
     texture2d_arrays: [Texture2DArrayInfo; Texture2DArrayID::MAX],
-
-    mesh_infos: HashMap<MeshID, MeshInfo>,
-
-    /*
-    skybox_is_enabled: bool,
-    skybox_cubemap_selector: CubemapSelector,
+    meshes: HashMap<MeshID, MeshInfo>,
+    materials: HashMap<MaterialID, Material>,
 
     // "entities"
     xforms: HashMap<EID, Xform>,
     cameras: HashMap<EID, Camera>,
-    models: HashMap<EID, ModelInstance>,
-    planes: HashMap<EID, PlaneInstance>,
+    lights: HashMap<EID, Light>,
+    instances: HashMap<EID, MeshInstance>,
+
+    /*
     visual_layers: HashMap<EID, VisualLayerID>,
     physics_layers: HashMap<EID, PhysicsLayerID>,
     visual_space: HashMap<EID, VisualSpace>,
-
-    //
-    plane_infos: HashMap<PlaneID, PlaneInfo>,
     */
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct MeshInstance {
+    pub mesh_id: MeshID,
+    pub material_id: MaterialID,
 }
 
 impl G {
@@ -183,7 +187,7 @@ impl G {
     pub fn mesh_info_mut(&mut self, mesh: MeshID) -> Option<&mut MeshInfo> {
         self.meshes.get_mut(&mesh.0)
     }
-    pub fn mesh_create(&mut self, mesh: MeshID) {
+    pub fn mesh_create(&mut self, mesh: MeshID, info: MeshInfo) {
         // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
     }
     pub fn mesh_delete(&mut self, mesh: MeshID) {
@@ -208,7 +212,7 @@ impl G {
     pub fn instance_array_info_mut(&mut self, i: InstanceArrayID) -> Option<&mut InstanceArrayInfo> {
         self.instance_arrays.get_mut(&i.0)
     }
-    pub fn instance_array_create(&mut self, i: InstanceArrayID) {
+    pub fn instance_array_create(&mut self, i: InstanceArrayID, info: InstanceArrayInfo) {
         // Push a command to ask "alloc nb_instances" as specified in the info.
     }
     pub fn instance_array_delete(&mut self, i: InstanceArrayID) {
@@ -240,12 +244,3 @@ impl G {
     }
 }
 
-#[repr(C)]
-struct Light {
-    pub position: Vec4<f32>,
-    pub color: Vec4<f32>,
-    pub linear: f32,
-    pub quadratic: f32,
-    pub radius: f32,
-    pub padding: f32,
-}
