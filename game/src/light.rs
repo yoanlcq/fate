@@ -1,6 +1,8 @@
+use fate::math::Vec4;
+
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[repr(C)]
-struct Light {
+pub struct Light {
     pub position: Vec4<f32>,
     pub color: Vec4<f32>,
     pub linear: f32,

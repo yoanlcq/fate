@@ -1,10 +1,10 @@
 use std::time::Duration;
 use std::collections::{VecDeque, HashMap};
 use std::sync::Arc;
-use std::ops::Range;
 
 use fate::mt;
 use fate::math::{Extent2, Rgba, Rect};
+use fate::math::{Vec2, Vec3, Mat4};
 use fate::lab::fps::FpsStats;
 
 use frame_time::FrameTimeManager;
@@ -14,9 +14,20 @@ use resources::Resources;
 use gpu::{GpuCmd, CpuSubImage2D};
 use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor};
-use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace};
+use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace, CubemapSelector};
 use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
 use mesh::{MeshID, MeshInfo};
+use material::{MaterialID, Material};
+use light::Light;
+use camera::Camera;
+use xform::Xform;
+use eid::EID;
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub struct MeshInstance {
+    pub mesh_id: MeshID,
+    pub material_id: MaterialID,
+}
 
 #[derive(Debug)]
 pub struct G {
@@ -45,8 +56,10 @@ pub struct G {
     clear_color: Rgba<f32>,
     viewport_db: ViewportDB,
 
+    /*
     skybox_is_enabled: bool,
     skybox_cubemap_selector: CubemapSelector,
+    */
 
     //
     cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
@@ -67,12 +80,6 @@ pub struct G {
     */
 }
 
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct MeshInstance {
-    pub mesh_id: MeshID,
-    pub material_id: MaterialID,
-}
-
 impl G {
     pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
        let mut g = Self {
@@ -90,7 +97,12 @@ impl G {
             viewport_db: ViewportDB::new(),
             cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
             texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
-            mesh_infos: HashMap::new(),
+            meshes: HashMap::new(),
+            materials: HashMap::new(),
+            xforms: HashMap::new(),
+            cameras: HashMap::new(),
+            lights: HashMap::new(),
+            instances: HashMap::new(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -182,10 +194,10 @@ impl G {
     //   - instance_array_mesh: DenseSlotMap<MeshID>, (TODO: versus how many of these instances in the range are actually used)
 
     pub fn mesh_info(&self, mesh: MeshID) -> Option<&MeshInfo> {
-        self.meshes.get(&mesh.0)
+        self.meshes.get(&mesh)
     }
     pub fn mesh_info_mut(&mut self, mesh: MeshID) -> Option<&mut MeshInfo> {
-        self.meshes.get_mut(&mesh.0)
+        self.meshes.get_mut(&mesh)
     }
     pub fn mesh_create(&mut self, mesh: MeshID, info: MeshInfo) {
         // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
@@ -206,6 +218,7 @@ impl G {
         // Push a command to call BufferSubData()
     }
 
+/*
     pub fn instance_array_info(&self, i: InstanceArrayID) -> Option<&InstanceArrayInfo> {
         self.instance_arrays.get(&i.0)
     }
@@ -229,6 +242,7 @@ impl G {
         // Push a command to call BufferSubData() in the GL_DRAW_INDIRECT_BUFFER
         // TODO: Possibility to create multiple such buffers ? (=> visibility layers!)
     }
+    */
 
     // TODO: Skyboxes should be specified per-viewport, not one for all viewports
     pub fn skybox_set_cubemap(&mut self, tex: CubemapSelector) {
@@ -243,4 +257,3 @@ impl G {
         // Push a command to call BufferSubData();
     }
 }
-

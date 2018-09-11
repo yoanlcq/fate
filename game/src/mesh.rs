@@ -63,16 +63,3 @@ pub enum VertexAttribIndex {
     ModelMatrix = 9,
     MaterialIndex = 13,
 }
-
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone, PartialEq)]
-pub struct Material {
-    pub albedo_mul: Rgba<u8>,
-    pub albedo_map: Tex2D,
-    pub normal_map: Tex2D,
-    pub metallic_mul: f32,
-    pub metallic_map: Tex2D,
-    pub roughness_mul: f32,
-    pub roughness_map: Tex2D,
-    pub ao_map: Tex2D,
-}

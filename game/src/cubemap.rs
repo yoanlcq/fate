@@ -2,6 +2,12 @@ use fate::math::{Extent2};
 use gpu::GpuTextureInternalFormat;
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CubemapSelector {
+    pub array_id: CubemapArrayID,
+    pub cubemap: u16,
+}
+
+#[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CubemapArrayID(pub u8);
 
 impl CubemapArrayID {

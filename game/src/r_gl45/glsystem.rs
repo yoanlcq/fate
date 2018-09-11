@@ -141,15 +141,6 @@ struct MemInfo {
     pub instance_range_mesh_entry: Vec<u32>,
 }
 
-impl MemInfo {
-    fn mesh_alloc(&mut self, nb_vertices: u32, nb_indices: u32) { unimplemented!{} }
-    fn mesh_dealloc(&mut self, i: u32) { unimplemented!{} }
-    fn mesh_set_data(&mut self, buf (pos, normal, uv, indices), offset, data) { unimplemented!{} }
-    fn instancerange_alloc(&mut self, nb_instances: u32) { unimplemented!{} }
-    fn instancerange_dealloc(&mut self, i: u32) { unimplemented!{} }
-    fn instancerange_set_data(&mut self, buf (model_matrix, mat_id), offset, data) { unimplemented!{} }
-}
-
 
 #[derive(Debug)]
 pub struct GLSystem {
