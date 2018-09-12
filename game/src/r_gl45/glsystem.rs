@@ -144,8 +144,14 @@ struct MemInfo {
 
 #[derive(Debug)]
 pub struct GLSystem {
+    // Texture arrays
     cubemap_arrays: [GLuint; CubemapArrayID::MAX],
     texture2d_arrays: [GLuint; Texture2DArrayID::MAX],
+
+    // Skybox
+    skybox_program: gx::ProgramEx,
+    skybox_vbo: gx::Buffer,
+    skybox_vao: gx::VertexArray,
 }
 
 impl GLSystem {
@@ -168,8 +174,14 @@ impl GLSystem {
             }
             gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0);
         }
+
+        let skybox_vbo = create_skybox_vbo();
+
         Self {
             cubemap_arrays, texture2d_arrays,
+            skybox_program: new_program_ex_unwrap(SKY_VS, SKY_FS),
+            skybox_vao: create_skybox_vao(skybox_vbo.gl_id()),
+            skybox_vbo,
         }
     }
 }
@@ -179,6 +191,9 @@ impl Drop for GLSystem {
         let &mut Self {
             ref mut cubemap_arrays,
             ref mut texture2d_arrays,
+            skybox_program: _,
+            skybox_vao: _,
+            skybox_vbo: _,
         } = self;
         unsafe {
             gl::DeleteTextures(cubemap_arrays.len() as _, cubemap_arrays.as_mut_ptr());
@@ -267,6 +282,143 @@ impl GLSystem {
     }
 }
 
+static SKY_VS: &'static [u8] = b"
+#version 450 core
+
+uniform mat4 u_mvp;
+
+layout(location = 0) in vec3 a_position;
+
+out vec3 v_uvw;
+
+void main() {
+    gl_Position = (u_mvp * vec4(a_position, 1.0)).xyww; // Z = 1 after perspective divide by w
+    v_uvw = a_position;
+}
+";
+
+static SKY_FS: &'static [u8] = b"
+#version 450 core
+
+uniform samplerCubeArray u_cubemap_arrays[32];
+uniform uint u_cubemap_array;
+uniform float u_cubemap_slot;
+
+in vec3 v_uvw;
+
+out vec4 f_color;
+
+void main() {
+    f_color = texture(u_cubemap_arrays[u_cubemap_array], vec4(v_uvw, u_cubemap_slot));
+}
+";
+
+fn unwrap_or_display_error(r: Result<gx::ProgramEx, String>) -> gx::ProgramEx {
+    match r {
+        Ok(p) => p,
+        Err(e) => {
+            error!("GL compile error\n{}", e);
+            panic!("GL compile error\n{}", e)
+        },
+    }
+}
+fn new_program_ex(vs: &[u8], fs: &[u8]) -> Result<gx::ProgramEx, String> {
+    let vs = gx::VertexShader::try_from_source(vs)?;
+    let fs = gx::FragmentShader::try_from_source(fs)?;
+    let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
+    Ok(gx::ProgramEx::new(prog))
+}
+fn new_program_ex_unwrap(vs: &[u8], fs: &[u8]) -> gx::ProgramEx {
+    unwrap_or_display_error(new_program_ex(vs, fs))
+}
+
+use camera::Camera;
+use cubemap::CubemapSelector;
+use fate::math::Vec4;
+use fate::math::Vec3;
+use fate::gx::Object;
+
+fn create_skybox_vbo() -> gx::Buffer {
+    let vbo = gx::Buffer::new();
+    let v = new_skybox_triangle_strip(0.5);
+    let flags = 0;
+    unsafe {
+        gl::NamedBufferStorage(vbo.gl_id(), (v.len() * 3 * 4) as _, v.as_ptr() as _, flags);
+    }
+    vbo
+}
+
+fn create_skybox_vao(vbo: GLuint) -> gx::VertexArray {
+    let vao = gx::VertexArray::new();
+    unsafe {
+        gl::BindVertexArray(vao.gl_id());
+
+        gl::EnableVertexAttribArray(0);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+
+        gl::BindVertexArray(0);
+    }
+    vao
+}
+
+pub const SKYBOX_NB_VERTICES: usize = 15;
+
+pub fn new_skybox_triangle_strip(s: f32) -> [Vec3<f32>; SKYBOX_NB_VERTICES] {
+    [
+        Vec3::new(-s,  s,  s), // Degenerate triangle to flip winding. The remainder of the array describes a regular cube strip.
+
+        Vec3::new(-s,  s,  s), // Front-top-left
+        Vec3::new( s,  s,  s), // Front-top-right
+        Vec3::new(-s, -s,  s), // Front-bottom-left
+        Vec3::new( s, -s,  s), // Front-bottom-right
+        Vec3::new( s, -s, -s), // Back-bottom-right
+        Vec3::new( s,  s,  s), // Front-top-right
+        Vec3::new( s,  s, -s), // Back-top-right
+        Vec3::new(-s,  s,  s), // Front-top-left
+        Vec3::new(-s,  s, -s), // Back-top-left
+        Vec3::new(-s, -s,  s), // Front-bottom-left
+        Vec3::new(-s, -s, -s), // Back-bottom-left
+        Vec3::new( s, -s, -s), // Back-bottom-right
+        Vec3::new(-s,  s, -s), // Back-top-left
+        Vec3::new( s,  s, -s), // Back-top-right
+    ]
+}
+
+impl GLSystem {
+    fn draw_skybox(&self, cubemap: CubemapSelector, camera: &Camera) {
+        let view = camera.view_matrix();
+        let proj = camera.proj_matrix();
+        let view_without_translation = {
+            let mut r = view;
+            r.cols.w = Vec4::unit_w();
+            r
+        };
+
+        // TODO: glActiveTexture
+        unimplemented!();
+
+        unsafe {
+            gl::UseProgram(self.skybox_program.inner().gl_id());
+
+            self.skybox_program.set_uniform_primitive("u_proj_matrix", &[proj]);
+            self.skybox_program.set_uniform_primitive("u_modelview_matrix", &[view_without_translation]);
+            let tabs = self.skybox_program.uniform("u_cubemap_arrays[0]").unwrap(); unimplemented!();
+            self.skybox_program.set_uniform_primitive("u_cubemap_array", &[cubemap.array_id.0 as u32]);
+            self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
+
+            gl::DepthFunc(gl::LEQUAL);
+            gl::BindVertexArray(self.skybox_vao.gl_id());
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, SKYBOX_NB_VERTICES as _);
+            gl::BindVertexArray(0);
+            gl::DepthFunc(gl::LESS);
+
+            gl::UseProgram(0);
+        }
+    }
+}
+
 impl ViewportVisitor for GLSystem {
     fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
         unsafe {
@@ -285,6 +437,8 @@ impl ViewportVisitor for GLSystem {
             gl::Scissor(x as _, y as _, w as _, h as _);
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
+
+            self.draw_skybox(args.info.skybox_cubemap_selector, unimplemented!());
 
             gl::Disable(gl::SCISSOR_TEST);
         }
