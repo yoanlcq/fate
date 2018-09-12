@@ -2,10 +2,13 @@ use fate::math::{Extent2};
 use gpu::GpuTextureInternalFormat;
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(C)]
 pub struct CubemapSelector {
     pub array_id: CubemapArrayID,
     pub cubemap: u16,
 }
+
+assert_eq_size!(cubemap_size; CubemapSelector, u32);
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CubemapArrayID(pub u8);
