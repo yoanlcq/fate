@@ -1,4 +1,5 @@
 use fate::math::{Mat4, Vec3, Extent2, FrustumPlanes, Vec2, Rect};
+use xform::Xform;
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum CameraProjectionMode {
@@ -8,12 +9,6 @@ pub enum CameraProjectionMode {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Camera {
-    /*
-    pub position: Vec3<f32>,
-    pub target: Vec3<f32>,
-    pub scale: Vec3<f32>,
-    pub viewport_size: Extent2<u32>,
-    */
     pub projection_mode: CameraProjectionMode,
     pub fov_y_radians: f32,
     pub near: f32,
@@ -22,6 +17,7 @@ pub struct Camera {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct View {
+    pub xform: Xform,
     pub camera: Camera,
     pub viewport: Rect<u32, u32>,
 }
@@ -52,6 +48,9 @@ impl View {
             far: self.camera.far,
         }
     }
+    pub fn view_matrix(&self) -> Mat4<f32> {
+        self.xform.view_matrix_with_up(self.up_vector_for_lookat())
+    } 
     pub fn proj_matrix(&self) -> Mat4<f32> {
         match self.camera.projection_mode {
             CameraProjectionMode::Perspective => {

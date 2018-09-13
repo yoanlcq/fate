@@ -129,15 +129,22 @@ impl G {
         self.clear_color
     }
 
+    pub fn xform(&self, eid: EID) -> Option<&Xform> {
+        self.xforms.get(&eid)
+    }
+    pub fn camera(&self, eid: EID) -> Option<&Camera> {
+        self.cameras.get(&eid)
+    }
+ 
     pub fn viewport_db(&self) -> &ViewportDB {
         &self.viewport_db
     }
     pub fn viewport_db_mut(&mut self) -> &mut ViewportDB {
         &mut self.viewport_db
     }
-    pub fn visit_viewports(&mut self, f: &mut ViewportVisitor) {
+    pub fn visit_viewports(&self, f: &mut ViewportVisitor) {
         let Extent2 { w, h } = self.input.canvas_size();
-        self.viewport_db_mut().visit(Rect { x: 0, y: 0, w, h }, f);
+        self.viewport_db().visit(Rect { x: 0, y: 0, w, h }, f);
     }
 
     pub fn cubemap_array_create(&mut self, info: CubemapArrayInfo) -> CubemapArrayID {

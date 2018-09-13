@@ -371,7 +371,7 @@ impl System for GLSystem {
             gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        g.visit_viewports(self);
+        g.visit_viewports(&mut GLViewportVisitor { g, sys: self, });
     }
 }
 
@@ -543,8 +543,10 @@ pub fn new_skybox_triangle_strip(s: f32) -> [Vec3<f32>; SKYBOX_NB_VERTICES] {
     ]
 }
 
+use camera::View;
+
 impl GLSystem {
-    fn draw_skybox(&self, cubemap: CubemapSelector, camera: &Camera) {
+    fn draw_skybox(&self, cubemap: CubemapSelector, camera: &View) {
         let view = camera.view_matrix();
         let proj = camera.proj_matrix();
         let view_without_translation = {
@@ -565,7 +567,7 @@ impl GLSystem {
             gl::UseProgram(self.skybox_program.inner().gl_id());
 
             self.skybox_program.set_uniform_primitive("u_mvp", &[proj * view_without_translation]);
-            self.skybox_program.set_uniform_primitive("u_cubemap_arrays[0]", tex_units.as_slice());
+            self.skybox_program.set_uniform_primitive("u_cubemap_arrays[0]", &tex_units[..]);
             self.skybox_program.set_uniform_primitive("u_cubemap_array", &[cubemap.array_id.0 as u32]);
             self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
 
@@ -578,7 +580,7 @@ impl GLSystem {
             gl::UseProgram(0);
 
             for (i, _) in self.cubemap_arrays.iter().enumerate() {
-                gl::ActiveTexture(gl::TEXTURE0 + i);
+                gl::ActiveTexture(gl::TEXTURE0 + i as GLuint);
                 gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
             }
             gl::ActiveTexture(gl::TEXTURE0);
@@ -586,7 +588,13 @@ impl GLSystem {
     }
 }
 
-impl ViewportVisitor for GLSystem {
+#[derive(Debug)]
+struct GLViewportVisitor<'a> {
+    pub g: &'a G,
+    pub sys: &'a GLSystem,
+}
+
+impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
     fn accept_leaf_viewport(&mut self, args: AcceptLeafViewport) {
         unsafe {
             let Rect { x, y, w, h } = args.rect;
@@ -605,7 +613,13 @@ impl ViewportVisitor for GLSystem {
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
 
-            self.draw_skybox(args.info.skybox_cubemap_selector, args.info.camera);
+            let eid = args.info.camera;
+            let view = View {
+                xform: *self.g.xform(eid).unwrap(),
+                camera: *self.g.camera(eid).unwrap(),
+                viewport: Rect { x, y, w, h },
+            };
+            self.sys.draw_skybox(args.info.skybox_cubemap_selector, &view);
 
             gl::Disable(gl::SCISSOR_TEST);
         }
