@@ -64,14 +64,14 @@ pub struct G {
     //
     cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
     texture2d_arrays: [Texture2DArrayInfo; Texture2DArrayID::MAX],
-    meshes: HashMap<MeshID, MeshInfo>,
-    materials: HashMap<MaterialID, Material>,
+    //meshes: HashMap<MeshID, MeshInfo>,
+    //materials: HashMap<MaterialID, Material>,
 
     // "entities"
     xforms: HashMap<EID, Xform>,
     cameras: HashMap<EID, Camera>,
-    lights: HashMap<EID, Light>,
-    instances: HashMap<EID, MeshInstance>,
+    //lights: HashMap<EID, Light>,
+    //instances: HashMap<EID, MeshInstance>,
 
     /*
     visual_layers: HashMap<EID, VisualLayerID>,
@@ -97,12 +97,12 @@ impl G {
             viewport_db: ViewportDB::new(),
             cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
             texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
-            meshes: HashMap::new(),
-            materials: HashMap::new(),
+            //meshes: HashMap::new(),
+            //materials: HashMap::new(),
             xforms: HashMap::new(),
             cameras: HashMap::new(),
-            lights: HashMap::new(),
-            instances: HashMap::new(),
+            //lights: HashMap::new(),
+            //instances: HashMap::new(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
         g
@@ -147,11 +147,11 @@ impl G {
         self.viewport_db().visit(Rect { x: 0, y: 0, w, h }, f);
     }
 
-    pub fn cubemap_array_create(&mut self, info: CubemapArrayInfo) -> CubemapArrayID {
-        unimplemented!()
+    pub fn cubemap_array_create(&mut self, id: CubemapArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayCreate(id))
     }
     pub fn cubemap_array_delete(&mut self, id: CubemapArrayID) {
-        unimplemented!()
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(id))
     }
     pub fn cubemap_array_info(&self, array: CubemapArrayID) -> Option<&CubemapArrayInfo> {
         self.cubemap_arrays.get(array.0 as usize)
@@ -163,11 +163,11 @@ impl G {
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage2D(array, cubemap, face, img))
     }
 
-    pub fn texture2d_array_create(&mut self, info: Texture2DArrayInfo) -> Texture2DArrayID {
-        unimplemented!()
+    pub fn texture2d_array_create(&mut self, id: Texture2DArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayCreate(id))
     }
-    pub fn texture2d_array_delete(&mut self, array: Texture2DArrayID) {
-        unimplemented!()
+    pub fn texture2d_array_delete(&mut self, id: Texture2DArrayID) {
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayDelete(id))
     }
     pub fn texture2d_array_info(&self, array: Texture2DArrayID) -> Option<&Texture2DArrayInfo> {
         self.texture2d_arrays.get(array.0 as usize)
@@ -188,7 +188,8 @@ impl G {
         unimplemented!()
     }
     pub fn mesh_info(&self, mesh: MeshID) -> Option<&MeshInfo> {
-        self.meshes.get(&mesh)
+        // self.meshes.get(&mesh)
+        unimplemented!()
     }
     pub fn mesh_set_indices(&mut self, mesh: MeshID, start: usize, data: Box<[u32]>) {
         // Push a command to call BufferSubData()

@@ -496,13 +496,14 @@ use fate::math::Vec3;
 use fate::gx::Object;
 
 fn create_skybox_vbo() -> gx::Buffer {
-    let vbo = gx::Buffer::new();
     let v = new_skybox_triangle_strip(0.5);
     let flags = 0;
     unsafe {
-        gl::NamedBufferStorage(vbo.gl_id(), (v.len() * 3 * 4) as _, v.as_ptr() as _, flags);
+        let mut vbo = 0;
+        gl::CreateBuffers(1, &mut vbo);
+        gl::NamedBufferStorage(vbo, (v.len() * 3 * 4) as _, v.as_ptr() as _, flags);
+        gx::Buffer::from_gl_id(vbo)
     }
-    vbo
 }
 
 fn create_skybox_vao(vbo: GLuint) -> gx::VertexArray {
