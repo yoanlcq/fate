@@ -45,7 +45,7 @@ impl CubemapFace {
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CubemapArrayInfo {
     // Parameters at creation
-    pub levels: u32,
+    pub nb_levels: u32,
     pub internal_format: GpuTextureInternalFormat,
     pub size: Extent2<u32>,
     pub nb_cubemaps: u32,
@@ -54,7 +54,7 @@ pub struct CubemapArrayInfo {
 impl CubemapArrayInfo {
     pub fn new() -> Self {
         Self {
-            levels: 1,
+            nb_levels: 1,
             internal_format: GpuTextureInternalFormat::RGB8,
             size: Extent2::broadcast(1),
             nb_cubemaps: 0,

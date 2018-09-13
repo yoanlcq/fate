@@ -11,7 +11,7 @@ use frame_time::FrameTimeManager;
 use message::Message;
 use input::Input;
 use resources::Resources;
-use gpu::{GpuCmd, CpuSubImage2D};
+use gpu::{GpuCmd, CpuSubImage2D, GpuTextureFilter};
 use mouse_cursor::MouseCursor;
 use viewport::{ViewportDB, ViewportVisitor, ViewportInfo};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace, CubemapSelector};
@@ -62,8 +62,8 @@ pub struct G {
     */
 
     //
-    cubemap_arrays: [CubemapArrayInfo; CubemapArrayID::MAX],
-    texture2d_arrays: [Texture2DArrayInfo; Texture2DArrayID::MAX],
+    cubemap_arrays: [Option<CubemapArrayInfo>; CubemapArrayID::MAX],
+    texture2d_arrays: [Option<Texture2DArrayInfo>; Texture2DArrayID::MAX],
     //meshes: HashMap<MeshID, MeshInfo>,
     //materials: HashMap<MaterialID, Material>,
 
@@ -85,7 +85,7 @@ impl G {
         let camera = EID(0);
         let viewport_info = ViewportInfo {
             clear_color: Rgba::blue(),
-            skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 0, },
+            skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 1, },
             camera,
         };
 
@@ -102,8 +102,8 @@ impl G {
             mouse_cursor: MouseCursor::default(),
             is_mouse_cursor_visible: true,
             viewport_db: ViewportDB::new(viewport_info),
-            cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
-            texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
+            cubemap_arrays: array![None; CubemapArrayID::MAX],
+            texture2d_arrays: array![None; Texture2DArrayID::MAX],
             //meshes: HashMap::new(),
             //materials: HashMap::new(),
             xforms: HashMap::new(),
@@ -183,37 +183,70 @@ impl G {
         self.viewport_db().visit(Rect { x: 0, y: 0, w, h }, f);
     }
 
-    pub fn cubemap_array_create(&mut self, id: CubemapArrayID) {
+    pub fn cubemap_array_create(&mut self, id: CubemapArrayID, info: CubemapArrayInfo) {
+        assert!(self.cubemap_array_info(id).is_none());
+        self.cubemap_arrays[id.0 as usize] = Some(info);
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayCreate(id))
     }
-    pub fn cubemap_array_delete(&mut self, id: CubemapArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(id))
+    pub fn cubemap_array_delete(&mut self, id: CubemapArrayID) -> Option<CubemapArrayInfo> {
+        assert!(self.cubemap_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(id));
+        self.cubemap_arrays[id.0 as usize].take()
     }
     pub fn cubemap_array_info(&self, array: CubemapArrayID) -> Option<&CubemapArrayInfo> {
-        self.cubemap_arrays.get(array.0 as usize)
+        self.cubemap_arrays[array.0 as usize].as_ref()
     }
     pub fn cubemap_array_clear(&mut self, array: CubemapArrayID, level: u32, color: Rgba<f32>) {
+        assert!(self.cubemap_array_info(array).is_some());
+        assert!(level < self.cubemap_array_info(array).unwrap().nb_levels);
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayClear(array, level, color))
     }
     pub fn cubemap_array_sub_image_2d(&mut self, array: CubemapArrayID, cubemap: usize, face: CubemapFace, img: CpuSubImage2D) {
+        assert!(self.cubemap_array_info(array).is_some());
+        assert!(cubemap < self.cubemap_array_info(array).unwrap().nb_cubemaps as usize);
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage2D(array, cubemap, face, img))
     }
+    pub fn cubemap_array_set_min_filter(&mut self, id: CubemapArrayID, filter: GpuTextureFilter) {
+        assert!(self.cubemap_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySetMinFilter(id, filter))
+    }
+    pub fn cubemap_array_set_mag_filter(&mut self, id: CubemapArrayID, filter: GpuTextureFilter) {
+        assert!(self.cubemap_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySetMagFilter(id, filter))
+    }
 
-    pub fn texture2d_array_create(&mut self, id: Texture2DArrayID) {
+    pub fn texture2d_array_create(&mut self, id: Texture2DArrayID, info: Texture2DArrayInfo) {
+        assert!(self.texture2d_array_info(id).is_none());
+        self.texture2d_arrays[id.0 as usize] = Some(info);
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayCreate(id))
     }
-    pub fn texture2d_array_delete(&mut self, id: Texture2DArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayDelete(id))
+    pub fn texture2d_array_delete(&mut self, id: Texture2DArrayID) -> Option<Texture2DArrayInfo> {
+        assert!(self.texture2d_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayDelete(id));
+        self.texture2d_arrays[id.0 as usize].take()
     }
     pub fn texture2d_array_info(&self, array: Texture2DArrayID) -> Option<&Texture2DArrayInfo> {
-        self.texture2d_arrays.get(array.0 as usize)
+        self.texture2d_arrays[array.0 as usize].as_ref()
     }
     pub fn texture2d_array_clear(&mut self, array: Texture2DArrayID, level: u32, color: Rgba<f32>) {
+        assert!(self.texture2d_array_info(array).is_some());
+        assert!(level < self.texture2d_array_info(array).unwrap().nb_levels);
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayClear(array, level, color))
     }
     pub fn texture2d_array_sub_image_2d(&mut self, array: Texture2DArrayID, slot: usize, img: CpuSubImage2D) {
+        assert!(self.texture2d_array_info(array).is_some());
+        assert!(slot < self.texture2d_array_info(array).unwrap().nb_slots as usize);
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySubImage2D(array, slot, img))
     }
+    pub fn texture2d_array_set_min_filter(&mut self, id: Texture2DArrayID, filter: GpuTextureFilter) {
+        assert!(self.texture2d_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySetMinFilter(id, filter))
+    }
+    pub fn texture2d_array_set_mag_filter(&mut self, id: Texture2DArrayID, filter: GpuTextureFilter) {
+        assert!(self.texture2d_array_info(id).is_some());
+        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySetMagFilter(id, filter))
+    }
+
 
     pub fn mesh_create(&mut self, info: MeshInfo) -> MeshID {
         // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
