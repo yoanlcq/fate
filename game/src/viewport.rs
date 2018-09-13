@@ -126,23 +126,19 @@ impl Default for ViewportNode {
 }
 
 impl ViewportNode {
-    pub fn new() -> Self {
+    pub fn with_info(info: ViewportInfo) -> Self {
         ViewportNode::Whole {
             parent: None,
-            info: ViewportInfo {
-                clear_color: Rgba::blue(),
-                skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 0, },
-                camera: EID(0),
-            }.into(),
+            info: info.into(),
         }
     }
 }
 
 impl ViewportDB {
-    pub fn new() -> Self {
+    pub fn new(info: ViewportInfo) -> Self {
         let mut nodes = HashMap::new();
         let root = ViewportNodeID(0);
-        nodes.insert(root, ViewportNode::new());
+        nodes.insert(root, ViewportNode::with_info(info));
         let highest_id = root;
  
         Self {

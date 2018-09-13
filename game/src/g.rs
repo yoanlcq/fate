@@ -13,13 +13,13 @@ use input::Input;
 use resources::Resources;
 use gpu::{GpuCmd, CpuSubImage2D};
 use mouse_cursor::MouseCursor;
-use viewport::{ViewportDB, ViewportVisitor};
+use viewport::{ViewportDB, ViewportVisitor, ViewportInfo};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace, CubemapSelector};
 use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
 use mesh::{MeshID, MeshInfo};
 use material::{MaterialID, Material};
 use light::Light;
-use camera::Camera;
+use camera::{Camera, CameraProjectionMode};
 use xform::Xform;
 use eid::EID;
 
@@ -82,7 +82,14 @@ pub struct G {
 
 impl G {
     pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
-       let mut g = Self {
+        let camera = EID(0);
+        let viewport_info = ViewportInfo {
+            clear_color: Rgba::blue(),
+            skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 0, },
+            camera,
+        };
+
+        let mut g = Self {
             t: Duration::default(),
             frame_time_manager: FrameTimeManager::with_max_len(60),
             pending_messages: VecDeque::new(),
@@ -94,7 +101,7 @@ impl G {
             clear_color: Rgba::new(0., 1., 1., 1.),
             mouse_cursor: MouseCursor::default(),
             is_mouse_cursor_visible: true,
-            viewport_db: ViewportDB::new(),
+            viewport_db: ViewportDB::new(viewport_info),
             cubemap_arrays: array![CubemapArrayInfo::new(); CubemapArrayID::MAX],
             texture2d_arrays: array![Texture2DArrayInfo::new(); Texture2DArrayID::MAX],
             //meshes: HashMap::new(),
@@ -105,6 +112,16 @@ impl G {
             //instances: HashMap::new(),
         };
         g.gpu_cmd_queue.push_back(GpuCmd::ClearColorEdit);
+        g.eid_set_xform(camera, Xform {
+            position: Vec3::new(0., 0., -5.),
+            .. Default::default()
+        });
+        g.eid_set_camera(camera, Camera {
+            projection_mode: CameraProjectionMode::Perspective,
+            fov_y_radians: 60_f32.to_radians(),
+            near: 0.001,
+            far: 10000.,
+        });
         g
     }
     #[allow(dead_code)]
@@ -129,11 +146,30 @@ impl G {
         self.clear_color
     }
 
-    pub fn xform(&self, eid: EID) -> Option<&Xform> {
+    pub fn eid_xform(&self, eid: EID) -> Option<&Xform> {
         self.xforms.get(&eid)
     }
-    pub fn camera(&self, eid: EID) -> Option<&Camera> {
+    pub fn eid_xform_mut(&mut self, eid: EID) -> Option<&mut Xform> {
+        self.xforms.get_mut(&eid)
+    }
+    pub fn eid_set_xform(&mut self, eid: EID, xform: Xform) -> Option<Xform> {
+        self.xforms.insert(eid, xform)
+    }
+    pub fn eid_unset_xform(&mut self, eid: EID) -> Option<Xform> {
+        self.xforms.remove(&eid)
+    }
+
+    pub fn eid_camera(&self, eid: EID) -> Option<&Camera> {
         self.cameras.get(&eid)
+    }
+    pub fn eid_camera_mut(&mut self, eid: EID) -> Option<&mut Camera> {
+        self.cameras.get_mut(&eid)
+    }
+    pub fn eid_set_camera(&mut self, eid: EID, camera: Camera) -> Option<Camera> {
+        self.cameras.insert(eid, camera)
+    }
+    pub fn eid_unset_camera(&mut self, eid: EID) -> Option<Camera> {
+        self.cameras.remove(&eid)
     }
  
     pub fn viewport_db(&self) -> &ViewportDB {

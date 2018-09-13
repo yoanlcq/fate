@@ -558,17 +558,17 @@ impl GLSystem {
 
         unsafe {
             // TODO: Pre-reserve the texture units
-            let mut tex_units = [0_u32; CubemapArrayID::MAX];
+            let mut tex_units = [0_i32; CubemapArrayID::MAX];
             for (i, tex) in self.cubemap_arrays.iter().enumerate() {
                 gl::ActiveTexture(gl::TEXTURE0 + i as GLuint);
                 gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, *tex);
-                tex_units[i] = i as u32;
+                tex_units[i] = i as i32;
             }
 
             gl::UseProgram(self.skybox_program.inner().gl_id());
 
             self.skybox_program.set_uniform_primitive("u_mvp", &[proj * view_without_translation]);
-            self.skybox_program.set_uniform_primitive("u_cubemap_arrays[0]", &tex_units[..]);
+            self.skybox_program.set_uniform("u_cubemap_arrays[0]", gx::GLSLType::SamplerCubeMapArray, &tex_units[..]);
             self.skybox_program.set_uniform_primitive("u_cubemap_array", &[cubemap.array_id.0 as u32]);
             self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
 
@@ -616,8 +616,8 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
 
             let eid = args.info.camera;
             let view = View {
-                xform: *self.g.xform(eid).unwrap(),
-                camera: *self.g.camera(eid).unwrap(),
+                xform: *self.g.eid_xform(eid).unwrap(),
+                camera: *self.g.eid_camera(eid).unwrap(),
                 viewport: Rect { x, y, w, h },
             };
             self.sys.draw_skybox(args.info.skybox_cubemap_selector, &view);

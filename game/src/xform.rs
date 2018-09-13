@@ -7,6 +7,16 @@ pub struct Xform {
     pub scale: Vec3<f32>,
 }
 
+impl Default for Xform {
+    fn default() -> Self {
+        Self {
+            position: Vec3::zero(),
+            orientation: Quaternion::identity(),
+            scale: Vec3::one(),
+        }
+    }
+}
+
 impl Xform {
     pub fn forward(&self) -> Vec3<f32> {
         (self.orientation * Vec3::forward_lh()).normalized()
