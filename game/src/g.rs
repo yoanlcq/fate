@@ -140,17 +140,14 @@ impl G {
         self.viewport_db_mut().visit(Rect { x: 0, y: 0, w, h }, f);
     }
 
+    pub fn cubemap_array_create(&mut self, info: CubemapArrayInfo) -> CubemapArrayID {
+        unimplemented!()
+    }
+    pub fn cubemap_array_delete(&mut self, id: CubemapArrayID) {
+        unimplemented!()
+    }
     pub fn cubemap_array_info(&self, array: CubemapArrayID) -> Option<&CubemapArrayInfo> {
         self.cubemap_arrays.get(array.0 as usize)
-    }
-    pub fn cubemap_array_info_mut(&mut self, array: CubemapArrayID) -> Option<&mut CubemapArrayInfo> {
-        self.cubemap_arrays.get_mut(array.0 as usize)
-    }
-    pub fn cubemap_array_create(&mut self, array: CubemapArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayCreate(array))
-    }
-    pub fn cubemap_array_delete(&mut self, array: CubemapArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayDelete(array))
     }
     pub fn cubemap_array_clear(&mut self, array: CubemapArrayID, level: u32, color: Rgba<f32>) {
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArrayClear(array, level, color))
@@ -159,17 +156,14 @@ impl G {
         self.gpu_cmd_queue.push_back(GpuCmd::CubemapArraySubImage2D(array, cubemap, face, img))
     }
 
-    pub fn texture2d_array_info(&self, array: Texture2DArrayID) -> Option<&Texture2DArrayInfo> {
-        self.texture2d_arrays.get(array.0 as usize)
-    }
-    pub fn texture2d_array_info_mut(&mut self, array: Texture2DArrayID) -> Option<&mut Texture2DArrayInfo> {
-        self.texture2d_arrays.get_mut(array.0 as usize)
-    }
-    pub fn texture2d_array_create(&mut self, array: Texture2DArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayCreate(array))
+    pub fn texture2d_array_create(&mut self, info: Texture2DArrayInfo) -> Texture2DArrayID {
+        unimplemented!()
     }
     pub fn texture2d_array_delete(&mut self, array: Texture2DArrayID) {
-        self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayDelete(array))
+        unimplemented!()
+    }
+    pub fn texture2d_array_info(&self, array: Texture2DArrayID) -> Option<&Texture2DArrayInfo> {
+        self.texture2d_arrays.get(array.0 as usize)
     }
     pub fn texture2d_array_clear(&mut self, array: Texture2DArrayID, level: u32, color: Rgba<f32>) {
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArrayClear(array, level, color))
@@ -178,32 +172,16 @@ impl G {
         self.gpu_cmd_queue.push_back(GpuCmd::Texture2DArraySubImage2D(array, slot, img))
     }
 
-    // TODO: These are problems suited for a DenseSlotMap.
-    // Basically, have a singleton GpuMemory internal to G, which info is as follows:
-    // - max_materials
-    // - max_lights
-    // - max_vertices (for vertex data buffers: position, normal, uv)
-    // - max_indices
-    // - max_instances (for instanced data buffers: model matrices, material indices)
-    // -
-    // - Indexed by MeshID (slotmap key):
-    //   - vertex_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these vertices in the range are actually used)
-    //   - index_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these indices in the range are actually used)
-    // - Indexed by InstanceArrayID (slotmap key):
-    //   - instance_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these instances in the range are actually used)
-    //   - instance_array_mesh: DenseSlotMap<MeshID>, (TODO: versus how many of these instances in the range are actually used)
-
-    pub fn mesh_info(&self, mesh: MeshID) -> Option<&MeshInfo> {
-        self.meshes.get(&mesh)
-    }
-    pub fn mesh_info_mut(&mut self, mesh: MeshID) -> Option<&mut MeshInfo> {
-        self.meshes.get_mut(&mesh)
-    }
-    pub fn mesh_create(&mut self, mesh: MeshID, info: MeshInfo) {
+    pub fn mesh_create(&mut self, info: MeshInfo) -> MeshID {
         // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
+        unimplemented!()
     }
     pub fn mesh_delete(&mut self, mesh: MeshID) {
         // Push a command to free space occupied by this mesh
+        unimplemented!()
+    }
+    pub fn mesh_info(&self, mesh: MeshID) -> Option<&MeshInfo> {
+        self.meshes.get(&mesh)
     }
     pub fn mesh_set_indices(&mut self, mesh: MeshID, start: usize, data: Box<[u32]>) {
         // Push a command to call BufferSubData()
@@ -219,41 +197,71 @@ impl G {
     }
 
 /*
-    pub fn instance_array_info(&self, i: InstanceArrayID) -> Option<&InstanceArrayInfo> {
-        self.instance_arrays.get(&i.0)
-    }
-    pub fn instance_array_info_mut(&mut self, i: InstanceArrayID) -> Option<&mut InstanceArrayInfo> {
-        self.instance_arrays.get_mut(&i.0)
-    }
-    pub fn instance_array_create(&mut self, i: InstanceArrayID, info: InstanceArrayInfo) {
+    pub fn instance_array_create(&mut self, info: InstanceArrayInfo) -> InstanceArrayID {
         // Push a command to ask "alloc nb_instances" as specified in the info.
+        unimplemented!()
     }
     pub fn instance_array_delete(&mut self, i: InstanceArrayID) {
         // Push a command to free the space occupied by this instance array
     }
+    pub fn instance_array_info(&self, i: InstanceArrayID) -> Option<&InstanceArrayInfo> {
+        self.instance_arrays.get(&i.0)
+    }
     pub fn instance_array_set_model_matrices(&mut self, i: InstanceArrayID, start: usize, data: Box<[Mat4<f32>]>) {
         // Push a command to call BufferSubData()
     }
-    pub fn instance_array_set_material_indices(&mut self, i: InstanceArrayID, start: usize, data: Box<[u16]>) {
+    pub fn instance_array_set_materials(&mut self, i: InstanceArrayID, start: usize, data: Box<[MaterialID]>) {
         // Push a command to call BufferSubData()
     }
 
-    pub fn drawlist_set_data(&mut self, start: usize, data: Box<[(InstanceArrayID, MeshID)]>) {
+    pub fn drawlist_create(&mut self, info: DrawlistInfo) -> DrawlistID {
+        unimplemented!()
+    }
+    pub fn drawlist_delete(&mut self, id: DrawlistID) {
+        unimplemented!()
+    }
+    pub fn drawlist_info(&mut self, id: DrawlistID) -> Option<&DrawlistInfo> {
+        unimplemented!()
+    }
+    pub fn drawlist_set_entries(&mut self, id: DrawlistID, data: Box<[DrawlistEntry]>) {
         // Push a command to call BufferSubData() in the GL_DRAW_INDIRECT_BUFFER
-        // TODO: Possibility to create multiple such buffers ? (=> visibility layers!)
+        unimplemented!()
+    }
+
+    pub fn material_create(&mut self, info: MaterialInfo) -> MaterialID {
+        unimplemented!()
+    }
+    pub fn material_delete(&mut self, id: MaterialID) {
+        unimplemented!()
+    }
+    pub fn material_set_data(&mut self, id: MaterialID, mat: Material) {
+        unimplemented!()
     }
     */
+
+/*
+    // TODO: These are problems suited for a DenseSlotMap.
+    // Basically, have a singleton GpuMemory internal to G, which info is as follows:
+    // - max_materials
+    // - max_lights
+    // - max_vertices (for vertex data buffers: position, normal, uv)
+    // - max_indices
+    // - max_instances (for instanced data buffers: model matrices, material indices)
+    // -
+    // - Indexed by MeshID (slotmap key):
+    //   - vertex_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these vertices in the range are actually used)
+    //   - index_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these indices in the range are actually used)
+    // - Indexed by InstanceArrayID (slotmap key):
+    //   - instance_mem_ranges: DenseSlotMap<Range<u32>>, (TODO: versus how many of these instances in the range are actually used)
+    //   - instance_array_mesh: DenseSlotMap<MeshID>, (TODO: versus how many of these instances in the range are actually used)
 
     // TODO: Skyboxes should be specified per-viewport, not one for all viewports
     pub fn skybox_set_cubemap(&mut self, tex: CubemapSelector) {
         // Push a command to update the uniform buffer (or not ?)
     }
 
-    pub fn material_array_set_data(&mut self, start: usize, data: Box<[Material]>) {
-        // Push a command to call BufferSubData();
-    }
-
     pub fn light_array_set_data(&mut self, start: usize, data: Box<[Light]>) {
         // Push a command to call BufferSubData();
     }
+    */
 }

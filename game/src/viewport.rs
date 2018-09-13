@@ -4,6 +4,7 @@ use fate::math::{Rect, Rgba};
 
 use rand::random;
 
+use cubemap::{CubemapSelector, CubemapArrayID};
 use mouse_cursor::{MouseCursor, SystemCursor};
 use system::*;
 
@@ -40,6 +41,7 @@ pub enum ViewportNode {
 pub struct ViewportInfo {
     // TODO: Describes what a viewport displays    
     pub clear_color: Rgba<f32>,
+    pub skybox_cubemap_selector: CubemapSelector,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -321,10 +323,16 @@ impl ViewportDB {
 
         self.highest_id.0 += 2;
         let c0_info = info.clone();
-        let mut c1_info = info;
+        let c1_info = ViewportInfo {
+            clear_color: Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.),
+            skybox_cubemap_selector: CubemapSelector {
+                array_id: CubemapArrayID((random::<f32>() * 2_f32) as _),
+                cubemap: (random::<f32>() * 2_f32) as _,
+            },
+        };
+        debug!("Created {:#?}", c1_info);
 
         self.focus(c0_id);
-        c1_info.clear_color = Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.);
 
         let c0_node = ViewportNode::Whole { info: c0_info, parent: Some(id) };
         let c1_node = ViewportNode::Whole { info: c1_info, parent: Some(id) };
