@@ -42,6 +42,7 @@ pub struct ViewportInfo {
     // TODO: Describes what a viewport displays    
     pub clear_color: Rgba<f32>,
     pub skybox_cubemap_selector: CubemapSelector,
+    pub camera: Camera, // TODO: Multiple (stacked) cameras (but draw skybox once with one of them)
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -122,11 +123,33 @@ impl Default for ViewportNode {
     }
 }
 
+impl ViewportNode {
+    pub fn new() -> Self {
+        ViewportNode::Whole {
+            parent: None,
+            info: ViewportInfo {
+                clear_color: Rgba::blue(),
+                skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 0, },
+                camera: Camera {
+                    position: Vec3::new(0., 0., -5.),
+                    target: Vec3::zero(),
+                    scale: Vec3::one(),
+                    viewport_size,
+                    projection_mode: CameraProjectionMode::Perspective,
+                    fov_y_radians: 60_f32.to_radians(),
+                    near: 0.001,
+                    far: 10000.,
+                },
+            },
+        }
+    }
+}
+
 impl ViewportDB {
     pub fn new() -> Self {
         let mut nodes = HashMap::new();
         let root = ViewportNodeID(0);
-        nodes.insert(root, ViewportNode::default());
+        nodes.insert(root, ViewportNode::new());
         let highest_id = root;
  
         Self {

@@ -553,15 +553,19 @@ impl GLSystem {
             r
         };
 
-        // TODO: glActiveTexture
-        unimplemented!();
-
         unsafe {
+            // TODO: Pre-reserve the texture units
+            let mut tex_units = [0_u32; CubemapArrayID::MAX];
+            for (i, tex) in self.cubemap_arrays.iter().enumerate() {
+                gl::ActiveTexture(gl::TEXTURE0 + i as GLuint);
+                gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, *tex);
+                tex_units[i] = i as u32;
+            }
+
             gl::UseProgram(self.skybox_program.inner().gl_id());
 
-            self.skybox_program.set_uniform_primitive("u_proj_matrix", &[proj]);
-            self.skybox_program.set_uniform_primitive("u_modelview_matrix", &[view_without_translation]);
-            let tabs = self.skybox_program.uniform("u_cubemap_arrays[0]").unwrap(); unimplemented!();
+            self.skybox_program.set_uniform_primitive("u_mvp", &[proj * view_without_translation]);
+            self.skybox_program.set_uniform_primitive("u_cubemap_arrays[0]", tex_units.as_slice());
             self.skybox_program.set_uniform_primitive("u_cubemap_array", &[cubemap.array_id.0 as u32]);
             self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
 
@@ -572,6 +576,12 @@ impl GLSystem {
             gl::DepthFunc(gl::LESS);
 
             gl::UseProgram(0);
+
+            for (i, _) in self.cubemap_arrays.iter().enumerate() {
+                gl::ActiveTexture(gl::TEXTURE0 + i);
+                gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
+            }
+            gl::ActiveTexture(gl::TEXTURE0);
         }
     }
 }
@@ -595,7 +605,7 @@ impl ViewportVisitor for GLSystem {
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
 
-            self.draw_skybox(args.info.skybox_cubemap_selector, unimplemented!());
+            self.draw_skybox(args.info.skybox_cubemap_selector, args.info.camera);
 
             gl::Disable(gl::SCISSOR_TEST);
         }
