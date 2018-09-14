@@ -298,14 +298,18 @@ struct MemInfo {
     pub instance_range_mesh_entry: Vec<u32>,
 }
 
+pub const TEXUNIT_TEXTURE2D_ARRAY: GLint = 1;
+pub const TEXUNIT_CUBEMAP_ARRAY: GLint = TEXUNIT_TEXTURE2D_ARRAY + Texture2DArrayID::MAX as GLint + 1;
+pub const TEXUNIT_LAST: GLint = TEXUNIT_CUBEMAP_ARRAY + CubemapArrayID::MAX as GLint + 1;
 
-#[derive(Debug)]
 pub struct GLSystem {
     // Texture arrays
-    cubemap_arrays: [GLuint; CubemapArrayID::MAX],
-    texture2d_arrays: [GLuint; Texture2DArrayID::MAX],
-    texunit_first_cubemap_array: GLint,
-    texunit_first_texture2d_array: GLint,
+    cubemap_arrays: [GLuint; CubemapArrayID::MAX + 1],
+    texture2d_arrays: [GLuint; Texture2DArrayID::MAX + 1],
+    cubemap_array_units: [GLint; CubemapArrayID::MAX + 1],
+    texture2d_array_units: [GLint; Texture2DArrayID::MAX + 1],
+    cubemap_array_used: [bool; CubemapArrayID::MAX + 1],
+    texture2d_array_used: [bool; Texture2DArrayID::MAX + 1],
 
     // Skybox
     skybox_program: gx::ProgramEx,
@@ -315,42 +319,38 @@ pub struct GLSystem {
 
 impl GLSystem {
     pub fn new() -> Self {
-        let mut tex_unit = 1;
-        let mut cubemap_arrays = [0; CubemapArrayID::MAX];
-        let mut texture2d_arrays = [0; Texture2DArrayID::MAX];
-        let texunit_first_cubemap_array: GLint;
-        let texunit_first_texture2d_array: GLint;
+        let mut cubemap_arrays = [0; CubemapArrayID::MAX + 1];
+        let mut texture2d_arrays = [0; Texture2DArrayID::MAX + 1];
+        let mut cubemap_array_used = [false; CubemapArrayID::MAX + 1];
+        let mut texture2d_array_used = [false; Texture2DArrayID::MAX + 1];
         unsafe {
-            gl::GenTextures(cubemap_arrays.len() as _, cubemap_arrays.as_mut_ptr());
-            gl::GenTextures(texture2d_arrays.len() as _, texture2d_arrays.as_mut_ptr());
-
-            texunit_first_cubemap_array = tex_unit as GLint;
-            for tex in cubemap_arrays.iter() {
-                assert_ne!(*tex, 0);
-                gl::ActiveTexture(gl::TEXTURE0 + tex_unit);
-                gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, *tex);
-                tex_unit += 1;
-            }
+            gl::CreateTextures(gl::TEXTURE_CUBE_MAP_ARRAY, cubemap_arrays.len() as _, cubemap_arrays.as_mut_ptr());
+            gl::CreateTextures(gl::TEXTURE_2D_ARRAY, texture2d_arrays.len() as _, texture2d_arrays.as_mut_ptr());
+            gl::TextureStorage3D(texture2d_arrays[0], 1, gl::RGB8, 1, 1, 1);
+            gl::TextureStorage3D(cubemap_arrays[0], 1, gl::RGB8, 1, 1, 6);
+            gl::ClearTexImage(texture2d_arrays[0], 0, gl::RGBA, gl::FLOAT, Rgba::<f32>::white().as_ptr() as _);
+            gl::ClearTexImage(cubemap_arrays[0], 0, gl::RGBA, gl::FLOAT, Rgba::<f32>::white().as_ptr() as _);
+            gl::ActiveTexture(gl::TEXTURE0 + TEXUNIT_CUBEMAP_ARRAY as GLuint);
+            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, cubemap_arrays[0]);
+            gl::ActiveTexture(gl::TEXTURE0 + TEXUNIT_TEXTURE2D_ARRAY as GLuint);
+            gl::BindTexture(gl::TEXTURE_2D_ARRAY, texture2d_arrays[0]);
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
-
-            texunit_first_texture2d_array = tex_unit as GLint;
-            for tex in texture2d_arrays.iter() {
-                assert_ne!(*tex, 0);
-                gl::ActiveTexture(gl::TEXTURE0 + tex_unit);
-                gl::BindTexture(gl::TEXTURE_2D_ARRAY, *tex);
-                tex_unit += 1;
-            }
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0);
         }
+        cubemap_array_used[0] = true;
+        texture2d_array_used[0] = true;
+
+        let cubemap_array_units = [TEXUNIT_CUBEMAP_ARRAY; CubemapArrayID::MAX + 1];
+        let texture2d_array_units = [TEXUNIT_TEXTURE2D_ARRAY; Texture2DArrayID::MAX + 1];
 
         let skybox_vbo = create_skybox_vbo();
 
         Self {
-            cubemap_arrays, texture2d_arrays,
-            texunit_first_cubemap_array,
-            texunit_first_texture2d_array,
+            cubemap_arrays,
+            texture2d_arrays,
+            cubemap_array_units,
+            texture2d_array_units,
+            cubemap_array_used,
+            texture2d_array_used,
             skybox_program: new_program_ex_unwrap(SKY_VS, SKY_FS),
             skybox_vao: create_skybox_vao(skybox_vbo.gl_id()),
             skybox_vbo,
@@ -363,11 +363,7 @@ impl Drop for GLSystem {
         let &mut Self {
             ref mut cubemap_arrays,
             ref mut texture2d_arrays,
-            texunit_first_cubemap_array: _,
-            texunit_first_texture2d_array: _,
-            skybox_program: _,
-            skybox_vao: _,
-            skybox_vbo: _,
+            ..
         } = self;
         unsafe {
             gl::DeleteTextures(cubemap_arrays.len() as _, cubemap_arrays.as_mut_ptr());
@@ -407,55 +403,69 @@ impl GLSystem {
                 },
                 GpuCmd::Texture2DArrayCreate(id) => {
                     let info = g.texture2d_array_info(id).unwrap();
-                    gl::TextureStorage3D(self.texture2d_arrays[id.0 as usize], info.nb_levels as _, info.internal_format as _, info.size.w as _, info.size.h as _, info.nb_slots as _);
+                    self.texture2d_array_used[id.0 as usize + 1] = true;
+                    self.texture2d_array_units[id.0 as usize + 1] = TEXUNIT_TEXTURE2D_ARRAY + id.0 as GLint + 1;
+                    gl::TextureStorage3D(self.texture2d_arrays[id.0 as usize + 1], info.nb_levels as _, info.internal_format as _, info.size.w as _, info.size.h as _, info.nb_slots as _);
+                    gl::ActiveTexture(gl::TEXTURE0 + self.texture2d_array_units[id.0 as usize + 1] as GLuint);
+                    gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.texture2d_arrays[id.0 as usize + 1]);
+                    gl::ActiveTexture(gl::TEXTURE0);
                 },
                 GpuCmd::CubemapArrayCreate(id) => {
                     let info = g.cubemap_array_info(id).unwrap();
-                    gl::TextureStorage3D(self.cubemap_arrays[id.0 as usize], info.nb_levels as _, info.internal_format as _, info.size.w as _, info.size.h as _, (info.nb_cubemaps * 6) as _);
+                    self.cubemap_array_used[id.0 as usize + 1] = true;
+                    self.cubemap_array_units[id.0 as usize + 1] = TEXUNIT_CUBEMAP_ARRAY + id.0 as GLint + 1;
+                    gl::TextureStorage3D(self.cubemap_arrays[id.0 as usize + 1], info.nb_levels as _, info.internal_format as _, info.size.w as _, info.size.h as _, (info.nb_cubemaps * 6) as _);
+                    gl::ActiveTexture(gl::TEXTURE0 + self.cubemap_array_units[id.0 as usize + 1] as GLuint);
+                    gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, self.cubemap_arrays[id.0 as usize + 1]);
+                    gl::ActiveTexture(gl::TEXTURE0);
                 },
 
                 GpuCmd::Texture2DArrayDelete(id) => {
-                    let tex = &mut self.texture2d_arrays[id.0 as usize];
+                    let tex = &mut self.texture2d_arrays[id.0 as usize + 1];
+                    self.texture2d_array_used[id.0 as usize + 1] = false;
+                    self.texture2d_array_units[id.0 as usize + 1] = TEXUNIT_TEXTURE2D_ARRAY;
                     gl::DeleteTextures(1, tex);
-                    gl::GenTextures(1, tex);
-                    assert_ne!(*tex, 0);
-                    gl::BindTexture(gl::TEXTURE_2D_ARRAY, *tex);
+                    gl::CreateTextures(gl::TEXTURE_2D_ARRAY, 1, tex);
+                    gl::ActiveTexture(gl::TEXTURE0 + TEXUNIT_TEXTURE2D_ARRAY as GLuint + id.0 as GLuint + 1);
                     gl::BindTexture(gl::TEXTURE_2D_ARRAY, 0);
+                    gl::ActiveTexture(gl::TEXTURE0);
                 },
                 GpuCmd::CubemapArrayDelete(id) => {
-                    let tex = &mut self.cubemap_arrays[id.0 as usize];
+                    let tex = &mut self.cubemap_arrays[id.0 as usize + 1];
+                    self.cubemap_array_used[id.0 as usize + 1] = false;
+                    self.cubemap_array_units[id.0 as usize + 1] = TEXUNIT_CUBEMAP_ARRAY;
                     gl::DeleteTextures(1, tex);
-                    gl::GenTextures(1, tex);
-                    assert_ne!(*tex, 0);
-                    gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, *tex);
+                    gl::CreateTextures(gl::TEXTURE_CUBE_MAP_ARRAY, 1, tex);
+                    gl::ActiveTexture(gl::TEXTURE0 + TEXUNIT_CUBEMAP_ARRAY as GLuint + id.0 as GLuint + 1);
                     gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
+                    gl::ActiveTexture(gl::TEXTURE0);
                 },
 
 
                 GpuCmd::Texture2DArrayClear(id, level, color) => {
                     let color: Rgba<f32> = color; // Assert that we're dealing with the correct type
-                    gl::ClearTexImage(self.texture2d_arrays[id.0 as usize], level as _, gl::RGBA, gl::FLOAT, color.as_ptr() as _);
+                    gl::ClearTexImage(self.texture2d_arrays[id.0 as usize + 1], level as _, gl::RGBA, gl::FLOAT, color.as_ptr() as _);
                 },
                 GpuCmd::CubemapArrayClear(id, level, color) => {
                     let color: Rgba<f32> = color; // Assert that we're dealing with the correct type
-                    gl::ClearTexImage(self.cubemap_arrays[id.0 as usize], level as _, gl::RGBA, gl::FLOAT, color.as_ptr() as _);
+                    gl::ClearTexImage(self.cubemap_arrays[id.0 as usize + 1], level as _, gl::RGBA, gl::FLOAT, color.as_ptr() as _);
                 },
 
                 GpuCmd::Texture2DArraySubImage2D(id, slot, ref img) => {
                     let z = slot;
                     let depth = 1;
-                    gl::TextureSubImage3D(self.cubemap_arrays[id.0 as usize], img.level as _, img.x as _, img.y as _, z as _, img.w as _, img.h as _, depth, img.format as _, img.type_ as _, img.data.as_ptr() as _);
+                    gl::TextureSubImage3D(self.cubemap_arrays[id.0 as usize + 1], img.level as _, img.x as _, img.y as _, z as _, img.w as _, img.h as _, depth, img.format as _, img.type_ as _, img.data.as_ptr() as _);
                 },
                 GpuCmd::CubemapArraySubImage2D(id, slot, face, ref img) => {
                     let z = slot * 6 + face as usize;
                     let depth = 1;
-                    gl::TextureSubImage3D(self.cubemap_arrays[id.0 as usize], img.level as _, img.x as _, img.y as _, z as _, img.w as _, img.h as _, depth, img.format as _, img.type_ as _, img.data.as_ptr() as _);
+                    gl::TextureSubImage3D(self.cubemap_arrays[id.0 as usize + 1], img.level as _, img.x as _, img.y as _, z as _, img.w as _, img.h as _, depth, img.format as _, img.type_ as _, img.data.as_ptr() as _);
                 },
 
-                GpuCmd::CubemapArraySetMinFilter(id, filter) => gl::TextureParameteri(self.cubemap_arrays[id.0 as usize], gl::TEXTURE_MIN_FILTER, filter as _),
-                GpuCmd::CubemapArraySetMagFilter(id, filter) => gl::TextureParameteri(self.cubemap_arrays[id.0 as usize], gl::TEXTURE_MAG_FILTER, filter as _),
-                GpuCmd::Texture2DArraySetMinFilter(id, filter) => gl::TextureParameteri(self.texture2d_arrays[id.0 as usize], gl::TEXTURE_MIN_FILTER, filter as _),
-                GpuCmd::Texture2DArraySetMagFilter(id, filter) => gl::TextureParameteri(self.texture2d_arrays[id.0 as usize], gl::TEXTURE_MAG_FILTER, filter as _),
+                GpuCmd::CubemapArraySetMinFilter(id, filter) => gl::TextureParameteri(self.cubemap_arrays[id.0 as usize + 1], gl::TEXTURE_MIN_FILTER, filter as _),
+                GpuCmd::CubemapArraySetMagFilter(id, filter) => gl::TextureParameteri(self.cubemap_arrays[id.0 as usize + 1], gl::TEXTURE_MAG_FILTER, filter as _),
+                GpuCmd::Texture2DArraySetMinFilter(id, filter) => gl::TextureParameteri(self.texture2d_arrays[id.0 as usize + 1], gl::TEXTURE_MIN_FILTER, filter as _),
+                GpuCmd::Texture2DArraySetMagFilter(id, filter) => gl::TextureParameteri(self.texture2d_arrays[id.0 as usize + 1], gl::TEXTURE_MAG_FILTER, filter as _),
             }
         }
     }
@@ -479,7 +489,7 @@ void main() {
 static SKY_FS: &'static [u8] = b"
 #version 450 core
 
-uniform samplerCubeArray u_cubemap_arrays[32];
+uniform samplerCubeArray u_cubemap_arrays[33];
 uniform uint u_cubemap_array;
 uniform float u_cubemap_slot;
 
@@ -579,15 +589,10 @@ impl GLSystem {
         };
 
         unsafe {
-            let mut tex_units = [0_i32; CubemapArrayID::MAX];
-            for i in 0 .. self.cubemap_arrays.len() {
-                tex_units[i] = self.texunit_first_cubemap_array + i as i32;
-            }
-
             gl::UseProgram(self.skybox_program.inner().gl_id());
 
             self.skybox_program.set_uniform_primitive("u_mvp", &[proj * view_without_translation]);
-            self.skybox_program.set_uniform("u_cubemap_arrays[0]", gx::GLSLType::SamplerCubeMapArray, &tex_units[..]);
+            self.skybox_program.set_uniform("u_cubemap_arrays[0]", gx::GLSLType::SamplerCubeMapArray, &self.cubemap_array_units[..]);
             self.skybox_program.set_uniform_primitive("u_cubemap_array", &[cubemap.array_id.0 as u32]);
             self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
 
@@ -602,7 +607,6 @@ impl GLSystem {
     }
 }
 
-#[derive(Debug)]
 struct GLViewportVisitor<'a> {
     pub g: &'a G,
     pub sys: &'a GLSystem,
