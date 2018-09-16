@@ -30,17 +30,20 @@ pub struct DMap<V> {
 
 impl<V> DMap<V> {
     pub fn remove(&mut self, k: Key) -> Option<V> {
-        let (item, back, index) = {
+        let i = {
             let info = self.infos.get_mut(k.index as usize)?;
             if info.generation != k.generation {
                 return None;
             }
-            let item = self.items.swap_remove(info.index as usize);
-            let back = self.backs.swap_remove(info.index as usize);
             info.generation = info.generation.wrapping_add(1);
-            (item, back as usize, info.index)
+            info.index as usize
         };
-        self.infos[back].index = index;
+        let item = self.items.swap_remove(i);
+        let _bck = self.backs.swap_remove(i);
+        if i < self.items.len() {
+            let back = self.backs[i] as usize;
+            self.infos[back].index = i as _;
+        }
         self.frees.push(k.index);
         Some(item)
     }

@@ -24,8 +24,8 @@ pub struct View {
 
 pub fn aspect_ratio(size: Extent2<u32>) -> f32 {
     let Extent2 { w, h } = size;
-    assert_ne!(w, 0);
-    assert_ne!(h, 0);
+    assert_ne!(w, 0, "Zero width while computing aspect ratio!");
+    assert_ne!(h, 0, "Zero height while computing aspect ratio!");
     w as f32 / h as f32
 }
 
