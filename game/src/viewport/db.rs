@@ -81,15 +81,12 @@ impl ViewportDB {
     pub fn node_mut(&mut self, id: ViewportNodeID) -> Option<&mut ViewportNode> {
         self.nodes.get_mut(id)
     }
-    pub fn split_h(&mut self) {
-        self.split(SplitDirection::Horizontal)
-    }
-    pub fn split_v(&mut self) {
-        self.split(SplitDirection::Vertical)
-    }
-    pub fn split(&mut self, direction: SplitDirection) {
+    // Returns the new leaf node.
+    pub fn split_focused(&mut self, direction: SplitDirection) -> ViewportNodeID {
         let id = self.focused();
-
+        self.split(id, direction)
+    }
+    pub fn split(&mut self, id: ViewportNodeID, direction: SplitDirection) -> ViewportNodeID {
         let info = {
             let node = self.node_mut(id).unwrap();
             let info = match node.value {
@@ -99,16 +96,7 @@ impl ViewportDB {
             info
         };
         let c0_info = info.clone();
-        let c1_info = LeafViewport {
-            clear_color: Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.),
-            skybox_cubemap_selector: CubemapSelector {
-                array_id: CubemapArrayID((random::<f32>() * 2_f32) as _),
-                cubemap: (random::<f32>() * 2_f32) as _,
-            },
-            camera: c0_info.borrow().camera.clone(),
-        }.into();
-        debug!("Created {:#?}", c1_info);
-
+        let c1_info = info;
         let c0_node = ViewportNode { parent: Some(id), value: ViewportNodeValue::Leaf(c0_info), };
         let c1_node = ViewportNode { parent: Some(id), value: ViewportNodeValue::Leaf(c1_info), };
         let c0_id = self.nodes.insert(c0_node);
@@ -128,6 +116,7 @@ impl ViewportDB {
         }
 
         self.focus(c0_id);
+        c1_id
     }
     /// Merges the focused viewport node into its neighbour.
     pub fn merge(&mut self) {

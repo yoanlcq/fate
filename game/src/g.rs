@@ -79,7 +79,7 @@ impl G {
         let camera = EID(0);
         let root_viewport = LeafViewport {
             clear_color: Rgba::blue(),
-            skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 1, },
+            skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(1), cubemap: 1, },
             camera,
         };
 

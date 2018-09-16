@@ -67,9 +67,9 @@ impl System for ViewportInputHandler {
     }
     fn on_key(&mut self, g: &mut G, key: Key, state: KeyState) {
         match key.sym {
-            Some(Keysym::V) if state.is_down() => g.viewport_db_mut().split_v(),
-            Some(Keysym::H) if state.is_down() => g.viewport_db_mut().split_h(),
-            Some(Keysym::M) if state.is_down() => g.viewport_db_mut().merge(),
+            Some(Keysym::V) if state.is_down() => { g.viewport_db_mut().split_focused(SplitDirection::Vertical); },
+            Some(Keysym::H) if state.is_down() => { g.viewport_db_mut().split_focused(SplitDirection::Horizontal); },
+            Some(Keysym::M) if state.is_down() => { g.viewport_db_mut().merge() },
             _ => {},
         }
     }
