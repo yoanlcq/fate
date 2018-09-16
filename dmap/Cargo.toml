@@ -1,0 +1,7 @@
+[package]
+name = "fate-dmap"
+version = "0.1.0"
+authors = ["Yoan Lecoq <yoanlecoq.io@gmail.com>"]
+description = "A collection similar to slotmap and generational area; dmap is a short and sweet name for 'dense map'"
+
+[dependencies]

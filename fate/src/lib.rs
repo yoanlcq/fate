@@ -4,6 +4,7 @@
 
 pub extern crate fate_font as font;
 pub extern crate fate_gx as gx;
+pub extern crate fate_dmap as dmap;
 pub use gx::check_gl;
 pub extern crate fate_img as img;
 pub extern crate fate_lab as lab;

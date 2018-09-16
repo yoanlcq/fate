@@ -68,16 +68,7 @@ impl Gameplay {
         });
 
         fn pixel(rgb: Rgb<u8>) -> CpuSubImage2D {
-            CpuSubImage2D {
-                level: 0,
-                x: 0,
-                y: 0,
-                w: 1,
-                h: 1,
-                format: CpuImgFormat::RGB,
-                type_: CpuImgPixelType::U8,
-                data: CpuPixels::from_vec(vec![rgb]),
-            }
+            CpuSubImage2D::from_rgb_u8_pixel(rgb)
         }
 
         // TODO:
@@ -153,31 +144,18 @@ impl Gameplay {
         // Upload cubemap textures (async)
         
         let dir = g.res.data_path().join(PathBuf::from("art/3rdparty/mayhem"));
-        let suffixes = [ "ft", "bk", "up", "dn", "rt", "lf" ];
-        let faces = [ CubemapFace::PositiveX, CubemapFace::NegativeX, CubemapFace::PositiveY, CubemapFace::NegativeY, CubemapFace::PositiveZ, CubemapFace::NegativeZ ];
+        let suffixes = CubemapFace::TERRAGEN_SUFFIXES;
         let extension = "jpg";
         let mut cubemap_face_requests = vec![];
         for (cubemap_index, name) in ["grouse", "aqua4", "h2s", "flame"].iter().enumerate() {
-            for (suffix, face) in suffixes.iter().zip(faces.iter()) {
+            for suffix in suffixes.iter() {
                 cubemap_face_requests.push(CubemapFaceRequest {
                     path: dir.join(format!("{}_{}.{}", name, suffix, extension)),
                     cubemap_index: cubemap_index as _,
-                    face: *face,
+                    face: CubemapFace::try_from_terragen_suffix(suffix).unwrap(),
                     future: None,
                 });
             }
-        }
-
-        for req in cubemap_face_requests.iter() {
-            let w = 1024_u32;
-            let h = 1024_u32;
-
-            info!("Checking `{}`", req.path.display());
-            let metadata = img::load_metadata(&req.path).unwrap();
-            assert_eq!(metadata.size.w, w);
-            assert_eq!(metadata.size.h, h);
-            assert_eq!(metadata.pixel_format.semantic(), img::PixelSemantic::Rgb);
-            assert_eq!(metadata.pixel_format.bits(), 24);
         }
 
         for req in cubemap_face_requests.iter_mut() {
@@ -220,18 +198,8 @@ impl Gameplay {
                 Some(i) => {
                     let mut req = self.cubemap_face_requests.remove(i);
                     match req.future.take().unwrap().wait() {
-                        Ok(Ok((_, img::AnyImage::Rgb8(img)))) => {
-                            let cpuimg = CpuSubImage2D {
-                                level: 0,
-                                x: 0,
-                                y: 0,
-                                w: img.width() as _,
-                                h: img.height() as _,
-                                format: CpuImgFormat::RGB,
-                                type_: CpuImgPixelType::U8,
-                                data: CpuPixels::from_vec(img.buf),
-                            };
-                            g.cubemap_array_sub_image_2d(cubemap::RGB8_1L_1024X1024, req.cubemap_index as _, req.face, cpuimg);
+                        Ok(Ok((_, img))) => {
+                            g.cubemap_array_sub_image_2d(cubemap::RGB8_1L_1024X1024, req.cubemap_index as _, req.face, CpuSubImage2D::from_any_image(img));
                             info!("Loaded `{}`", req.path.display());
                         },
                         _ => unimplemented!{},

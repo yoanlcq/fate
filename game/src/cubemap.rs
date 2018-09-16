@@ -29,7 +29,8 @@ pub enum CubemapFace {
 }
 
 impl CubemapFace {
-    pub fn try_from_terragen_suffix(&self, suffix: &str) -> Option<Self> {
+    pub const TERRAGEN_SUFFIXES: [&'static str; 6] = [ "ft", "bk", "up", "dn", "rt", "lf" ];
+    pub fn try_from_terragen_suffix(suffix: &str) -> Option<Self> {
         Some(match suffix {
             "ft" => CubemapFace::PositiveX,
             "bk" => CubemapFace::NegativeX,
@@ -50,15 +51,3 @@ pub struct CubemapArrayInfo {
     pub size: Extent2<u32>,
     pub nb_cubemaps: u32,
 }
-
-impl CubemapArrayInfo {
-    pub fn new() -> Self {
-        Self {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(1),
-            nb_cubemaps: 0,
-        }
-    }
-}
-

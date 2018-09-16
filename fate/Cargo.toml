@@ -12,6 +12,7 @@ version = "0.1.0" # remember to update html_root_url
 [dependencies]
 fate-font = { path = "../font" }
 fate-gx = { path = "../gx" }
+fate-dmap = { path = "../dmap" }
 fate-img = { path = "../img" }
 fate-lab = { path = "../lab" }
 fate-main-loop = { path = "../main-loop" }

@@ -13,7 +13,7 @@ use input::Input;
 use resources::Resources;
 use gpu::{GpuCmd, CpuSubImage2D, GpuTextureFilter};
 use mouse_cursor::MouseCursor;
-use viewport::{ViewportDB, ViewportVisitor, ViewportInfo};
+use viewport::{ViewportDB, ViewportVisitor, LeafViewport};
 use cubemap::{CubemapArrayInfo, CubemapArrayID, CubemapFace, CubemapSelector};
 use texture2d::{Texture2DArrayInfo, Texture2DArrayID};
 use mesh::{MeshID, MeshInfo};
@@ -22,12 +22,6 @@ use light::Light;
 use camera::{Camera, CameraProjectionMode};
 use xform::Xform;
 use eid::EID;
-
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct MeshInstance {
-    pub mesh_id: MeshID,
-    pub material_id: MaterialID,
-}
 
 #[derive(Debug)]
 pub struct G {
@@ -83,7 +77,7 @@ pub struct G {
 impl G {
     pub fn new(canvas_size: Extent2<u32>, mt: Arc<mt::SharedThreadContext>) -> Self {
         let camera = EID(0);
-        let viewport_info = ViewportInfo {
+        let root_viewport = LeafViewport {
             clear_color: Rgba::blue(),
             skybox_cubemap_selector: CubemapSelector { array_id: CubemapArrayID(0), cubemap: 1, },
             camera,
@@ -101,7 +95,7 @@ impl G {
             clear_color: Rgba::new(0., 1., 1., 1.),
             mouse_cursor: MouseCursor::default(),
             is_mouse_cursor_visible: true,
-            viewport_db: ViewportDB::new(viewport_info),
+            viewport_db: ViewportDB::new(root_viewport),
             cubemap_arrays: array![None; CubemapArrayID::MAX],
             texture2d_arrays: array![None; Texture2DArrayID::MAX],
             //meshes: HashMap::new(),

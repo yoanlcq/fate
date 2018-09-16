@@ -1,7 +1,7 @@
 use std::env;
 use std::fmt;
 use std::panic;
-use log::LevelFilter;
+use log::{Level, LevelFilter};
 use pretty_env_logger;
 use backtrace;
 
@@ -54,9 +54,7 @@ pub fn setup_log() {
 
     let mut builder = pretty_env_logger::formatted_builder().unwrap();
     builder.format(|buf, record| {
-        let s = format!("{}", record.level());
-        let s = s.chars().next().unwrap();
-        writeln!(buf, "[{}] [{}] {}", s, record.target(), record.args())
+        writeln!(buf, "[{}] [{}] {}", log_level_letter(record.level()), record.target(), record.args())
     }).filter(None, LevelFilter::Debug);
 
     if let Ok(rust_log) = env::var("RUST_LOG") {
@@ -65,3 +63,12 @@ pub fn setup_log() {
     builder.init();
 }
 
+fn log_level_letter(level: Level) -> &'static str {
+    match level {
+        Level::Error => "E",
+        Level::Warn  => "W",
+        Level::Info  => "I",
+        Level::Debug => "D",
+        Level::Trace => "T",
+    }
+}

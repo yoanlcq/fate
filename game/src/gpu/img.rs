@@ -1,13 +1,22 @@
 use fate::gx::gl;
+use fate::math::Rgb;
+use fate::img;
 
-// TODO: Also move to GX
+// TODO: Also move enums to GX
+
+pub fn into_bytes_vec<T>(mut v: Vec<T>) -> Vec<u8> {
+    let (ptr, len, cap, sz) = (v.as_mut_ptr(), v.len(), v.capacity(), ::std::mem::size_of::<T>());
+    ::std::mem::forget(v);
+    unsafe { Vec::from_raw_parts(ptr as *mut u8, len * sz, cap * sz) }
+}
+
 
 // This allows for Vec<u8>, but also Rc-based custom containers for sparing memory.
 pub struct CpuPixels(Box<AsRef<[u8]>>);
 
 impl CpuPixels {
     pub fn from_vec<T>(v: Vec<T>) -> Self {
-        CpuPixels(Box::new(super::into_bytes_vec(v)))
+        CpuPixels(Box::new(into_bytes_vec(v)))
     }
     pub fn as_slice(&self) -> &[u8] {
         self.0.as_ref().as_ref()
@@ -63,6 +72,65 @@ pub struct CpuSubImage2D {
     pub format: CpuImgFormat,
     pub type_: CpuImgPixelType,
     pub data: CpuPixels,
+}
+
+impl CpuSubImage2D {
+    pub fn from_rgb_u8_pixel(rgb: Rgb<u8>) -> Self {
+        CpuSubImage2D {
+            level: 0,
+            x: 0,
+            y: 0,
+            w: 1,
+            h: 1,
+            format: CpuImgFormat::RGB,
+            type_: CpuImgPixelType::U8,
+            data: CpuPixels::from_vec(vec![rgb]),
+        }
+    }
+    pub fn from_any_image(img: img::AnyImage) -> Self {
+        match img {
+            img::AnyImage::Rgb8(img) => Self {
+                level: 0,
+                x: 0,
+                y: 0,
+                w: img.width() as _,
+                h: img.height() as _,
+                format: CpuImgFormat::RGB,
+                type_: CpuImgPixelType::U8,
+                data: CpuPixels::from_vec(img.buf),
+            },
+            img::AnyImage::Rgba8(img) => Self {
+                level: 0,
+                x: 0,
+                y: 0,
+                w: img.width() as _,
+                h: img.height() as _,
+                format: CpuImgFormat::RGBA,
+                type_: CpuImgPixelType::U8,
+                data: CpuPixels::from_vec(img.buf),
+            },
+            img::AnyImage::Gray8(img) => Self {
+                level: 0,
+                x: 0,
+                y: 0,
+                w: img.width() as _,
+                h: img.height() as _,
+                format: CpuImgFormat::R,
+                type_: CpuImgPixelType::U8,
+                data: CpuPixels::from_vec(img.buf),
+            },
+            img::AnyImage::GrayAlpha8(img) => Self {
+                level: 0,
+                x: 0,
+                y: 0,
+                w: img.width() as _,
+                h: img.height() as _,
+                format: CpuImgFormat::RG,
+                type_: CpuImgPixelType::U8,
+                data: CpuPixels::from_vec(img.buf),
+            },
+        }
+    }
 }
 
 

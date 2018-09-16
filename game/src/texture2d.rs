@@ -6,7 +6,6 @@ use gpu::GpuTextureInternalFormat;
 pub struct Texture2DSelector {
     pub array_id: Texture2DArrayID,
     pub slot: u16,
-    //pub _pad: u8,
 }
 
 assert_eq_size!(tex2d_size; Texture2DSelector, u32);
@@ -26,15 +25,3 @@ pub struct Texture2DArrayInfo {
     pub size: Extent2<u32>,
     pub nb_slots: u32,
 }
-
-impl Texture2DArrayInfo {
-    pub fn new() -> Self {
-        Self {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(1),
-            nb_slots: 0,
-        }
-    }
-}
-

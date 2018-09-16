@@ -3,6 +3,7 @@
 [workspace]
 members = [
     "lab",
+    "dmap",
     "math",
     "font",
     "img",
