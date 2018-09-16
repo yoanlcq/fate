@@ -46,6 +46,9 @@ pub fn gl_setup(platform: &Platform) {
     gx::boot_gl();
     gx::set_debug_message_callback(Some(gl_debug_message_callback));
     gx::log_debug_message("OpenGL debug logging is enabled.");
+
+    let max_tex_units = gx::get::integer(gl::MAX_TEXTURE_IMAGE_UNITS); // NOTE: Min. 16
+    info!("OpenGL max texture units: {}", max_tex_units);
 }
 
 

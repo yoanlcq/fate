@@ -248,6 +248,7 @@ impl G {
     }
 
 
+    /*
     pub fn mesh_create(&mut self, info: MeshInfo) -> MeshID {
         // Push a command to ask "alloc nb_vertices and nb_indices" as specified in the info.
         unimplemented!()
@@ -272,7 +273,7 @@ impl G {
     pub fn mesh_set_uvs(&mut self, mesh: MeshID, start: usize, data: Box<[Vec2<f32>]>) {
         // Push a command to call BufferSubData()
     }
-
+*/
 /*
     pub fn instance_array_create(&mut self, info: InstanceArrayInfo) -> InstanceArrayID {
         // Push a command to ask "alloc nb_instances" as specified in the info.

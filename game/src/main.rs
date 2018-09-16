@@ -1,4 +1,5 @@
 #![feature(panic_info_message)]
+#![allow(unused_imports)]
 
 #[macro_use]
 extern crate fate;
