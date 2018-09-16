@@ -231,3 +231,10 @@ pub enum GpuTextureInternalFormat {
      CompressedSRGBA_S3TC_DXT5 = gl::COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,
 }
 
+#[repr(u32)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum GpuTextureFilter {
+    Linear = gl::LINEAR,
+    Nearest = gl::NEAREST,
+    // TODO: Others???
+}

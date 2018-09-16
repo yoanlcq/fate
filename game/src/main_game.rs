@@ -50,12 +50,12 @@ impl MainGame {
 
         let canvas_size = platform.canvas_size();
         let (mt, threads) = mt::spawn_threads(3);
-        let g = G::new(canvas_size, mt.clone());
+        let mut g = G::new(canvas_size, mt.clone());
         let systems: Vec<Box<System>> = vec![
             Box::new(InputUpdater::new()),
             Box::new(Quitter::default()),
             Box::new(ViewportInputHandler::new()),
-            Box::new(Gameplay::new()),
+            Box::new(Gameplay::new(&mut g)),
             Box::new(GLSystem::new()),
             Box::new(GpuEndFrame::new()),
         ];

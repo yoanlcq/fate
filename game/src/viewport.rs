@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
 
 use fate::math::{Rect, Rgba};
 
 use rand::random;
 
+use cubemap::{CubemapSelector, CubemapArrayID};
 use mouse_cursor::{MouseCursor, SystemCursor};
 use system::*;
+use eid::EID;
 
 #[derive(Debug)]
 pub struct ViewportDB {
@@ -27,7 +30,7 @@ pub struct ViewportNodeID(u32);
 pub enum ViewportNode {
     Whole {
         parent: Option<ViewportNodeID>,
-        info: ViewportInfo
+        info: RefCell<ViewportInfo>,
     },
     Split {
         parent: Option<ViewportNodeID>,
@@ -40,13 +43,15 @@ pub enum ViewportNode {
 pub struct ViewportInfo {
     // TODO: Describes what a viewport displays    
     pub clear_color: Rgba<f32>,
+    pub skybox_cubemap_selector: CubemapSelector,
+    pub camera: EID, // TODO: Multiple (stacked) cameras (but draw skybox once with one of them)
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Split {
     pub origin: SplitOrigin,
     pub unit: SplitUnit,
-    pub value: f32,
+    pub value: Cell<f32>,
     pub direction: SplitDirection,
 }
 
@@ -120,11 +125,20 @@ impl Default for ViewportNode {
     }
 }
 
+impl ViewportNode {
+    pub fn with_info(info: ViewportInfo) -> Self {
+        ViewportNode::Whole {
+            parent: None,
+            info: info.into(),
+        }
+    }
+}
+
 impl ViewportDB {
-    pub fn new() -> Self {
+    pub fn new(info: ViewportInfo) -> Self {
         let mut nodes = HashMap::new();
         let root = ViewportNodeID(0);
-        nodes.insert(root, ViewportNode::default());
+        nodes.insert(root, ViewportNode::with_info(info));
         let highest_id = root;
  
         Self {
@@ -313,7 +327,7 @@ impl ViewportDB {
                     direction,
                     origin: SplitOrigin::Middle,
                     unit: SplitUnit::Ratio,
-                    value: 0.,
+                    value: (0.).into(),
                 }
             };
             info
@@ -321,10 +335,17 @@ impl ViewportDB {
 
         self.highest_id.0 += 2;
         let c0_info = info.clone();
-        let mut c1_info = info;
+        let c1_info = ViewportInfo {
+            clear_color: Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.),
+            skybox_cubemap_selector: CubemapSelector {
+                array_id: CubemapArrayID((random::<f32>() * 2_f32) as _),
+                cubemap: (random::<f32>() * 2_f32) as _,
+            },
+            camera: c0_info.borrow().camera.clone(),
+        }.into();
+        debug!("Created {:#?}", c1_info);
 
         self.focus(c0_id);
-        c1_info.clear_color = Rgba::<u8>::new_opaque(random(), random(), random()).map(|x| x as f32 / 255.);
 
         let c0_node = ViewportNode::Whole { info: c0_info, parent: Some(id) };
         let c1_node = ViewportNode::Whole { info: c1_info, parent: Some(id) };
@@ -363,17 +384,17 @@ impl ViewportDB {
         self.nodes.remove(&c1_id).unwrap();
         self.focus(merge_id);
     }
-    pub fn visit(&mut self, rect: Rect<u32, u32>, f: &mut ViewportVisitor) {
+    pub fn visit(&self, rect: Rect<u32, u32>, f: &mut ViewportVisitor) {
         let root_id = self.root();
         let border_px = self.border_px();
         self.visit_viewport(root_id, rect, f, border_px)
     }
-    fn visit_viewport(&mut self, id: ViewportNodeID, rect: Rect<u32, u32>, f: &mut ViewportVisitor, border_px: u32) {
+    fn visit_viewport(&self, id: ViewportNodeID, rect: Rect<u32, u32>, f: &mut ViewportVisitor, border_px: u32) {
         let (c0, c1, r0, r1) = {
-            let node = self.node_mut(id).unwrap();
+            let node = self.node(id).unwrap();
             match *node {
-                ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, ref mut value, direction }, parent } => {
-                    let v = *value;
+                ViewportNode::Split { children: (c0, c1), split: Split { origin, unit, ref value, direction }, parent } => {
+                    let v = value.get();
                     let mut distance_from_left_or_bottom_px = match (origin, unit, direction) {
                         (SplitOrigin::LeftOrBottom, SplitUnit::Px, _) => v as u32,
                         (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Horizontal) => (v * rect.h as f32).round() as u32,
@@ -391,7 +412,7 @@ impl ViewportDB {
                     f.accept_split_viewport(AcceptSplitViewport{ id, rect, split_direction: direction, distance_from_left_or_bottom_px: &mut distance_from_left_or_bottom_px, parent, border_px });
 
                     let d = distance_from_left_or_bottom_px as f32;
-                    *value = match (origin, unit, direction) {
+                    value.set(match (origin, unit, direction) {
                         (SplitOrigin::LeftOrBottom, SplitUnit::Px, _) => d,
                         (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Horizontal) => d / rect.h as f32,
                         (SplitOrigin::LeftOrBottom, SplitUnit::Ratio, SplitDirection::Vertical)   => d / rect.w as f32,
@@ -403,7 +424,7 @@ impl ViewportDB {
                         (SplitOrigin::RightOrTop, SplitUnit::Px, SplitDirection::Vertical)   => rect.w as f32 - d,
                         (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Horizontal) => 1. - (d / rect.h as f32),
                         (SplitOrigin::RightOrTop, SplitUnit::Ratio, SplitDirection::Vertical)   => 1. - (d / rect.w as f32),
-                    };
+                    });
 
                     let mut r0 = rect;
                     let mut r1 = rect;
@@ -422,13 +443,13 @@ impl ViewportDB {
 
                     (c0, c1, r0, r1)
                 },
-                ViewportNode::Whole { ref mut info, parent } => {
+                ViewportNode::Whole { ref info, parent } => {
                     let border_px = if parent.is_some() {
                         border_px
                     } else {
                         0
                     };
-                    return f.accept_leaf_viewport(AcceptLeafViewport{ id, rect, info, parent, border_px });
+                    return f.accept_leaf_viewport(AcceptLeafViewport{ id, rect, info: &mut info.borrow_mut(), parent, border_px });
                 },
             }
         };
