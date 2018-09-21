@@ -1,5 +1,9 @@
-use fate::math::{Extent2, Rgba, Rect};
-use fate::gx::{self, gl::{self, types::*}};
+use fate::math::{Extent2, Rgba, Rect, Vec3, Vec4};
+use fate::gx::{self, Object, gl::{self, types::*}};
+use camera::{Camera, View};
+use cubemap::CubemapSelector;
+
+use super::gl_skybox::GLSkybox;
 
 use gpu::GpuCmd;
 use viewport::{ViewportVisitor, AcceptLeafViewport};
@@ -14,10 +18,7 @@ pub struct GLSystem {
     texture2d_arrays: [GLuint; Texture2DArrayID::MAX],
 
     // Skybox
-    skybox_program: gx::ProgramEx,
-    #[allow(dead_code)]
-    skybox_vbo: gx::Buffer,
-    skybox_vao: gx::VertexArray,
+    skybox: GLSkybox,
 }
 
 impl GLSystem {
@@ -29,14 +30,10 @@ impl GLSystem {
             gl::CreateTextures(gl::TEXTURE_2D_ARRAY, texture2d_arrays.len() as _, texture2d_arrays.as_mut_ptr());
         }
 
-        let skybox_vbo = create_skybox_vbo();
-
         Self {
             cubemap_arrays,
             texture2d_arrays,
-            skybox_program: new_program_ex_unwrap(SKY_VS, SKY_FS),
-            skybox_vao: create_skybox_vao(skybox_vbo.gl_id()),
-            skybox_vbo,
+            skybox: GLSkybox::new(),
         }
     }
     pub fn cubemap_array(&self, id: CubemapArrayID) -> GLuint { self.cubemap_arrays[id.0 as usize] }
@@ -138,148 +135,6 @@ impl GLSystem {
     }
 }
 
-static SKY_VS: &'static [u8] = b"
-#version 450 core
-
-uniform mat4 u_mvp;
-
-layout(location = 0) in vec3 a_position;
-
-out vec3 v_uvw;
-
-void main() {
-    gl_Position = (u_mvp * vec4(a_position, 1.0)).xyww; // Z = 1 after perspective divide by w
-    v_uvw = a_position;
-}
-";
-
-static SKY_FS: &'static [u8] = b"
-#version 450 core
-
-uniform samplerCubeArray u_cubemap_array;
-uniform float u_cubemap_slot;
-
-in vec3 v_uvw;
-
-out vec4 f_color;
-
-void main() {
-    f_color = texture(u_cubemap_array, vec4(v_uvw, u_cubemap_slot));
-}
-";
-
-fn unwrap_or_display_error(r: Result<gx::ProgramEx, String>) -> gx::ProgramEx {
-    match r {
-        Ok(p) => p,
-        Err(e) => {
-            error!("GL compile error\n{}", e);
-            panic!("GL compile error\n{}", e)
-        },
-    }
-}
-fn new_program_ex(vs: &[u8], fs: &[u8]) -> Result<gx::ProgramEx, String> {
-    let vs = gx::VertexShader::try_from_source(vs)?;
-    let fs = gx::FragmentShader::try_from_source(fs)?;
-    let prog = gx::Program::try_from_vert_frag(&vs, &fs)?;
-    Ok(gx::ProgramEx::new(prog))
-}
-fn new_program_ex_unwrap(vs: &[u8], fs: &[u8]) -> gx::ProgramEx {
-    unwrap_or_display_error(new_program_ex(vs, fs))
-}
-
-use camera::Camera;
-use cubemap::CubemapSelector;
-use fate::math::Vec4;
-use fate::math::Vec3;
-use fate::gx::Object;
-
-fn create_skybox_vbo() -> gx::Buffer {
-    let v = new_skybox_triangle_strip(0.5);
-    let flags = 0;
-    unsafe {
-        let mut vbo = 0;
-        gl::CreateBuffers(1, &mut vbo);
-        gl::NamedBufferStorage(vbo, (v.len() * 3 * 4) as _, v.as_ptr() as _, flags);
-        gx::Buffer::from_gl_id(vbo)
-    }
-}
-
-fn create_skybox_vao(vbo: GLuint) -> gx::VertexArray {
-    let vao = gx::VertexArray::new();
-    unsafe {
-        gl::BindVertexArray(vao.gl_id());
-
-        gl::EnableVertexAttribArray(0);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-        gl::VertexAttribPointer(0, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
-        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-
-        gl::BindVertexArray(0);
-    }
-    vao
-}
-
-pub const SKYBOX_NB_VERTICES: usize = 15;
-
-pub fn new_skybox_triangle_strip(s: f32) -> [Vec3<f32>; SKYBOX_NB_VERTICES] {
-    [
-        Vec3::new(-s,  s,  s), // Degenerate triangle to flip winding. The remainder of the array describes a regular cube strip.
-
-        Vec3::new(-s,  s,  s), // Front-top-left
-        Vec3::new( s,  s,  s), // Front-top-right
-        Vec3::new(-s, -s,  s), // Front-bottom-left
-        Vec3::new( s, -s,  s), // Front-bottom-right
-        Vec3::new( s, -s, -s), // Back-bottom-right
-        Vec3::new( s,  s,  s), // Front-top-right
-        Vec3::new( s,  s, -s), // Back-top-right
-        Vec3::new(-s,  s,  s), // Front-top-left
-        Vec3::new(-s,  s, -s), // Back-top-left
-        Vec3::new(-s, -s,  s), // Front-bottom-left
-        Vec3::new(-s, -s, -s), // Back-bottom-left
-        Vec3::new( s, -s, -s), // Back-bottom-right
-        Vec3::new(-s,  s, -s), // Back-top-left
-        Vec3::new( s,  s, -s), // Back-top-right
-    ]
-}
-
-use camera::View;
-
-impl GLSystem {
-    fn draw_skybox(&self, cubemap: CubemapSelector, camera: &View) {
-        let mvp = {
-            let view = camera.view_matrix();
-            let proj = camera.proj_matrix();
-            let view_without_translation = {
-                let mut r = view;
-                r.cols.w = Vec4::unit_w();
-                r
-            };
-            proj * view_without_translation
-        };
-
-        unsafe {
-            gl::UseProgram(self.skybox_program.inner().gl_id());
-
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, self.cubemap_array(cubemap.array_id));
-
-            self.skybox_program.set_uniform_primitive("u_mvp", &[mvp]);
-            self.skybox_program.set_uniform("u_cubemap_array", gx::GLSLType::SamplerCubeMapArray, &[0_i32]);
-            self.skybox_program.set_uniform_primitive("u_cubemap_slot", &[cubemap.cubemap as f32]);
-
-            gl::DepthFunc(gl::LEQUAL);
-            gl::BindVertexArray(self.skybox_vao.gl_id());
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, SKYBOX_NB_VERTICES as _);
-            gl::BindVertexArray(0);
-            gl::DepthFunc(gl::LESS);
-
-            gl::BindTexture(gl::TEXTURE_CUBE_MAP_ARRAY, 0);
-
-            gl::UseProgram(0);
-        }
-    }
-}
-
 struct GLViewportVisitor<'a> {
     pub g: &'a G,
     pub sys: &'a GLSystem,
@@ -311,7 +166,7 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
                     camera: *self.g.eid_camera(eid).unwrap(),
                     viewport: Rect { x, y, w, h },
                 };
-                self.sys.draw_skybox(skybox_cubemap_selector, &view);
+                self.sys.skybox.draw(skybox_cubemap_selector, self.sys.cubemap_array(skybox_cubemap_selector.array_id), &view);
             }
 
             gl::Disable(gl::SCISSOR_TEST);
