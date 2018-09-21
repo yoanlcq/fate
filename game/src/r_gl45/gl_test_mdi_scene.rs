@@ -1,3 +1,7 @@
+use std::ptr;
+use fate::gx::{self, {gl::{self, types::*}}};
+use mesh::VertexAttribIndex;
+
 #[derive(Debug)]
 pub struct GLTestMDIScene {
 
@@ -5,17 +9,139 @@ pub struct GLTestMDIScene {
 
 impl GLTestMDIScene {
     pub fn new() -> Self {
+        unimplemented!(); // The draw() method is evil
         Self {
 
         }
     }
     pub fn draw(&self) {
+        unsafe {
+            self.draw_unsafe()
+        }
+    }
+    unsafe fn draw_unsafe(&self) {
+        // Creating the resources
+        
+        let max_vertices = 0xffffff;
+        let max_indices = 0xffffff;
+        let max_instances = 0xffffff;
 
+        let mut vao = 0;
+        let mut buffers = [0; 6];
+
+        gl::GenVertexArrays(1, &mut vao);
+        gl::GenBuffers(buffers.len() as _, buffers.as_mut_ptr());
+
+        let position_vbo = buffers[0];
+        let normal_vbo = buffers[1];
+        let uv_vbo = buffers[2];
+        let model_matrix_vbo = buffers[3];
+        let material_index_vbo = buffers[4];
+        let ibo = buffers[5];
+
+        let flags = gl::DYNAMIC_STORAGE_BIT;
+        gl::NamedBufferStorage(position_vbo, max_vertices * 3 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(normal_vbo, max_vertices * 3 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(uv_vbo, max_vertices * 2 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(model_matrix_vbo, max_instances * 4 * 4 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(material_index_vbo, max_instances * 2, ptr::null(), flags);
+        gl::NamedBufferStorage(ibo, max_indices * 4, ptr::null(), flags);
+
+        // Specifying vertex attrib layout
+
+        gl::BindVertexArray(vao);
+        gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
+        gl::EnableVertexAttribArray(VertexAttribIndex::Normal as _);
+        gl::EnableVertexAttribArray(VertexAttribIndex::UV as _);
+        gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 0);
+        gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 1);
+        gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 2);
+        gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 3);
+        gl::EnableVertexAttribArray(VertexAttribIndex::MaterialIndex as _);
+
+        gl::VertexAttribDivisor(VertexAttribIndex::Position as _, 0);
+        gl::VertexAttribDivisor(VertexAttribIndex::Normal as _, 0);
+        gl::VertexAttribDivisor(VertexAttribIndex::UV as _, 0);
+        gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 0, 1);
+        gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 1, 1);
+        gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 2, 1);
+        gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 3, 1);
+        gl::VertexAttribDivisor(VertexAttribIndex::MaterialIndex as _, 1);
+
+        gl::BindBuffer(gl::ARRAY_BUFFER, position_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::Position as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, normal_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::Normal as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, uv_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::UV as _, 2, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, model_matrix_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 0, 4, gl::FLOAT, gl::FALSE, 4*4*4, (0*4*4) as _);
+        gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 1, 4, gl::FLOAT, gl::FALSE, 4*4*4, (1*4*4) as _);
+        gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 2, 4, gl::FLOAT, gl::FALSE, 4*4*4, (2*4*4) as _);
+        gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 3, 4, gl::FLOAT, gl::FALSE, 4*4*4, (3*4*4) as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, material_index_vbo);
+        gl::VertexAttribIPointer(VertexAttribIndex::MaterialIndex as _, 1, gl::UNSIGNED_SHORT, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        gl::BindVertexArray(0);
+
+        // TODO: Operations:
+        // - Add mesh (grab chunks)
+        // - Remove mesh (release chunks)
+        // - Edit mesh (re-upload data)
+        // - Add instance pack
+        // - Remove instance pack
+        // - Edit instance pack
+        //
+        // i.e
+        // - Allocate N vertices
+        // - Allocate N indices
+        // - Allocate N instances
+        // - Defragment the memory
+
+        // Uploading data
+
+        // gl::NamedBufferSubData(buf, offset, size, data);
+
+        // Drawing
+
+        let m = HeapInfo::default();
+        let mut cmds = vec![];
+
+        for (i, mesh) in m.instance_ranges.iter().zip(m.instance_range_mesh_entry.iter()) {
+            let index_range = &m.index_ranges[*mesh as usize];
+            let vertex_range = &m.vertex_ranges[*mesh as usize];
+            cmds.push(GLDrawElementsIndirectCommand {
+                base_instance: i.start,
+                nb_instances: i.end - i.start,
+                first_index: index_range.start, // Offset into the index buffer
+                nb_indices: index_range.end - index_range.start,
+                base_vertex: vertex_range.start, // Value added to indices for vertex retrieval
+            });
+        }
+
+        gl::BindVertexArray(vao);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
+        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0); // read from cpu memory
+        gl::MultiDrawElementsIndirect(gx::Topology::Triangles as _, gl::UNSIGNED_INT, cmds.as_ptr() as _, cmds.len() as _, 0);
+        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
+        gl::BindVertexArray(0);
     }
 }
 
+use std::ops::Range;
 
-/*
+#[derive(Debug, Default)]
+pub struct HeapInfo {
+    // Indexed by mesh
+    pub vertex_ranges: Vec<Range<u32>>,
+    pub index_ranges: Vec<Range<u32>>,
+
+    // Indexed by instance
+    pub instance_ranges: Vec<Range<u32>>,
+    pub instance_range_mesh_entry: Vec<u32>,
+}
+
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
 pub struct GLDrawElementsIndirectCommand {
@@ -25,6 +151,7 @@ pub struct GLDrawElementsIndirectCommand {
     pub base_vertex: GLuint,
     pub base_instance: GLuint,
 }
+
 
 static PBR_VS : &'static str = 
 "#version 450 core
@@ -182,128 +309,3 @@ void main() {
     FragColor = vec4(color, 1.0);
 }
 ";
-
-unsafe fn toast_rendering() {
-    use ::std::ptr;
-
-    // Creating the resources
-    
-    let max_vertices = 0xffffff;
-    let max_indices = 0xffffff;
-    let max_instances = 0xffffff;
-
-    let mut vao = 0;
-    let mut buffers = [0; 6];
-
-    gl::GenVertexArrays(1, &mut vao);
-    gl::GenBuffers(buffers.len() as _, buffers.as_mut_ptr());
-
-    let position_vbo = buffers[0];
-    let normal_vbo = buffers[1];
-    let uv_vbo = buffers[2];
-    let model_matrix_vbo = buffers[3];
-    let material_index_vbo = buffers[4];
-    let ibo = buffers[5];
-
-    let flags = gl::DYNAMIC_STORAGE_BIT;
-    gl::NamedBufferStorage(position_vbo, max_vertices * 3 * 4, ptr::null(), flags);
-    gl::NamedBufferStorage(normal_vbo, max_vertices * 3 * 4, ptr::null(), flags);
-    gl::NamedBufferStorage(uv_vbo, max_vertices * 2 * 4, ptr::null(), flags);
-    gl::NamedBufferStorage(model_matrix_vbo, max_instances * 4 * 4 * 4, ptr::null(), flags);
-    gl::NamedBufferStorage(material_index_vbo, max_instances * 2, ptr::null(), flags);
-    gl::NamedBufferStorage(ibo, max_indices * 4, ptr::null(), flags);
-
-    // Specifying vertex attrib layout
-
-    gl::BindVertexArray(vao);
-    gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
-    gl::EnableVertexAttribArray(VertexAttribIndex::Normal as _);
-    gl::EnableVertexAttribArray(VertexAttribIndex::UV as _);
-    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 0);
-    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 1);
-    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 2);
-    gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 3);
-    gl::EnableVertexAttribArray(VertexAttribIndex::MaterialIndex as _);
-
-    gl::VertexAttribDivisor(VertexAttribIndex::Position as _, 0);
-    gl::VertexAttribDivisor(VertexAttribIndex::Normal as _, 0);
-    gl::VertexAttribDivisor(VertexAttribIndex::UV as _, 0);
-    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 0, 1);
-    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 1, 1);
-    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 2, 1);
-    gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 3, 1);
-    gl::VertexAttribDivisor(VertexAttribIndex::MaterialIndex as _, 1);
-
-    gl::BindBuffer(gl::ARRAY_BUFFER, position_vbo);
-    gl::VertexAttribPointer(VertexAttribIndex::Position as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
-    gl::BindBuffer(gl::ARRAY_BUFFER, normal_vbo);
-    gl::VertexAttribPointer(VertexAttribIndex::Normal as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
-    gl::BindBuffer(gl::ARRAY_BUFFER, uv_vbo);
-    gl::VertexAttribPointer(VertexAttribIndex::UV as _, 2, gl::FLOAT, gl::FALSE, 0, 0 as _);
-    gl::BindBuffer(gl::ARRAY_BUFFER, model_matrix_vbo);
-    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 0, 4, gl::FLOAT, gl::FALSE, 4*4*4, (0*4*4) as _);
-    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 1, 4, gl::FLOAT, gl::FALSE, 4*4*4, (1*4*4) as _);
-    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 2, 4, gl::FLOAT, gl::FALSE, 4*4*4, (2*4*4) as _);
-    gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 3, 4, gl::FLOAT, gl::FALSE, 4*4*4, (3*4*4) as _);
-    gl::BindBuffer(gl::ARRAY_BUFFER, material_index_vbo);
-    gl::VertexAttribIPointer(VertexAttribIndex::MaterialIndex as _, 1, gl::UNSIGNED_SHORT, 0, 0 as _);
-    gl::BindBuffer(gl::ARRAY_BUFFER, 0);
-    gl::BindVertexArray(0);
-
-    // TODO: Operations:
-    // - Add mesh (grab chunks)
-    // - Remove mesh (release chunks)
-    // - Edit mesh (re-upload data)
-    // - Add instance pack
-    // - Remove instance pack
-    // - Edit instance pack
-    //
-    // i.e
-    // - Allocate N vertices
-    // - Allocate N indices
-    // - Allocate N instances
-    // - Defragment the memory
-
-    // Uploading data
-
-    // gl::NamedBufferSubData(buf, offset, size, data);
-
-    // Drawing
-
-    let m = MemInfo::default();
-    let mut cmds = vec![];
-
-    for (i, mesh) in m.instance_ranges.iter().zip(m.instance_range_mesh_entry.iter()) {
-        let index_range = &m.index_ranges[*mesh as usize];
-        let vertex_range = &m.vertex_ranges[*mesh as usize];
-        cmds.push(GLDrawElementsIndirectCommand {
-            base_instance: i.start,
-            nb_instances: i.end - i.start,
-            first_index: index_range.start, // Offset into the index buffer
-            nb_indices: index_range.end - index_range.start,
-            base_vertex: vertex_range.start, // Value added to indices for vertex retrieval
-        });
-    }
-
-    gl::BindVertexArray(vao);
-    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-    gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0); // read from cpu memory
-    gl::MultiDrawElementsIndirect(gx::Topology::Triangles as _, gl::UNSIGNED_INT, cmds.as_ptr() as _, cmds.len() as _, 0);
-    gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
-    gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
-    gl::BindVertexArray(0);
-}
-
-use ::std::ops::Range;
-#[derive(Debug, Default, Clone, Hash, PartialEq)]
-struct MemInfo {
-    // Indexed by mesh
-    pub vertex_ranges: Vec<Range<u32>>,
-    pub index_ranges: Vec<Range<u32>>,
-
-    // Indexed by instancerange
-    pub instance_ranges: Vec<Range<u32>>,
-    pub instance_range_mesh_entry: Vec<u32>,
-}
-*/
-
