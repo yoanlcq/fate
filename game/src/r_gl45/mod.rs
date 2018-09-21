@@ -3,6 +3,7 @@ use fate::gx;
 pub mod glsystem;
 pub mod gl_setup;
 pub mod gl_skybox;
+pub mod gl_test_mdi_scene;
 
 pub use self::glsystem::GLSystem;
 

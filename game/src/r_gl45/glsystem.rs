@@ -4,6 +4,7 @@ use camera::{Camera, View};
 use cubemap::CubemapSelector;
 
 use super::gl_skybox::GLSkybox;
+use super::gl_test_mdi_scene::GLTestMDIScene;
 
 use gpu::GpuCmd;
 use viewport::{ViewportVisitor, AcceptLeafViewport};
@@ -19,6 +20,7 @@ pub struct GLSystem {
 
     // Skybox
     skybox: GLSkybox,
+    test_mdi_scene: GLTestMDIScene,
 }
 
 impl GLSystem {
@@ -34,6 +36,7 @@ impl GLSystem {
             cubemap_arrays,
             texture2d_arrays,
             skybox: GLSkybox::new(),
+            test_mdi_scene: GLTestMDIScene::new(),
         }
     }
     pub fn cubemap_array(&self, id: CubemapArrayID) -> GLuint { self.cubemap_arrays[id.0 as usize] }
@@ -158,6 +161,8 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
             gl::Scissor(x as _, y as _, w as _, h as _);
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
+
+            self.sys.test_mdi_scene.draw();
 
             if let Some(skybox_cubemap_selector) = args.info.skybox_cubemap_selector {
                 let eid = args.info.camera;
