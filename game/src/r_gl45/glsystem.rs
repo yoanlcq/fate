@@ -304,13 +304,15 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
 
-            let eid = args.info.camera;
-            let view = View {
-                xform: *self.g.eid_xform(eid).unwrap(),
-                camera: *self.g.eid_camera(eid).unwrap(),
-                viewport: Rect { x, y, w, h },
-            };
-            self.sys.draw_skybox(args.info.skybox_cubemap_selector, &view);
+            if let Some(skybox_cubemap_selector) = args.info.skybox_cubemap_selector {
+                let eid = args.info.camera;
+                let view = View {
+                    xform: *self.g.eid_xform(eid).unwrap(),
+                    camera: *self.g.eid_camera(eid).unwrap(),
+                    viewport: Rect { x, y, w, h },
+                };
+                self.sys.draw_skybox(skybox_cubemap_selector, &view);
+            }
 
             gl::Disable(gl::SCISSOR_TEST);
         }

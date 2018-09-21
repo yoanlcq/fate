@@ -48,6 +48,12 @@ impl ViewportDB {
     pub fn hovered(&self) -> Option<ViewportNodeID> {
         self.hovered
     }
+    pub fn root_node(&self) -> &ViewportNode {
+        self.node(self.root()).unwrap()
+    }
+    pub fn hovered_node(&self) -> Option<&ViewportNode> {
+        self.node(self.hovered()?)
+    }
     pub fn hover(&mut self, id: Option<ViewportNodeID>) {
         if self.hovered != id {
             debug!("Now hovering {:?}", id);
@@ -56,6 +62,9 @@ impl ViewportDB {
     }
     pub fn focused(&self) -> ViewportNodeID {
         self.focused
+    }
+    pub fn focused_node(&self) -> &ViewportNode {
+        self.node(self.focused()).unwrap()
     }
     pub fn focus(&mut self, id: ViewportNodeID) {
         if self.focused != id {

@@ -30,8 +30,8 @@ impl System for ViewportInputHandler {
             None => SystemCursor::Arrow,
             Some(id) => match g.viewport_db().node(id) {
                 Some(ViewportNode { value: ViewportNodeValue::Split { split, .. }, .. }) => match split.direction {
-                    SplitDirection::Horizontal => SystemCursor::ResizeV,
-                    SplitDirection::Vertical => SystemCursor::ResizeH,
+                    SplitDirection::Horizontal => SystemCursor::ResizeNS,
+                    SplitDirection::Vertical => SystemCursor::ResizeWE,
                 },
                 _ => unreachable!(),
             },
