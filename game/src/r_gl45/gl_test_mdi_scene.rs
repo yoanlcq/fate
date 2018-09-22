@@ -10,6 +10,7 @@ const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
 const MAX_INDICES  : isize = 1024 << 5;
 const MAX_CMDS     : isize = 1024;
+const MAX_MATERIALS: isize = 16384 / mem::size_of::<Material>() as isize; // min value in bytes of GL_MAX_UNIFORM_BLOCK_SIZE (limit does not apply to SSBOs)
 
 #[derive(Debug)]
 pub struct GLTestMDIScene {
@@ -21,6 +22,7 @@ pub struct GLTestMDIScene {
     material_index_vbo: gx::Buffer,
     ibo: gx::Buffer,
     cmd_buffer: gx::Buffer,
+    material_buffer: gx::Buffer,
     program: gx::ProgramEx,
     heap_info: HeapInfo,
 }
@@ -33,7 +35,7 @@ impl GLTestMDIScene {
     }
     unsafe fn new_unsafe() -> Self {
         let vao = gx::VertexArray::new();
-        let mut buffers = [0; 7];
+        let mut buffers = [0; 8];
         gl::CreateBuffers(buffers.len() as _, buffers.as_mut_ptr());
         let position_vbo = buffers[0];
         let normal_vbo = buffers[1];
@@ -42,6 +44,7 @@ impl GLTestMDIScene {
         let material_index_vbo = buffers[4];
         let ibo = buffers[5];
         let cmd_buffer = buffers[6];
+        let material_buffer = buffers[7];
 
         let flags = gl::DYNAMIC_STORAGE_BIT;
         gl::NamedBufferStorage(position_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
@@ -51,6 +54,7 @@ impl GLTestMDIScene {
         gl::NamedBufferStorage(material_index_vbo, MAX_INSTANCES * 2, ptr::null(), flags);
         gl::NamedBufferStorage(ibo, MAX_INDICES * 4, ptr::null(), flags);
         gl::NamedBufferStorage(cmd_buffer, MAX_CMDS * mem::size_of::<GLDrawElementsIndirectCommand>() as isize, ptr::null(), flags);
+        gl::NamedBufferStorage(material_buffer, MAX_MATERIALS * mem::size_of::<Material>() as isize, ptr::null(), flags);
 
         // Specifying vertex attrib layout
 
@@ -98,6 +102,7 @@ impl GLTestMDIScene {
             material_index_vbo: gx::Buffer::from_gl_id(material_index_vbo),
             ibo: gx::Buffer::from_gl_id(ibo),
             cmd_buffer: gx::Buffer::from_gl_id(cmd_buffer),
+            material_buffer: gx::Buffer::from_gl_id(material_buffer),
             program: super::new_program_ex_unwrap(PBR_VS, PBR_FS),
             heap_info: HeapInfo::default(),
         };
@@ -147,8 +152,17 @@ impl GLTestMDIScene {
             Mat4::<f32>::translation_3d(Vec3::new( 1.0, 1., 0.)),
         ];
         let material_indices = [
-            0_u32, 1, 2,
+            0_u16, 1, 2,
             3, 4, 5,
+        ];
+
+        let materials = [
+            Material { color: Rgba::red(), },
+            Material { color: Rgba::yellow(), },
+            Material { color: Rgba::green(), },
+            Material { color: Rgba::white(), },
+            Material { color: Rgba::black(), },
+            Material { color: Rgba::cyan(), },
         ];
 
         gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
@@ -157,6 +171,7 @@ impl GLTestMDIScene {
         gl::NamedBufferSubData(self.model_matrix_vbo.gl_id(), 0, mem::size_of_val(&model_matrices[..]) as _, model_matrices.as_ptr() as _);
         gl::NamedBufferSubData(self.material_index_vbo.gl_id(), 0, mem::size_of_val(&material_indices[..]) as _, material_indices.as_ptr() as _);
         gl::NamedBufferSubData(self.ibo.gl_id(), 0, mem::size_of_val(&indices[..]) as _, indices.as_ptr() as _);
+        gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
 
         self.heap_info.vertex_ranges.push(0 .. 3);
         self.heap_info.index_ranges.push(0 .. 3);
@@ -193,10 +208,7 @@ impl GLTestMDIScene {
         gl::UseProgram(self.program.inner().gl_id());
         self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
         self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
-        self.program.set_uniform_primitive("u_material_colors", &[
-            Rgba::<f32>::red(), Rgba::yellow(), Rgba::green(),
-            Rgba::white(), Rgba::black(), Rgba::cyan(),
-        ]);
+        gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, self.material_buffer.gl_id());
 
         gl::BindVertexArray(self.vao.gl_id());
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ibo.gl_id());
@@ -206,6 +218,7 @@ impl GLTestMDIScene {
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
         gl::BindVertexArray(0);
 
+        gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, 0);
         gl::UseProgram(0);
     }
 }
@@ -219,6 +232,12 @@ pub struct HeapInfo {
     // Indexed by instance
     pub instance_ranges: Vec<Range<u32>>,
     pub instance_range_mesh_entry: Vec<u32>,
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[repr(C)]
+pub struct Material {
+    pub color: Rgba<f32>,
 }
 
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
@@ -261,11 +280,15 @@ void main() {
 static PBR_FS: &'static [u8] = 
 b"#version 450 core
 
+struct Material {
+    vec4 color;
+};
+
 // layout(std430, binding = 1) buffer Lights { Light u_lights[]; };
-// layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
 // uniform sampler2DArray u_texture2d_arrays[32];
+
 uniform vec3 u_eye_position_worldspace;
-uniform vec4 u_material_colors[8];
+layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
 
 in vec3 v_position_worldspace;
 in vec3 v_normal;
@@ -279,7 +302,7 @@ void main() {
     vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
 
     // lol
-    f_color = u_material_colors[v_material_index] - vec4(V, 0.0) * 0.0001;
+    f_color = u_materials[v_material_index].color - vec4(V, 0.0) * 0.0001;
 }
 ";
 
