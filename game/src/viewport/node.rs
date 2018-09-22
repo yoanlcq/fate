@@ -24,3 +24,11 @@ impl ViewportNode {
         }
     }
 }
+impl ViewportNodeValue {
+    pub fn unwrap_leaf(&self) -> &RefCell<LeafViewport> {
+        match *self {
+            ViewportNodeValue::Leaf(ref leaf) => leaf,
+            _ => panic!("This viewport node is not a leaf"),
+        }
+    }
+}

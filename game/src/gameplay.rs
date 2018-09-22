@@ -41,6 +41,11 @@ pub struct Gameplay {
 
 impl Gameplay {
     pub fn new(g: &mut G) -> Self {
+        {
+            let mut leaf = g.viewport_db_mut().root_node().value.unwrap_leaf().borrow_mut();
+            leaf.skybox_cubemap_selector = Some(CubemapSelector { array_id: cubemap::RGB8_1L_1024X1024, cubemap: 0, });
+        }
+
         g.cubemap_array_create(cubemap::RGB8_1L_1X1, CubemapArrayInfo {
             nb_levels: 1,
             internal_format: GpuTextureInternalFormat::RGB8,
