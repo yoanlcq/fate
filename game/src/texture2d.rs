@@ -14,7 +14,7 @@ assert_eq_size!(tex2d_size; Texture2DSelector, u32);
 pub struct Texture2DArrayID(pub u8);
 
 impl Texture2DArrayID {
-    pub const MAX: usize = 32;
+    pub const MAX: usize = 16;
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]

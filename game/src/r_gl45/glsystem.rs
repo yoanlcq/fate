@@ -169,7 +169,7 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
                 viewport: Rect { x, y, w, h },
             };
 
-            self.sys.test_mdi_scene.draw(&view);
+            self.sys.test_mdi_scene.draw(&view, &self.sys.texture2d_arrays);
 
             if let Some(skybox_cubemap_selector) = args.info.skybox_cubemap_selector {
                 self.sys.skybox.draw(skybox_cubemap_selector, self.sys.cubemap_array(skybox_cubemap_selector.array_id), &view);

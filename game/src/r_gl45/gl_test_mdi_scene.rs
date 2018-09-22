@@ -184,19 +184,22 @@ impl GLTestMDIScene {
         self.heap_info.instance_ranges.push(3 .. 6);
         self.heap_info.instance_range_mesh_entry.push(1);
     }
-    pub fn draw(&self, view: &View) {
+    pub fn draw(&self, view: &View, texture2d_arrays: &[GLuint]) {
         unsafe {
-            self.draw_unsafe(view)
+            self.draw_unsafe(view, texture2d_arrays)
         }
     }
-    unsafe fn draw_unsafe(&self, view: &View) {
+    unsafe fn draw_unsafe(&self, view: &View, texture2d_arrays: &[GLuint]) {
+        assert!(texture2d_arrays.len() <= 16, "Too many texture2d arrays for shader");
+
+        // FIXME: Hardcoded texture selectors
         let materials = [
-            Material { albedo_mul: Rgba::red(), .. Default::default() },
-            Material { albedo_mul: Rgba::yellow(), .. Default::default()  },
-            Material { albedo_mul: Rgba::green(), .. Default::default() },
-            Material { albedo_mul: Rgba::white(), .. Default::default() },
-            Material { albedo_mul: Rgba::black(), .. Default::default() },
-            Material { albedo_mul: Rgba::cyan(), .. Default::default() },
+            Material { albedo_mul: Rgba::red()   , albedo_map: (2 << 16) | 0, .. Default::default() },
+            Material { albedo_mul: Rgba::yellow(), albedo_map: (2 << 16) | 0, .. Default::default() },
+            Material { albedo_mul: Rgba::green() , albedo_map: (2 << 16) | 1, .. Default::default() },
+            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 1, .. Default::default() },
+            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 2, .. Default::default() },
+            Material { albedo_mul: Rgba::cyan()  , albedo_map: (2 << 16) | 2, .. Default::default() },
         ];
 
         gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
@@ -231,7 +234,11 @@ impl GLTestMDIScene {
         let nb_cmds = cmds.len();
         gl::NamedBufferSubData(self.cmd_buffer.gl_id(), 0, mem::size_of_val(&cmds[..]) as _, cmds.as_ptr() as _); // PERF
 
+        gl::BindTextures(0, texture2d_arrays.len() as _, texture2d_arrays.as_ptr());
+        let units = [0_i32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, ];
+
         gl::UseProgram(self.program.inner().gl_id());
+        self.program.set_uniform("u_texture2d_arrays[0]", gx::GLSLType::Sampler2DArray, &units[..texture2d_arrays.len()]);
         self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
         self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
         self.program.set_uniform_primitive("u_directional_light.direction", &[Vec3::<f32>::new(1., 1., 1.).normalized()]);
@@ -250,6 +257,8 @@ impl GLTestMDIScene {
         gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, 0);
         gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, 0);
         gl::UseProgram(0);
+
+        gl::BindTextures(0, texture2d_arrays.len() as _, ptr::null());
     }
 }
 
@@ -364,7 +373,7 @@ struct DirectionalLight {
 };
 
 
-uniform sampler2DArray u_texture2d_arrays[16]; // FIXME: we planned for 32
+uniform sampler2DArray u_texture2d_arrays[16];
 uniform vec3 u_eye_position_worldspace;
 uniform DirectionalLight u_directional_light;
 layout(std430, binding = 1) buffer PointLights { PointLight u_point_lights[]; };
@@ -378,7 +387,7 @@ flat in uint v_material_index;
 out vec4 f_color;
 
 vec4 tex(uint sel, vec2 uv) {
-    return texture(u_texture2d_arrays[sel >> 16], vec3(uv, float(sel & 0xffff)));
+    return texture(u_texture2d_arrays[sel >> 16], vec3(uv, float(sel & 0xffffu)));
 }
 
 void main() {
@@ -387,7 +396,7 @@ void main() {
 
 #define mat u_materials[v_material_index]
 
-    vec3 Kd = mat.albedo_mul.rgb;
+    vec3 Kd = mat.albedo_mul.rgb * tex(mat.albedo_map, v_uv).rgb;
     vec3 Ks = vec3(1.0);
 
     vec3 color = vec3(0.0);

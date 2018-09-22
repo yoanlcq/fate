@@ -14,7 +14,7 @@ assert_eq_size!(cubemap_size; CubemapSelector, u32);
 pub struct CubemapArrayID(pub u8);
 
 impl CubemapArrayID {
-    pub const MAX: usize = 32;
+    pub const MAX: usize = 16;
 }
 
 #[repr(u8)]
