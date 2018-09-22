@@ -20,6 +20,7 @@ mod texture2d {
     use super::*;
     pub const RGB8_1L_1X1: Texture2DArrayID = Texture2DArrayID(0);
     pub const RGB8_1L_1024X1024: Texture2DArrayID = Texture2DArrayID(1);
+    pub const RGB8_1L_256X256: Texture2DArrayID = Texture2DArrayID(2);
 }
 
 
@@ -29,14 +30,23 @@ type ImgFuture = mt::Future<mt::Then<mt::ReadFile, mt::Async<io::Result<img::Res
 struct CubemapFaceRequest {
     future: Option<ImgFuture>,
     path: PathBuf,
+    array_id: CubemapArrayID,
     cubemap_index: u32,
     face: CubemapFace,
 }
 
+#[derive(Debug)]
+struct Texture2DRequest {
+    future: Option<ImgFuture>,
+    path: PathBuf,
+    array_id: Texture2DArrayID,
+    slot: u32,
+}
 
 #[derive(Debug)]
 pub struct Gameplay {
     cubemap_face_requests: Vec<CubemapFaceRequest>,
+    texture2d_requests: Vec<Texture2DRequest>,
 }
 
 impl Gameplay {
@@ -64,6 +74,12 @@ impl Gameplay {
             internal_format: GpuTextureInternalFormat::RGB8,
             size: Extent2::broadcast(1),
             nb_slots: 2,
+        });
+        g.texture2d_array_create(texture2d::RGB8_1L_256X256, Texture2DArrayInfo {
+            nb_levels: 1,
+            internal_format: GpuTextureInternalFormat::RGB8,
+            size: Extent2::broadcast(256),
+            nb_slots: 3,
         });
         g.texture2d_array_create(texture2d::RGB8_1L_1024X1024, Texture2DArrayInfo {
             nb_levels: 1,
@@ -132,18 +148,19 @@ impl Gameplay {
         g.cubemap_array_set_mag_filter(cubemap::RGB8_1L_1024X1024, GpuTextureFilter::Linear);
 
 
-        g.texture2d_array_clear(texture2d::RGB8_1L_1X1, 0, Rgba::magenta());
+        g.texture2d_array_clear(texture2d::RGB8_1L_1X1, 0, Rgba::cyan());
+        g.texture2d_array_clear(texture2d::RGB8_1L_256X256, 0, Rgba::cyan());
+        g.texture2d_array_clear(texture2d::RGB8_1L_1024X1024, 0, Rgba::cyan());
 
         g.texture2d_array_set_min_filter(texture2d::RGB8_1L_1X1, GpuTextureFilter::Nearest);
         g.texture2d_array_set_mag_filter(texture2d::RGB8_1L_1X1, GpuTextureFilter::Nearest);
+        g.texture2d_array_set_min_filter(texture2d::RGB8_1L_256X256, GpuTextureFilter::Linear);
+        g.texture2d_array_set_min_filter(texture2d::RGB8_1L_256X256, GpuTextureFilter::Linear);
+        g.texture2d_array_set_min_filter(texture2d::RGB8_1L_1024X1024, GpuTextureFilter::Linear);
+        g.texture2d_array_set_mag_filter(texture2d::RGB8_1L_1024X1024, GpuTextureFilter::Linear);
 
         g.texture2d_array_sub_image_2d(texture2d::RGB8_1L_1X1, 0, pixel(Rgb::new(000, 000, 000)));
         g.texture2d_array_sub_image_2d(texture2d::RGB8_1L_1X1, 1, pixel(Rgb::new(255, 255, 255)));
-
-        g.texture2d_array_clear(texture2d::RGB8_1L_1024X1024, 0, Rgba::magenta());
-
-        g.texture2d_array_set_min_filter(texture2d::RGB8_1L_1024X1024, GpuTextureFilter::Linear);
-        g.texture2d_array_set_mag_filter(texture2d::RGB8_1L_1024X1024, GpuTextureFilter::Linear);
 
 
         // Upload cubemap textures (async)
@@ -156,6 +173,7 @@ impl Gameplay {
             for suffix in suffixes.iter() {
                 cubemap_face_requests.push(CubemapFaceRequest {
                     path: dir.join(format!("{}_{}.{}", name, suffix, extension)),
+                    array_id: cubemap::RGB8_1L_1024X1024,
                     cubemap_index: cubemap_index as _,
                     face: CubemapFace::try_from_terragen_suffix(suffix).unwrap(),
                     future: None,
@@ -163,7 +181,26 @@ impl Gameplay {
             }
         }
 
+        let dir = g.res.data_path().join(PathBuf::from("art/tex2d"));
+        let mut texture2d_requests = vec![];
+        for (i, name) in ["maze.png", "plasma.png", "checkerboard.png"].iter().enumerate() {
+            texture2d_requests.push(Texture2DRequest {
+                path: dir.join(name),
+                array_id: texture2d::RGB8_1L_256X256,
+                slot: i as _,
+                future: None,
+            });
+        }
+
         for req in cubemap_face_requests.iter_mut() {
+            use self::mt::TaskExt;
+            let future = g.mt.schedule(mt::ReadFile::new(&req.path).then(|result: io::Result<Vec<u8>>| {
+                mt::Async::new(move || result.map(|data| img::load_from_memory(data)))
+            }));
+            req.future = Some(future);
+        }
+
+        for req in texture2d_requests.iter_mut() {
             use self::mt::TaskExt;
             let future = g.mt.schedule(mt::ReadFile::new(&req.path).then(|result: io::Result<Vec<u8>>| {
                 mt::Async::new(move || result.map(|data| img::load_from_memory(data)))
@@ -175,6 +212,7 @@ impl Gameplay {
         
         Gameplay {
             cubemap_face_requests,
+            texture2d_requests,
         }
     }
 }
@@ -204,7 +242,40 @@ impl Gameplay {
                     let mut req = self.cubemap_face_requests.remove(i);
                     match req.future.take().unwrap().wait() {
                         Ok(Ok((_, img))) => {
-                            g.cubemap_array_sub_image_2d(cubemap::RGB8_1L_1024X1024, req.cubemap_index as _, req.face, CpuSubImage2D::from_any_image(img));
+                            g.cubemap_array_sub_image_2d(req.array_id, req.cubemap_index as _, req.face, CpuSubImage2D::from_any_image(img));
+                            info!("Loaded `{}`", req.path.display());
+                        },
+                        _ => unimplemented!{},
+                    }
+                }
+            }
+        }
+    }
+    fn pump_texture2ds(&mut self, g: &mut G) {
+        loop {
+            let mut complete = None;
+
+            for (i, req) in self.texture2d_requests.iter().enumerate() {
+                let future = req.future.as_ref().unwrap();
+                if future.is_complete() {
+                    complete = Some(i);
+                    break;
+                }
+
+                let _progress = match future.poll() {
+                    mt::Either::Left(fp) => format!("{}%", if fp.nsize == 0 { 0. } else { fp.nread as f32 / fp.nsize as f32 }),
+                    mt::Either::Right(_) => format!("Converting..."),
+                };
+                // text += &format!("Loading {} (z = {}): {}\n", future.as_ref().first().path().display(), z, progress);
+            }
+
+            match complete {
+                None => break,
+                Some(i) => {
+                    let mut req = self.texture2d_requests.remove(i);
+                    match req.future.take().unwrap().wait() {
+                        Ok(Ok((_, img))) => {
+                            g.texture2d_array_sub_image_2d(req.array_id, req.slot as _, CpuSubImage2D::from_any_image(img));
                             info!("Loaded `{}`", req.path.display());
                         },
                         _ => unimplemented!{},
@@ -218,5 +289,6 @@ impl Gameplay {
 impl System for Gameplay {
     fn draw(&mut self, g: &mut G, _: &Draw) {
         self.pump_cubemap_faces(g);
+        self.pump_texture2ds(g);
     }
 }
