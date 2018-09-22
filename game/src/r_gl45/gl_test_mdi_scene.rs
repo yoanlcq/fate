@@ -1,55 +1,60 @@
 use std::ptr;
-use fate::gx::{self, {gl::{self, types::*}}};
+use std::mem;
+use std::ops::Range;
+use fate::math::{Vec2, Vec3, Mat4};
+use fate::gx::{self, Object, {gl::{self, types::*}}};
 use mesh::VertexAttribIndex;
+use camera::View;
+
+const MAX_VERTICES : isize = 1024 << 4;
+const MAX_INSTANCES: isize = 4096;
+const MAX_INDICES  : isize = 1024 << 5;
+const MAX_CMDS     : isize = 1024;
 
 #[derive(Debug)]
 pub struct GLTestMDIScene {
-
+    vao: gx::VertexArray,
+    position_vbo: gx::Buffer,
+    normal_vbo: gx::Buffer,
+    uv_vbo: gx::Buffer,
+    model_matrix_vbo: gx::Buffer,
+    material_index_vbo: gx::Buffer,
+    ibo: gx::Buffer,
+    cmd_buffer: gx::Buffer,
+    program: gx::ProgramEx,
+    heap_info: HeapInfo,
 }
 
 impl GLTestMDIScene {
     pub fn new() -> Self {
-        unimplemented!(); // The draw() method is evil
-        Self {
-
-        }
-    }
-    pub fn draw(&self) {
         unsafe {
-            self.draw_unsafe()
+            Self::new_unsafe()
         }
     }
-    unsafe fn draw_unsafe(&self) {
-        // Creating the resources
-        
-        let max_vertices = 0xffffff;
-        let max_indices = 0xffffff;
-        let max_instances = 0xffffff;
-
-        let mut vao = 0;
-        let mut buffers = [0; 6];
-
-        gl::GenVertexArrays(1, &mut vao);
-        gl::GenBuffers(buffers.len() as _, buffers.as_mut_ptr());
-
+    unsafe fn new_unsafe() -> Self {
+        let vao = gx::VertexArray::new();
+        let mut buffers = [0; 7];
+        gl::CreateBuffers(buffers.len() as _, buffers.as_mut_ptr());
         let position_vbo = buffers[0];
         let normal_vbo = buffers[1];
         let uv_vbo = buffers[2];
         let model_matrix_vbo = buffers[3];
         let material_index_vbo = buffers[4];
         let ibo = buffers[5];
+        let cmd_buffer = buffers[6];
 
         let flags = gl::DYNAMIC_STORAGE_BIT;
-        gl::NamedBufferStorage(position_vbo, max_vertices * 3 * 4, ptr::null(), flags);
-        gl::NamedBufferStorage(normal_vbo, max_vertices * 3 * 4, ptr::null(), flags);
-        gl::NamedBufferStorage(uv_vbo, max_vertices * 2 * 4, ptr::null(), flags);
-        gl::NamedBufferStorage(model_matrix_vbo, max_instances * 4 * 4 * 4, ptr::null(), flags);
-        gl::NamedBufferStorage(material_index_vbo, max_instances * 2, ptr::null(), flags);
-        gl::NamedBufferStorage(ibo, max_indices * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(position_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(normal_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(uv_vbo, MAX_VERTICES * 2 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(model_matrix_vbo, MAX_INSTANCES * 4 * 4 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(material_index_vbo, MAX_INSTANCES * 2, ptr::null(), flags);
+        gl::NamedBufferStorage(ibo, MAX_INDICES * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(cmd_buffer, MAX_CMDS * mem::size_of::<GLDrawElementsIndirectCommand>() as isize, ptr::null(), flags);
 
         // Specifying vertex attrib layout
 
-        gl::BindVertexArray(vao);
+        gl::BindVertexArray(vao.gl_id());
         gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
         gl::EnableVertexAttribArray(VertexAttribIndex::Normal as _);
         gl::EnableVertexAttribArray(VertexAttribIndex::UV as _);
@@ -84,29 +89,93 @@ impl GLTestMDIScene {
         gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         gl::BindVertexArray(0);
 
-        // TODO: Operations:
-        // - Add mesh (grab chunks)
-        // - Remove mesh (release chunks)
-        // - Edit mesh (re-upload data)
-        // - Add instance pack
-        // - Remove instance pack
-        // - Edit instance pack
-        //
-        // i.e
-        // - Allocate N vertices
-        // - Allocate N indices
-        // - Allocate N instances
-        // - Defragment the memory
+        let mut s = Self {
+            vao,
+            position_vbo: gx::Buffer::from_gl_id(position_vbo),
+            normal_vbo: gx::Buffer::from_gl_id(normal_vbo),
+            uv_vbo: gx::Buffer::from_gl_id(uv_vbo),
+            model_matrix_vbo: gx::Buffer::from_gl_id(model_matrix_vbo),
+            material_index_vbo: gx::Buffer::from_gl_id(material_index_vbo),
+            ibo: gx::Buffer::from_gl_id(ibo),
+            cmd_buffer: gx::Buffer::from_gl_id(cmd_buffer),
+            program: super::new_program_ex_unwrap(PBR_VS, PBR_FS),
+            heap_info: HeapInfo::default(),
+        };
+        s.add_meshes();
+        s
+    }
+    unsafe fn add_meshes(&mut self) {
+        let positions = [
+            Vec3::<f32>::new(0., 0., 0.),
+            Vec3::<f32>::new(1., 0., 0.),
+            Vec3::<f32>::new(0., 1., 0.),
 
-        // Uploading data
+            Vec3::<f32>::new( 0.0, 1.0, 0.),
+            Vec3::<f32>::new(-0.5, 0.0, 0.),
+            Vec3::<f32>::new( 0.5, 0.0, 0.),
+        ];
+        let normals = [
+            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new(0., 0., -1.),
 
-        // gl::NamedBufferSubData(buf, offset, size, data);
+            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new(0., 0., -1.),
+        ];
+        let uvs = [
+            Vec2::<f32>::new(0., 0.),
+            Vec2::<f32>::new(1., 0.),
+            Vec2::<f32>::new(0., 1.),
 
-        // Drawing
+            Vec2::<f32>::new(0., 0.),
+            Vec2::<f32>::new(1., 0.),
+            Vec2::<f32>::new(0., 1.),
+        ];
+        let indices = [
+            0_u32, 1, 2,
+            0_u32, 1, 2,
+        ];
 
-        let m = HeapInfo::default();
+        let model_matrices = [
+            Mat4::<f32>::translation_3d(Vec3::new(-1.0, 0., 0.)),
+            Mat4::<f32>::translation_3d(Vec3::new( 0.0, 0., 0.)),
+            Mat4::<f32>::translation_3d(Vec3::new( 1.0, 0., 0.)),
+
+            Mat4::<f32>::translation_3d(Vec3::new(-1.0, 1., 0.)),
+            Mat4::<f32>::translation_3d(Vec3::new( 0.0, 1., 0.)),
+            Mat4::<f32>::translation_3d(Vec3::new( 1.0, 1., 0.)),
+        ];
+        let material_indices = [
+            0_u32, 1, 2,
+            0_u32, 1, 2,
+        ];
+
+        gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
+        gl::NamedBufferSubData(self.normal_vbo.gl_id(), 0, mem::size_of_val(&normals[..]) as _, normals.as_ptr() as _);
+        gl::NamedBufferSubData(self.uv_vbo.gl_id(), 0, mem::size_of_val(&uvs[..]) as _, uvs.as_ptr() as _);
+        gl::NamedBufferSubData(self.model_matrix_vbo.gl_id(), 0, mem::size_of_val(&model_matrices[..]) as _, model_matrices.as_ptr() as _);
+        gl::NamedBufferSubData(self.material_index_vbo.gl_id(), 0, mem::size_of_val(&material_indices[..]) as _, material_indices.as_ptr() as _);
+        gl::NamedBufferSubData(self.ibo.gl_id(), 0, mem::size_of_val(&indices[..]) as _, indices.as_ptr() as _);
+
+        self.heap_info.vertex_ranges.push(0 .. 3);
+        self.heap_info.index_ranges.push(0 .. 3);
+        self.heap_info.vertex_ranges.push(3 .. 6);
+        self.heap_info.index_ranges.push(3 .. 6);
+        self.heap_info.instance_ranges.push(0 .. 3);
+        self.heap_info.instance_range_mesh_entry.push(0);
+        self.heap_info.instance_ranges.push(3 .. 6);
+        self.heap_info.instance_range_mesh_entry.push(1);
+    }
+    pub fn draw(&self, view: &View) {
+        unsafe {
+            self.draw_unsafe(view)
+        }
+    }
+    unsafe fn draw_unsafe(&self, view: &View) {
         let mut cmds = vec![];
 
+        let m = &self.heap_info;
         for (i, mesh) in m.instance_ranges.iter().zip(m.instance_range_mesh_entry.iter()) {
             let index_range = &m.index_ranges[*mesh as usize];
             let vertex_range = &m.vertex_ranges[*mesh as usize];
@@ -118,18 +187,24 @@ impl GLTestMDIScene {
                 base_vertex: vertex_range.start, // Value added to indices for vertex retrieval
             });
         }
+        let nb_cmds = cmds.len();
+        gl::NamedBufferSubData(self.cmd_buffer.gl_id(), 0, mem::size_of_val(&cmds[..]) as _, cmds.as_ptr() as _);
 
-        gl::BindVertexArray(vao);
-        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ibo);
-        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0); // read from cpu memory
-        gl::MultiDrawElementsIndirect(gx::Topology::Triangles as _, gl::UNSIGNED_INT, cmds.as_ptr() as _, cmds.len() as _, 0);
+        gl::UseProgram(self.program.inner().gl_id());
+        self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
+        self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
+
+        gl::BindVertexArray(self.vao.gl_id());
+        gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ibo.gl_id());
+        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, self.cmd_buffer.gl_id());
+        gl::MultiDrawElementsIndirect(gl::TRIANGLES, gl::UNSIGNED_INT, 0 as _, nb_cmds as _, 0);
         gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
         gl::BindVertexArray(0);
+
+        gl::UseProgram(0);
     }
 }
-
-use std::ops::Range;
 
 #[derive(Debug, Default)]
 pub struct HeapInfo {
@@ -153,8 +228,8 @@ pub struct GLDrawElementsIndirectCommand {
 }
 
 
-static PBR_VS : &'static str = 
-"#version 450 core
+static PBR_VS : &'static [u8] = 
+b"#version 450 core
 
 uniform mat4 u_viewproj_matrix;
 
@@ -164,22 +239,49 @@ layout(location = 5) in vec2 a_uv;
 layout(location = 9) in mat4 a_model_matrix;
 layout(location = 13) in uint a_material_index;
 
-out vec3 v_position;
+out vec3 v_position_worldspace;
 out vec3 v_normal;
 out vec2 v_uv;
 flat out uint v_material_index;
 
 void main() {
-    gl_Position = u_viewproj_matrix * a_model_matrix * vec4(a_position, 1.0);
-    v_position = a_position;
-    v_normal = a_normal;
+    vec4 world_pos = a_model_matrix * vec4(a_position, 1.0);
+    gl_Position = u_viewproj_matrix * world_pos;
+    v_position_worldspace = world_pos.xyz;
+    v_normal = mat3(transpose(inverse(a_model_matrix))) * a_normal; // FIXME PERF
     v_uv = a_uv;
     v_material_index = a_material_index;
 }
 ";
 
+static PBR_FS: &'static [u8] = 
+b"#version 450 core
+
+// layout(std430, binding = 1) buffer Lights { Light u_lights[]; };
+// layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
+// uniform sampler2DArray u_texture2d_arrays[32];
+uniform vec3 u_eye_position_worldspace;
+
+in vec3 v_position_worldspace;
+in vec3 v_normal;
+in vec2 v_uv;
+flat in uint v_material_index;
+
+out vec4 f_color;
+
+void main() {
+    vec3 N = normalize(v_normal);
+    vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
+
+    // lol
+    f_color = vec4(1.0, V.x * 0.0001, 0.0, 1.0);
+}
+";
+
+// Lol no PBR
+/*
 // https://learnopengl.com/PBR/Lighting
-static PBR_FS: &'static str = 
+static PBR_FS: &'static [u8] = 
 "#version 450 core
 
 in vec3 v_position;
@@ -309,3 +411,4 @@ void main() {
     FragColor = vec4(color, 1.0);
 }
 ";
+*/

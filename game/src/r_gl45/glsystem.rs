@@ -162,15 +162,16 @@ impl<'a> ViewportVisitor for GLViewportVisitor<'a> {
             gl::ClearColor(r, g, b, a);
             gl::Clear(gl::COLOR_BUFFER_BIT/* | gl::DEPTH_BUFFER_BIT*/);
 
-            self.sys.test_mdi_scene.draw();
+            let eid = args.info.camera;
+            let view = View {
+                xform: *self.g.eid_xform(eid).unwrap(),
+                camera: *self.g.eid_camera(eid).unwrap(),
+                viewport: Rect { x, y, w, h },
+            };
+
+            self.sys.test_mdi_scene.draw(&view);
 
             if let Some(skybox_cubemap_selector) = args.info.skybox_cubemap_selector {
-                let eid = args.info.camera;
-                let view = View {
-                    xform: *self.g.eid_xform(eid).unwrap(),
-                    camera: *self.g.eid_camera(eid).unwrap(),
-                    viewport: Rect { x, y, w, h },
-                };
                 self.sys.skybox.draw(skybox_cubemap_selector, self.sys.cubemap_array(skybox_cubemap_selector.array_id), &view);
             }
 
