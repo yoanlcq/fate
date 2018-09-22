@@ -267,7 +267,7 @@ pub struct HeapInfo {
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[repr(C)]
 pub struct Material {
-    pub albedo_mul   : Vec4<f32>,
+    pub albedo_mul   : Rgba<f32>,
     pub albedo_map   : u32,
     pub normal_map   : u32,
     pub metallic_mul : f32,
@@ -275,7 +275,7 @@ pub struct Material {
     pub roughness_mul: f32,
     pub roughness_map: u32,
     pub ao_map       : u32,
-    pub _pad: u32;
+    pub _pad: u32,
 }
 
 assert_eq_size!(material_struct_size; Material, [Vec4<f32>; 3]);
