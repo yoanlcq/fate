@@ -1,7 +1,7 @@
 use std::ptr;
 use std::mem;
 use std::ops::Range;
-use fate::math::{Vec2, Vec3, Mat4};
+use fate::math::{Vec2, Vec3, Mat4, Rgba};
 use fate::gx::{self, Object, {gl::{self, types::*}}};
 use mesh::VertexAttribIndex;
 use camera::View;
@@ -148,7 +148,7 @@ impl GLTestMDIScene {
         ];
         let material_indices = [
             0_u32, 1, 2,
-            0_u32, 1, 2,
+            3, 4, 5,
         ];
 
         gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
@@ -188,15 +188,19 @@ impl GLTestMDIScene {
             });
         }
         let nb_cmds = cmds.len();
-        gl::NamedBufferSubData(self.cmd_buffer.gl_id(), 0, mem::size_of_val(&cmds[..]) as _, cmds.as_ptr() as _);
+        gl::NamedBufferSubData(self.cmd_buffer.gl_id(), 0, mem::size_of_val(&cmds[..]) as _, cmds.as_ptr() as _); // PERF
 
         gl::UseProgram(self.program.inner().gl_id());
         self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
         self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
+        self.program.set_uniform_primitive("u_material_colors", &[
+            Rgba::<f32>::red(), Rgba::yellow(), Rgba::green(),
+            Rgba::white(), Rgba::black(), Rgba::cyan(),
+        ]);
 
         gl::BindVertexArray(self.vao.gl_id());
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ibo.gl_id());
-        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, self.cmd_buffer.gl_id());
+        gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, self.cmd_buffer.gl_id()); // In core profile, we MUST use a buffer to store commands
         gl::MultiDrawElementsIndirect(gl::TRIANGLES, gl::UNSIGNED_INT, 0 as _, nb_cmds as _, 0);
         gl::BindBuffer(gl::DRAW_INDIRECT_BUFFER, 0);
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
@@ -261,6 +265,7 @@ b"#version 450 core
 // layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
 // uniform sampler2DArray u_texture2d_arrays[32];
 uniform vec3 u_eye_position_worldspace;
+uniform vec4 u_material_colors[8];
 
 in vec3 v_position_worldspace;
 in vec3 v_normal;
@@ -274,7 +279,7 @@ void main() {
     vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
 
     // lol
-    f_color = vec4(1.0, V.x * 0.0001, 0.0, 1.0);
+    f_color = u_material_colors[v_material_index] - vec4(V, 0.0) * 0.0001;
 }
 ";
 
