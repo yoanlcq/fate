@@ -1,16 +1,24 @@
 use std::ptr;
 use std::mem;
 use std::ops::Range;
-use fate::math::{Vec2, Vec3, Mat4, Rgba};
+use fate::math::{Vec2, Vec3, Vec4, Mat4, Rgba, Rgb};
 use fate::gx::{self, Object, {gl::{self, types::*}}};
 use mesh::VertexAttribIndex;
 use camera::View;
+
+// TODO:
+// - Lights
+// - Material textures
+// - Shape keys
+// - Skeletal animations
+// - Full PBR rendering
 
 const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
 const MAX_INDICES  : isize = 1024 << 5;
 const MAX_CMDS     : isize = 1024;
 const MAX_MATERIALS: isize = 16384 / mem::size_of::<Material>() as isize; // min value in bytes of GL_MAX_UNIFORM_BLOCK_SIZE (limit does not apply to SSBOs)
+const MAX_POINT_LIGHTS: isize = 32;
 
 #[derive(Debug)]
 pub struct GLTestMDIScene {
@@ -23,6 +31,7 @@ pub struct GLTestMDIScene {
     ibo: gx::Buffer,
     cmd_buffer: gx::Buffer,
     material_buffer: gx::Buffer,
+    point_light_buffer: gx::Buffer,
     program: gx::ProgramEx,
     heap_info: HeapInfo,
 }
@@ -35,7 +44,7 @@ impl GLTestMDIScene {
     }
     unsafe fn new_unsafe() -> Self {
         let vao = gx::VertexArray::new();
-        let mut buffers = [0; 8];
+        let mut buffers = [0; 9];
         gl::CreateBuffers(buffers.len() as _, buffers.as_mut_ptr());
         let position_vbo = buffers[0];
         let normal_vbo = buffers[1];
@@ -45,6 +54,7 @@ impl GLTestMDIScene {
         let ibo = buffers[5];
         let cmd_buffer = buffers[6];
         let material_buffer = buffers[7];
+        let point_light_buffer = buffers[8];
 
         let flags = gl::DYNAMIC_STORAGE_BIT;
         gl::NamedBufferStorage(position_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
@@ -55,6 +65,7 @@ impl GLTestMDIScene {
         gl::NamedBufferStorage(ibo, MAX_INDICES * 4, ptr::null(), flags);
         gl::NamedBufferStorage(cmd_buffer, MAX_CMDS * mem::size_of::<GLDrawElementsIndirectCommand>() as isize, ptr::null(), flags);
         gl::NamedBufferStorage(material_buffer, MAX_MATERIALS * mem::size_of::<Material>() as isize, ptr::null(), flags);
+        gl::NamedBufferStorage(point_light_buffer, MAX_POINT_LIGHTS * mem::size_of::<PointLight>() as isize, ptr::null(), flags);
 
         // Specifying vertex attrib layout
 
@@ -103,6 +114,7 @@ impl GLTestMDIScene {
             ibo: gx::Buffer::from_gl_id(ibo),
             cmd_buffer: gx::Buffer::from_gl_id(cmd_buffer),
             material_buffer: gx::Buffer::from_gl_id(material_buffer),
+            point_light_buffer: gx::Buffer::from_gl_id(point_light_buffer),
             program: super::new_program_ex_unwrap(PBR_VS, PBR_FS),
             heap_info: HeapInfo::default(),
         };
@@ -120,13 +132,13 @@ impl GLTestMDIScene {
             Vec3::<f32>::new( 0.5, 0.0, 0.),
         ];
         let normals = [
-            Vec3::<f32>::new(0., 0., -1.),
-            Vec3::<f32>::new(0., 0., -1.),
-            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new(-1., -1., -1.),
+            Vec3::<f32>::new(1., 0., -1.),
+            Vec3::<f32>::new(0., 1., -1.),
 
-            Vec3::<f32>::new(0., 0., -1.),
-            Vec3::<f32>::new(0., 0., -1.),
-            Vec3::<f32>::new(0., 0., -1.),
+            Vec3::<f32>::new( 0., 1., -1.),
+            Vec3::<f32>::new(-1., 0., -1.),
+            Vec3::<f32>::new( 1., 0., -1.),
         ];
         let uvs = [
             Vec2::<f32>::new(0., 0.),
@@ -156,22 +168,12 @@ impl GLTestMDIScene {
             3, 4, 5,
         ];
 
-        let materials = [
-            Material { color: Rgba::red(), },
-            Material { color: Rgba::yellow(), },
-            Material { color: Rgba::green(), },
-            Material { color: Rgba::white(), },
-            Material { color: Rgba::black(), },
-            Material { color: Rgba::cyan(), },
-        ];
-
         gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
         gl::NamedBufferSubData(self.normal_vbo.gl_id(), 0, mem::size_of_val(&normals[..]) as _, normals.as_ptr() as _);
         gl::NamedBufferSubData(self.uv_vbo.gl_id(), 0, mem::size_of_val(&uvs[..]) as _, uvs.as_ptr() as _);
         gl::NamedBufferSubData(self.model_matrix_vbo.gl_id(), 0, mem::size_of_val(&model_matrices[..]) as _, model_matrices.as_ptr() as _);
         gl::NamedBufferSubData(self.material_index_vbo.gl_id(), 0, mem::size_of_val(&material_indices[..]) as _, material_indices.as_ptr() as _);
         gl::NamedBufferSubData(self.ibo.gl_id(), 0, mem::size_of_val(&indices[..]) as _, indices.as_ptr() as _);
-        gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
 
         self.heap_info.vertex_ranges.push(0 .. 3);
         self.heap_info.index_ranges.push(0 .. 3);
@@ -188,6 +190,30 @@ impl GLTestMDIScene {
         }
     }
     unsafe fn draw_unsafe(&self, view: &View) {
+        let materials = [
+            Material { color: Rgba::red(), },
+            Material { color: Rgba::yellow(), },
+            Material { color: Rgba::green(), },
+            Material { color: Rgba::white(), },
+            Material { color: Rgba::black(), },
+            Material { color: Rgba::cyan(), },
+        ];
+
+        gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
+        let nb_materials = materials.len();
+
+        let point_lights = [
+            PointLight {
+                position: Vec4::new(-5., 0., -5., 1.),
+                color: Rgba::white(),
+                range: 5.,
+                attenuation_factor: 0.9,
+                pad: Default::default(),
+            },
+        ];
+        gl::NamedBufferSubData(self.point_light_buffer.gl_id(), 0, mem::size_of_val(&point_lights[..]) as _, point_lights.as_ptr() as _);
+        let nb_point_lights = point_lights.len();
+
         let mut cmds = vec![];
 
         let m = &self.heap_info;
@@ -208,7 +234,10 @@ impl GLTestMDIScene {
         gl::UseProgram(self.program.inner().gl_id());
         self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
         self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
-        gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, self.material_buffer.gl_id());
+        self.program.set_uniform_primitive("u_directional_light.direction", &[Vec3::<f32>::new(1., 1., 1.).normalized()]);
+        self.program.set_uniform_primitive("u_directional_light.color", &[Rgb::<f32>::black()]);
+        gl::BindBufferRange(gl::SHADER_STORAGE_BUFFER, 1, self.point_light_buffer.gl_id(), 0, (nb_point_lights * mem::size_of::<PointLight>()) as _);
+        gl::BindBufferRange(gl::SHADER_STORAGE_BUFFER, 2, self.material_buffer.gl_id(), 0, (nb_materials * mem::size_of::<Material>()) as _);
 
         gl::BindVertexArray(self.vao.gl_id());
         gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ibo.gl_id());
@@ -219,6 +248,7 @@ impl GLTestMDIScene {
         gl::BindVertexArray(0);
 
         gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 2, 0);
+        gl::BindBufferBase(gl::SHADER_STORAGE_BUFFER, 1, 0);
         gl::UseProgram(0);
     }
 }
@@ -240,6 +270,28 @@ pub struct Material {
     pub color: Rgba<f32>,
 }
 
+assert_eq_size!(material_struct_size; Material, [Vec4<f32>; 1]);
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[repr(C)]
+pub struct DirectionalLight {
+    pub direction: Vec3<f32>,
+    pub color: Rgb<f32>,
+}
+
+
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
+#[repr(C)]
+pub struct PointLight {
+    pub position: Vec4<f32>,
+    pub color: Rgba<f32>,
+    pub range: f32,
+    pub attenuation_factor: f32,
+    pub pad: Vec2<f32>,
+}
+
+assert_eq_size!(point_light_struct_size; PointLight, [Vec4<f32>; 3]);
+
 #[derive(Debug, Default, Copy, Clone, Hash, PartialEq, Eq)]
 #[repr(C)]
 pub struct GLDrawElementsIndirectCommand {
@@ -249,7 +301,6 @@ pub struct GLDrawElementsIndirectCommand {
     pub base_vertex: GLuint,
     pub base_instance: GLuint,
 }
-
 
 static PBR_VS : &'static [u8] = 
 b"#version 450 core
@@ -284,10 +335,24 @@ struct Material {
     vec4 color;
 };
 
-// layout(std430, binding = 1) buffer Lights { Light u_lights[]; };
+struct PointLight {
+    vec4 position;
+    vec4 color;
+    float range;
+    float attenuation_factor;
+    vec2 _pad;
+};
+
+struct DirectionalLight {
+    vec3 direction;
+    vec3 color;
+};
+
 // uniform sampler2DArray u_texture2d_arrays[32];
 
 uniform vec3 u_eye_position_worldspace;
+uniform DirectionalLight u_directional_light;
+layout(std430, binding = 1) buffer PointLights { PointLight u_point_lights[]; };
 layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
 
 in vec3 v_position_worldspace;
@@ -301,8 +366,27 @@ void main() {
     vec3 N = normalize(v_normal);
     vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
 
-    // lol
-    f_color = u_materials[v_material_index].color - vec4(V, 0.0) * 0.0001;
+    vec3 Kd = u_materials[v_material_index].color.rgb;
+    vec3 Ks = vec3(1.0);
+
+    vec3 color = vec3(0.0);
+
+    vec3 L  = u_directional_light.direction; // Expected to be normalized
+    vec3 Li = u_directional_light.color;
+    vec3 H  = normalize(V + L);
+    color += Li*(Kd*dot(L, N) + max(vec3(0), Ks*dot(H, N)));
+
+    for(uint i = 0u; i < u_point_lights.length(); ++i) {
+        vec3 L_unnormalized = u_point_lights[i].position.xyz - v_position_worldspace;
+        float distance = length(L_unnormalized);
+
+        L = L_unnormalized / distance;
+        H = normalize(V + L);
+        Li = u_point_lights[i].color.rgb / (u_point_lights[i].attenuation_factor * pow(max(1, distance / u_point_lights[i].range), 2));
+        color += Li*(Kd*dot(L, N) + max(vec3(0), Ks*dot(H, N)));
+    }
+
+    f_color = vec4(color, 1.0); // TODO: alpha
 }
 ";
 
