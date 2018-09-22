@@ -7,11 +7,11 @@ use mesh::VertexAttribIndex;
 use camera::View;
 
 // TODO:
-// - Lights
 // - Material textures
 // - Shape keys
 // - Skeletal animations
 // - Full PBR rendering
+// | Lights
 
 const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
@@ -191,12 +191,12 @@ impl GLTestMDIScene {
     }
     unsafe fn draw_unsafe(&self, view: &View) {
         let materials = [
-            Material { color: Rgba::red(), },
-            Material { color: Rgba::yellow(), },
-            Material { color: Rgba::green(), },
-            Material { color: Rgba::white(), },
-            Material { color: Rgba::black(), },
-            Material { color: Rgba::cyan(), },
+            Material { albedo_mul: Rgba::red(), .. Default::default() },
+            Material { albedo_mul: Rgba::yellow(), .. Default::default()  },
+            Material { albedo_mul: Rgba::green(), .. Default::default() },
+            Material { albedo_mul: Rgba::white(), .. Default::default() },
+            Material { albedo_mul: Rgba::black(), .. Default::default() },
+            Material { albedo_mul: Rgba::cyan(), .. Default::default() },
         ];
 
         gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
@@ -267,10 +267,18 @@ pub struct HeapInfo {
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[repr(C)]
 pub struct Material {
-    pub color: Rgba<f32>,
+    pub albedo_mul   : Vec4<f32>,
+    pub albedo_map   : u32,
+    pub normal_map   : u32,
+    pub metallic_mul : f32,
+    pub metallic_map : u32,
+    pub roughness_mul: f32,
+    pub roughness_map: u32,
+    pub ao_map       : u32,
+    pub _pad: u32;
 }
 
-assert_eq_size!(material_struct_size; Material, [Vec4<f32>; 1]);
+assert_eq_size!(material_struct_size; Material, [Vec4<f32>; 3]);
 
 #[derive(Debug, Default, Copy, Clone, PartialEq)]
 #[repr(C)]
@@ -332,7 +340,14 @@ static PBR_FS: &'static [u8] =
 b"#version 450 core
 
 struct Material {
-    vec4 color;
+    vec4  albedo_mul;
+    uint  albedo_map;
+    uint  normal_map;
+    float metallic_mul;
+    uint  metallic_map;
+    float roughness_mul;
+    uint  roughness_map;
+    uint  ao_map;
 };
 
 struct PointLight {
@@ -348,8 +363,8 @@ struct DirectionalLight {
     vec3 color;
 };
 
-// uniform sampler2DArray u_texture2d_arrays[32];
 
+uniform sampler2DArray u_texture2d_arrays[16]; // FIXME: we planned for 32
 uniform vec3 u_eye_position_worldspace;
 uniform DirectionalLight u_directional_light;
 layout(std430, binding = 1) buffer PointLights { PointLight u_point_lights[]; };
@@ -362,11 +377,17 @@ flat in uint v_material_index;
 
 out vec4 f_color;
 
+vec4 tex(uint sel, vec2 uv) {
+    return texture(u_texture2d_arrays[sel >> 16], vec3(uv, float(sel & 0xffff)));
+}
+
 void main() {
     vec3 N = normalize(v_normal);
     vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
 
-    vec3 Kd = u_materials[v_material_index].color.rgb;
+#define mat u_materials[v_material_index]
+
+    vec3 Kd = mat.albedo_mul.rgb;
     vec3 Ks = vec3(1.0);
 
     vec3 color = vec3(0.0);
