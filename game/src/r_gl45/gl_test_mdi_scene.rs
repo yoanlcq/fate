@@ -19,11 +19,11 @@ macro_rules! hashmap {
 }
 
 // TODO:
-// - Skeletal animations
 // - Full PBR rendering
 // | Material textures
 // | Lights
 // | Shape keys
+// | Skeletal animations
 
 const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
@@ -272,6 +272,11 @@ impl GLTestMDIScene {
             3, 4, 5,
         ];
 
+        // Check weights
+        for weights in weights.iter().cloned() {
+            assert_relative_eq!(weights.sum(), 1.);
+        }
+
         gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
         gl::NamedBufferSubData(self.normal_vbo.gl_id(), 0, mem::size_of_val(&normals[..]) as _, normals.as_ptr() as _);
         gl::NamedBufferSubData(self.uv_vbo.gl_id(), 0, mem::size_of_val(&uvs[..]) as _, uvs.as_ptr() as _);
@@ -295,7 +300,7 @@ impl GLTestMDIScene {
     }
     unsafe fn draw_unsafe(&self, view: &View, texture2d_arrays: &[GLuint]) {
 
-        let joint_matrices = [Mat4::<f32>::identity(); 32];
+        let joint_matrices = [Mat4::<f32>::identity(); 32]; // FIXME: But this changes on a per-instance basis (driven by animation)
 
         assert!(texture2d_arrays.len() <= 16, "Too many texture2d arrays for shader");
 
@@ -447,20 +452,19 @@ out vec2 v_uv;
 flat out uint v_material_index;
 
 void main() {
-#if 1
     mat4 skin_matrix =
         a_weights.x * u_joint_matrices[int(a_joints.x)] +
         a_weights.y * u_joint_matrices[int(a_joints.y)] +
         a_weights.z * u_joint_matrices[int(a_joints.z)] +
         a_weights.w * u_joint_matrices[int(a_joints.w)];
-#else
-    mat4 skin_matrix = mat4(1.0);
-#endif
 
-    vec4 world_pos = a_model_matrix * skin_matrix * vec4(a_position, 1.0);
-    gl_Position = u_viewproj_matrix * world_pos;
+    mat4 final_model_matrix = a_model_matrix * skin_matrix;
+
+    vec4 world_pos = final_model_matrix * vec4(a_position, 1.0);
+
+    gl_Position = u_viewproj_matrix * vec4(world_pos.xyz, 1.0);
     v_position_worldspace = world_pos.xyz;
-    v_normal = mat3(transpose(inverse(a_model_matrix))) * a_normal; // FIXME PERF
+    v_normal = mat3(transpose(inverse(final_model_matrix))) * a_normal; // FIXME PERF
     v_uv = a_uv;
     v_material_index = a_material_index;
 }

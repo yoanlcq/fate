@@ -15,6 +15,9 @@ extern crate gltf;
 extern crate rand;
 #[macro_use]
 extern crate static_assertions;
+#[macro_use]
+extern crate approx;
+
 
 // TODO list:
 // - Load meshes (obj and GLTF)
