@@ -18,13 +18,6 @@ macro_rules! hashmap {
     };
 }
 
-// TODO:
-// | Full PBR rendering
-// | Material textures
-// | Lights
-// | Shape keys
-// | Skeletal animations
-
 const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
 const MAX_INDICES  : isize = 1024 << 5;
