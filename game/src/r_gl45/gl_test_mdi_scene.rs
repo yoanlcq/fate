@@ -152,12 +152,12 @@ impl GLTestMDIScene {
 
             // Per-mesh
             let morphtarget_displacements = [
-                hashmap!(2 => Vec3::<f32>::new(1., 0., 0.)),
+                hashmap!(2 => Vec3::<f32>::new(0.7, 0., 0.)),
                 hashmap!(0 => Vec3::<f32>::new(0., -1., 0.)),
             ];
 
             // Per morphed instance
-            let morphtarget_weights = [ 1., 0. ];
+            let morphtarget_weights = [ 1., 0.5 ];
 
             let mut positions = positions_orig.clone();
             for (i, pos) in positions.iter_mut().enumerate() {
@@ -194,6 +194,10 @@ impl GLTestMDIScene {
             Vec3::<f32>::new( 0., 1., -1.),
             Vec3::<f32>::new(-1., 0., -1.),
             Vec3::<f32>::new( 1., 0., -1.),
+
+            Vec3::<f32>::new(-1., -1., -1.),
+            Vec3::<f32>::new(1., 0., -1.),
+            Vec3::<f32>::new(0., 1., -1.),
         ];
         let uvs = [
             Vec2::<f32>::new(0., 0.),
@@ -203,8 +207,13 @@ impl GLTestMDIScene {
             Vec2::<f32>::new(0.5, 1.),
             Vec2::<f32>::new(0., 0.),
             Vec2::<f32>::new(1., 0.),
+
+            Vec2::<f32>::new(0., 0.),
+            Vec2::<f32>::new(1., 0.),
+            Vec2::<f32>::new(0., 1.),
         ];
         let indices = [
+            0_u32, 1, 2,
             0_u32, 1, 2,
             0_u32, 1, 2,
         ];
@@ -230,17 +239,12 @@ impl GLTestMDIScene {
         gl::NamedBufferSubData(self.material_index_vbo.gl_id(), 0, mem::size_of_val(&material_indices[..]) as _, material_indices.as_ptr() as _);
         gl::NamedBufferSubData(self.ibo.gl_id(), 0, mem::size_of_val(&indices[..]) as _, indices.as_ptr() as _);
 
-        self.heap_info.vertex_ranges.push(0 .. 3);
-        self.heap_info.index_ranges.push(0 .. 3);
-        self.heap_info.vertex_ranges.push(3 .. 6);
-        self.heap_info.index_ranges.push(3 .. 6);
-        self.heap_info.instance_ranges.push(0 .. 3);
-        self.heap_info.instance_range_mesh_entry.push(0);
-        self.heap_info.instance_ranges.push(3 .. 6);
-        self.heap_info.instance_range_mesh_entry.push(1);
-
-        // Morph targets:
-        // Each instance has a vertex buffer of displacements, computed client in side
+        self.heap_info = HeapInfo {
+            vertex_ranges: vec![0..3, 3..6, 6..9],
+            index_ranges: vec![0..3, 3..6, 6..9],
+            instance_ranges: vec![0..3, 3..6, 0..2],
+            instance_range_mesh_entry: vec![0, 1, 2],
+        };
     }
     pub fn draw(&self, view: &View, texture2d_arrays: &[GLuint]) {
         unsafe {
