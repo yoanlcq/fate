@@ -6,11 +6,23 @@ use fate::gx::{self, Object, {gl::{self, types::*}}};
 use mesh::VertexAttribIndex;
 use camera::View;
 
+macro_rules! hashmap {
+    ($($key:expr => $value:expr),*) => {
+        {
+            let mut m = ::std::collections::HashMap::new();
+            $(
+                m.insert($key, $value);
+            )*
+            m
+        }
+    };
+}
+
 // TODO:
-// - Material textures
 // - Shape keys
 // - Skeletal animations
 // - Full PBR rendering
+// | Material textures
 // | Lights
 
 const MAX_VERTICES : isize = 1024 << 4;
@@ -19,6 +31,13 @@ const MAX_INDICES  : isize = 1024 << 5;
 const MAX_CMDS     : isize = 1024;
 const MAX_MATERIALS: isize = 16384 / mem::size_of::<Material>() as isize; // min value in bytes of GL_MAX_UNIFORM_BLOCK_SIZE (limit does not apply to SSBOs)
 const MAX_POINT_LIGHTS: isize = 32;
+
+#[derive(Debug)]
+pub struct GLMorphVao {
+    vao: gx::VertexArray,
+    position_override_vbo: Option<gx::Buffer>,
+    normal_override_vbo: Option<gx::Buffer>,
+}
 
 #[derive(Debug)]
 pub struct GLTestMDIScene {
@@ -122,14 +141,50 @@ impl GLTestMDIScene {
         s
     }
     unsafe fn add_meshes(&mut self) {
-        let positions = [
-            Vec3::<f32>::new(0., 0., 0.),
-            Vec3::<f32>::new(1., 0., 0.),
-            Vec3::<f32>::new(0., 1., 0.),
+        use ::std::collections::HashMap;
 
+        let (mesh1_positions, mesh1_positions_morph1) = {
+            let positions_orig = [
+                Vec3::<f32>::new(0., 0., 0.),
+                Vec3::<f32>::new(1., 0., 0.),
+                Vec3::<f32>::new(0., 1., 0.),
+            ];
+
+            // Per-mesh
+            let morphtarget_displacements = [
+                hashmap!(2 => Vec3::<f32>::new(1., 0., 0.)),
+                hashmap!(0 => Vec3::<f32>::new(0., -1., 0.)),
+            ];
+
+            // Per morphed instance
+            let morphtarget_weights = [ 1., 0. ];
+
+            let mut positions = positions_orig.clone();
+            for (i, pos) in positions.iter_mut().enumerate() {
+                let mut displacement = Vec3::zero();
+                for (target_i, weight) in morphtarget_weights.iter().enumerate() {
+                    displacement += morphtarget_displacements[target_i].get(&i).map(|v| *v).unwrap_or_default() * *weight;
+                }
+                *pos += displacement;
+            }
+            (positions_orig, positions)
+        };
+
+        let positions = [
+            // Mesh 1
+            mesh1_positions[0],
+            mesh1_positions[1],
+            mesh1_positions[2],
+
+            // Mesh 2
             Vec3::<f32>::new( 0.0, 1.0, 0.),
             Vec3::<f32>::new(-0.5, 0.0, 0.),
             Vec3::<f32>::new( 0.5, 0.0, 0.),
+
+            // Mesh 1, morphed 1
+            mesh1_positions_morph1[0],
+            mesh1_positions_morph1[1],
+            mesh1_positions_morph1[2],
         ];
         let normals = [
             Vec3::<f32>::new(-1., -1., -1.),
@@ -145,9 +200,9 @@ impl GLTestMDIScene {
             Vec2::<f32>::new(1., 0.),
             Vec2::<f32>::new(0., 1.),
 
+            Vec2::<f32>::new(0.5, 1.),
             Vec2::<f32>::new(0., 0.),
             Vec2::<f32>::new(1., 0.),
-            Vec2::<f32>::new(0., 1.),
         ];
         let indices = [
             0_u32, 1, 2,
@@ -183,6 +238,9 @@ impl GLTestMDIScene {
         self.heap_info.instance_range_mesh_entry.push(0);
         self.heap_info.instance_ranges.push(3 .. 6);
         self.heap_info.instance_range_mesh_entry.push(1);
+
+        // Morph targets:
+        // Each instance has a vertex buffer of displacements, computed client in side
     }
     pub fn draw(&self, view: &View, texture2d_arrays: &[GLuint]) {
         unsafe {
