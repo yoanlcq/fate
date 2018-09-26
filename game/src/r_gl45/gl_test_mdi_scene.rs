@@ -19,11 +19,11 @@ macro_rules! hashmap {
 }
 
 // TODO:
-// - Shape keys
 // - Skeletal animations
 // - Full PBR rendering
 // | Material textures
 // | Lights
+// | Shape keys
 
 const MAX_VERTICES : isize = 1024 << 4;
 const MAX_INSTANCES: isize = 4096;
@@ -45,6 +45,8 @@ pub struct GLTestMDIScene {
     position_vbo: gx::Buffer,
     normal_vbo: gx::Buffer,
     uv_vbo: gx::Buffer,
+    weight_vbo: gx::Buffer,
+    joint_vbo: gx::Buffer,
     model_matrix_vbo: gx::Buffer,
     material_index_vbo: gx::Buffer,
     ibo: gx::Buffer,
@@ -63,22 +65,26 @@ impl GLTestMDIScene {
     }
     unsafe fn new_unsafe() -> Self {
         let vao = gx::VertexArray::new();
-        let mut buffers = [0; 9];
+        let mut buffers = [0; 11];
         gl::CreateBuffers(buffers.len() as _, buffers.as_mut_ptr());
         let position_vbo = buffers[0];
         let normal_vbo = buffers[1];
         let uv_vbo = buffers[2];
-        let model_matrix_vbo = buffers[3];
-        let material_index_vbo = buffers[4];
-        let ibo = buffers[5];
-        let cmd_buffer = buffers[6];
-        let material_buffer = buffers[7];
-        let point_light_buffer = buffers[8];
+        let weight_vbo = buffers[3];
+        let joint_vbo = buffers[4];
+        let model_matrix_vbo = buffers[5];
+        let material_index_vbo = buffers[6];
+        let ibo = buffers[7];
+        let cmd_buffer = buffers[8];
+        let material_buffer = buffers[9];
+        let point_light_buffer = buffers[10];
 
         let flags = gl::DYNAMIC_STORAGE_BIT;
         gl::NamedBufferStorage(position_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
         gl::NamedBufferStorage(normal_vbo, MAX_VERTICES * 3 * 4, ptr::null(), flags);
         gl::NamedBufferStorage(uv_vbo, MAX_VERTICES * 2 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(weight_vbo, MAX_VERTICES * 4 * 4, ptr::null(), flags);
+        gl::NamedBufferStorage(joint_vbo, MAX_VERTICES * 4 * 2, ptr::null(), flags);
         gl::NamedBufferStorage(model_matrix_vbo, MAX_INSTANCES * 4 * 4 * 4, ptr::null(), flags);
         gl::NamedBufferStorage(material_index_vbo, MAX_INSTANCES * 2, ptr::null(), flags);
         gl::NamedBufferStorage(ibo, MAX_INDICES * 4, ptr::null(), flags);
@@ -92,6 +98,8 @@ impl GLTestMDIScene {
         gl::EnableVertexAttribArray(VertexAttribIndex::Position as _);
         gl::EnableVertexAttribArray(VertexAttribIndex::Normal as _);
         gl::EnableVertexAttribArray(VertexAttribIndex::UV as _);
+        gl::EnableVertexAttribArray(VertexAttribIndex::Weights as _);
+        gl::EnableVertexAttribArray(VertexAttribIndex::Joints as _);
         gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 0);
         gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 1);
         gl::EnableVertexAttribArray(VertexAttribIndex::ModelMatrix as GLuint + 2);
@@ -101,6 +109,8 @@ impl GLTestMDIScene {
         gl::VertexAttribDivisor(VertexAttribIndex::Position as _, 0);
         gl::VertexAttribDivisor(VertexAttribIndex::Normal as _, 0);
         gl::VertexAttribDivisor(VertexAttribIndex::UV as _, 0);
+        gl::VertexAttribDivisor(VertexAttribIndex::Weights as _, 0);
+        gl::VertexAttribDivisor(VertexAttribIndex::Joints as _, 0);
         gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 0, 1);
         gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 1, 1);
         gl::VertexAttribDivisor(VertexAttribIndex::ModelMatrix as GLuint + 2, 1);
@@ -113,6 +123,10 @@ impl GLTestMDIScene {
         gl::VertexAttribPointer(VertexAttribIndex::Normal as _, 3, gl::FLOAT, gl::FALSE, 0, 0 as _);
         gl::BindBuffer(gl::ARRAY_BUFFER, uv_vbo);
         gl::VertexAttribPointer(VertexAttribIndex::UV as _, 2, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, weight_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::Weights as _, 4, gl::FLOAT, gl::FALSE, 0, 0 as _);
+        gl::BindBuffer(gl::ARRAY_BUFFER, joint_vbo);
+        gl::VertexAttribPointer(VertexAttribIndex::Joints as _, 4, gl::UNSIGNED_SHORT, gl::FALSE, 0, 0 as _);
         gl::BindBuffer(gl::ARRAY_BUFFER, model_matrix_vbo);
         gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 0, 4, gl::FLOAT, gl::FALSE, 4*4*4, (0*4*4) as _);
         gl::VertexAttribPointer(VertexAttribIndex::ModelMatrix as GLuint + 1, 4, gl::FLOAT, gl::FALSE, 4*4*4, (1*4*4) as _);
@@ -128,6 +142,8 @@ impl GLTestMDIScene {
             position_vbo: gx::Buffer::from_gl_id(position_vbo),
             normal_vbo: gx::Buffer::from_gl_id(normal_vbo),
             uv_vbo: gx::Buffer::from_gl_id(uv_vbo),
+            weight_vbo: gx::Buffer::from_gl_id(weight_vbo),
+            joint_vbo: gx::Buffer::from_gl_id(joint_vbo),
             model_matrix_vbo: gx::Buffer::from_gl_id(model_matrix_vbo),
             material_index_vbo: gx::Buffer::from_gl_id(material_index_vbo),
             ibo: gx::Buffer::from_gl_id(ibo),
@@ -212,6 +228,30 @@ impl GLTestMDIScene {
             Vec2::<f32>::new(1., 0.),
             Vec2::<f32>::new(0., 1.),
         ];
+        let weights = [
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+            Vec4::<f32>::new(1., 0., 0., 0.),
+        ];
+        let joints = [
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+            Vec4::<u16>::new(0, 0, 0, 0),
+        ];
         let indices = [
             0_u32, 1, 2,
             0_u32, 1, 2,
@@ -235,6 +275,8 @@ impl GLTestMDIScene {
         gl::NamedBufferSubData(self.position_vbo.gl_id(), 0, mem::size_of_val(&positions[..]) as _, positions.as_ptr() as _);
         gl::NamedBufferSubData(self.normal_vbo.gl_id(), 0, mem::size_of_val(&normals[..]) as _, normals.as_ptr() as _);
         gl::NamedBufferSubData(self.uv_vbo.gl_id(), 0, mem::size_of_val(&uvs[..]) as _, uvs.as_ptr() as _);
+        gl::NamedBufferSubData(self.weight_vbo.gl_id(), 0, mem::size_of_val(&weights[..]) as _, weights.as_ptr() as _);
+        gl::NamedBufferSubData(self.joint_vbo.gl_id(), 0, mem::size_of_val(&joints[..]) as _, joints.as_ptr() as _);
         gl::NamedBufferSubData(self.model_matrix_vbo.gl_id(), 0, mem::size_of_val(&model_matrices[..]) as _, model_matrices.as_ptr() as _);
         gl::NamedBufferSubData(self.material_index_vbo.gl_id(), 0, mem::size_of_val(&material_indices[..]) as _, material_indices.as_ptr() as _);
         gl::NamedBufferSubData(self.ibo.gl_id(), 0, mem::size_of_val(&indices[..]) as _, indices.as_ptr() as _);
@@ -252,6 +294,9 @@ impl GLTestMDIScene {
         }
     }
     unsafe fn draw_unsafe(&self, view: &View, texture2d_arrays: &[GLuint]) {
+
+        let joint_matrices = [Mat4::<f32>::identity(); 32];
+
         assert!(texture2d_arrays.len() <= 16, "Too many texture2d arrays for shader");
 
         // FIXME: Hardcoded texture selectors
@@ -300,6 +345,7 @@ impl GLTestMDIScene {
         let units = [0_i32, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, ];
 
         gl::UseProgram(self.program.inner().gl_id());
+        self.program.set_uniform_primitive("u_joint_matrices[0]", &joint_matrices[..]);
         self.program.set_uniform("u_texture2d_arrays[0]", gx::GLSLType::Sampler2DArray, &units[..texture2d_arrays.len()]);
         self.program.set_uniform_primitive("u_viewproj_matrix", &[view.proj_matrix() * view.view_matrix()]);
         self.program.set_uniform_primitive("u_eye_position_worldspace", &[view.xform.position]);
@@ -385,12 +431,15 @@ static PBR_VS : &'static [u8] =
 b"#version 450 core
 
 uniform mat4 u_viewproj_matrix;
+uniform mat4 u_joint_matrices[32];
 
-layout(location = 0) in vec3 a_position;
-layout(location = 1) in vec3 a_normal;
-layout(location = 5) in vec2 a_uv;
-layout(location = 9) in mat4 a_model_matrix;
-layout(location = 13) in uint a_material_index;
+layout(location =  0) in vec3 a_position;
+layout(location =  1) in vec3 a_normal;
+layout(location =  5) in vec2 a_uv;
+layout(location =  9) in vec4 a_weights;
+layout(location = 10) in vec4 a_joints;
+layout(location = 11) in mat4 a_model_matrix;
+layout(location = 15) in uint a_material_index;
 
 out vec3 v_position_worldspace;
 out vec3 v_normal;
@@ -398,7 +447,17 @@ out vec2 v_uv;
 flat out uint v_material_index;
 
 void main() {
-    vec4 world_pos = a_model_matrix * vec4(a_position, 1.0);
+#if 1
+    mat4 skin_matrix =
+        a_weights.x * u_joint_matrices[int(a_joints.x)] +
+        a_weights.y * u_joint_matrices[int(a_joints.y)] +
+        a_weights.z * u_joint_matrices[int(a_joints.z)] +
+        a_weights.w * u_joint_matrices[int(a_joints.w)];
+#else
+    mat4 skin_matrix = mat4(1.0);
+#endif
+
+    vec4 world_pos = a_model_matrix * skin_matrix * vec4(a_position, 1.0);
     gl_Position = u_viewproj_matrix * world_pos;
     v_position_worldspace = world_pos.xyz;
     v_normal = mat3(transpose(inverse(a_model_matrix))) * a_normal; // FIXME PERF

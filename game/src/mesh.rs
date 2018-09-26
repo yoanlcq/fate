@@ -65,7 +65,9 @@ pub enum VertexAttribIndex {
     UV2 = 6,
     UV3 = 7,
     UV4 = 8,
+    Weights = 9,
+    Joints = 10,
     // Instanced
-    ModelMatrix = 9,
-    MaterialIndex = 13,
+    ModelMatrix = 11,
+    MaterialIndex = 15,
 }
