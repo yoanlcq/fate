@@ -19,7 +19,7 @@ macro_rules! hashmap {
 }
 
 // TODO:
-// - Full PBR rendering
+// | Full PBR rendering
 // | Material textures
 // | Lights
 // | Shape keys
@@ -31,13 +31,6 @@ const MAX_INDICES  : isize = 1024 << 5;
 const MAX_CMDS     : isize = 1024;
 const MAX_MATERIALS: isize = 16384 / mem::size_of::<Material>() as isize; // min value in bytes of GL_MAX_UNIFORM_BLOCK_SIZE (limit does not apply to SSBOs)
 const MAX_POINT_LIGHTS: isize = 32;
-
-#[derive(Debug)]
-pub struct GLMorphVao {
-    vao: gx::VertexArray,
-    position_override_vbo: Option<gx::Buffer>,
-    normal_override_vbo: Option<gx::Buffer>,
-}
 
 #[derive(Debug)]
 pub struct GLTestMDIScene {
@@ -306,12 +299,12 @@ impl GLTestMDIScene {
 
         // FIXME: Hardcoded texture selectors
         let materials = [
-            Material { albedo_mul: Rgba::red()   , albedo_map: (2 << 16) | 0, .. Default::default() },
-            Material { albedo_mul: Rgba::yellow(), albedo_map: (2 << 16) | 0, .. Default::default() },
-            Material { albedo_mul: Rgba::green() , albedo_map: (2 << 16) | 1, .. Default::default() },
-            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 1, .. Default::default() },
-            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 2, .. Default::default() },
-            Material { albedo_mul: Rgba::cyan()  , albedo_map: (2 << 16) | 2, .. Default::default() },
+            Material { albedo_mul: Rgba::red()   , albedo_map: (2 << 16) | 0, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
+            Material { albedo_mul: Rgba::yellow(), albedo_map: (2 << 16) | 0, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
+            Material { albedo_mul: Rgba::green() , albedo_map: (2 << 16) | 1, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
+            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 1, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
+            Material { albedo_mul: Rgba::white() , albedo_map: (2 << 16) | 2, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
+            Material { albedo_mul: Rgba::cyan()  , albedo_map: (2 << 16) | 2, metallic_mul: 1., metallic_map: 1, roughness_mul: 0.4, roughness_map: 1, ao_map: 1, normal_map: 0, _pad: Default::default(), },
         ];
 
         gl::NamedBufferSubData(self.material_buffer.gl_id(), 0, mem::size_of_val(&materials[..]) as _, materials.as_ptr() as _);
@@ -473,6 +466,8 @@ void main() {
 static PBR_FS: &'static [u8] = 
 b"#version 450 core
 
+const float PI = 3.14159265359;
+
 struct Material {
     vec4  albedo_mul;
     uint  albedo_map;
@@ -515,75 +510,13 @@ vec4 tex(uint sel, vec2 uv) {
     return texture(u_texture2d_arrays[sel >> 16], vec3(uv, float(sel & 0xffffu)));
 }
 
-void main() {
-    vec3 N = normalize(v_normal);
-    vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
-
-#define mat u_materials[v_material_index]
-
-    vec3 Kd = mat.albedo_mul.rgb * tex(mat.albedo_map, v_uv).rgb;
-    vec3 Ks = vec3(1.0);
-
-    vec3 color = vec3(0.0);
-
-    vec3 L  = u_directional_light.direction; // Expected to be normalized
-    vec3 Li = u_directional_light.color;
-    vec3 H  = normalize(V + L);
-    color += Li*(Kd*dot(L, N) + max(vec3(0), Ks*dot(H, N)));
-
-    for(uint i = 0u; i < u_point_lights.length(); ++i) {
-        vec3 L_unnormalized = u_point_lights[i].position.xyz - v_position_worldspace;
-        float distance = length(L_unnormalized);
-
-        L = L_unnormalized / distance;
-        H = normalize(V + L);
-        Li = u_point_lights[i].color.rgb / (u_point_lights[i].attenuation_factor * pow(max(1, distance / u_point_lights[i].range), 2));
-        color += Li*(Kd*dot(L, N) + max(vec3(0), Ks*dot(H, N)));
-    }
-
-    f_color = vec4(color, 1.0); // TODO: alpha
-}
-";
-
-// Lol no PBR
-/*
-// https://learnopengl.com/PBR/Lighting
-static PBR_FS: &'static [u8] = 
-"#version 450 core
-
-in vec3 v_position;
-in vec3 v_normal;
-in vec2 v_uv;
-flat in uint v_material_index;
-
-out vec4 f_color;
-
-struct Light {
-
-};
-
-struct Material {
-    vec4  albedo_mul;
-    uint  albedo_map;
-    uint  normal_map;
-    float metallic_mul;
-    uint  metallic_map;
-    float roughness_mul;
-    uint  roughness_map;
-    uint  ao_map;
-};
-
-layout(std430, binding = 1) buffer Lights { Light u_lights[]; };
-layout(std430, binding = 2) buffer Materials { Material u_materials[]; };
-uniform sampler2DArray u_texture2d_arrays[32];
-uniform vec3 u_eye_position;
-
-const float PI = 3.14159265359;
-
+// Computes ratio between specular and diffuse reflection
+// F0 is the surface reflection at zero incidence (i.e when looking directly at the surface)
 vec3 fresnel_schlick(float cos_theta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cos_theta, 5.0);
-}  
+}
 
+// Computes the normal distribution coefficient, D
 float distribution_ggx(vec3 N, vec3 H, float roughness) {
     float a      = roughness*roughness;
     float a2     = a*a;
@@ -607,75 +540,69 @@ float geometry_schlick_ggx(float NdotV, float roughness) {
     return num / denom;
 }
 
+// Computes the geometry coefficient, G
 float geometry_smith(vec3 N, vec3 V, vec3 L, float roughness) {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
-    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+    float ggx2  = geometry_schlick_ggx(NdotV, roughness);
+    float ggx1  = geometry_schlick_ggx(NdotL, roughness);
 	
     return ggx1 * ggx2;
 }
 
-vec3 map_normal(vec3 N, vec3 sampled) {
-
-}
-
-vec4 tex(uint tex, vec2 uv) {
-    return texture(u_texture2d_arrays[tex & 0xffff], vec3(uv, float(tex >> 16)));
-}
-
 void main() {
-
     vec3 N = normalize(v_normal);
-    vec3 V = normalize(u_eye_position - v_position);
+    vec3 V = normalize(u_eye_position_worldspace - v_position_worldspace);
 
-#define m u_materials[a_material_index]
-    vec3  albedo    = m.albedo_mul * pow(tex(m.albedo_map, v_uv).rgb, 2.2); // Map sRGB to linear
-    vec3  normal    = map_normal(N, tex(m.normal_map, v_uv).rgb);
-    float metallic  = m.metallic_mul * tex(m.metallic_map, v_uv).r;
-    float roughness = m.roughness_mul * tex(m.roughness_map, v_uv).r;
-    float ao        = tex(m.ao_map, v_uv).r;
-#undef m
+#define mat u_materials[v_material_index]
 
-    vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, albedo, metallic);
-	           
-    // reflectance equation
+    vec4 albedo = mat.albedo_mul * tex(mat.albedo_map, v_uv);
+    float metallic = mat.metallic_mul * tex(mat.metallic_map, v_uv).r;
+    float roughness = mat.roughness_mul * tex(mat.roughness_map, v_uv).r;
+    float ao = tex(mat.ao_map, v_uv).r;
+
+    vec3 F0 = vec3(0.04); // See fresnel_schlick
+    F0 = mix(F0, albedo.rgb, metallic);
+
     vec3 Lo = vec3(0.0);
-    for(int i = 0; i < u_lights.length(); ++i) 
-    {
-        // calculate per-light radiance
-        vec3 L = normalize(lightPositions[i] - WorldPos);
+    for (int i = 0; i < u_point_lights.length(); ++i) {
+        vec3 L_unnormalized = u_point_lights[i].position.xyz - v_position_worldspace;
+        float distance = length(L_unnormalized);
+
+        vec3 L = L_unnormalized / distance;
         vec3 H = normalize(V + L);
-        float distance    = length(lightPositions[i] - WorldPos);
-        float attenuation = 1.0 / (distance * distance);
-        vec3 radiance     = lightColors[i] * attenuation;        
-        
-        // cook-torrance brdf
-        float NDF = DistributionGGX(N, H, roughness);        
-        float G   = GeometrySmith(N, V, L, roughness);      
-        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);       
-        
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= 1.0 - metallic;	  
-        
-        vec3 numerator    = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0);
-        vec3 specular     = numerator / max(denominator, 0.001);  
-            
-        // add to outgoing radiance Lo
-        float NdotL = max(dot(N, L), 0.0);                
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL; 
-    }   
-  
-    vec3 ambient = vec3(0.03) * albedo * ao;
+
+        float attenuation = 1.0 / (distance * distance); // XXX attenuation because we're in linear space, which we gamma correct at end of the shader
+        vec3 radiance = u_point_lights[i].color.rgb * attenuation;
+
+        float NDF = distribution_ggx(N, H, roughness);
+        float G = geometry_smith(N, V, L, roughness);
+        vec3 F = fresnel_schlick(max(0.0, dot(H, V)), F0);
+
+        // Cook-Torrance BRDF
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(0.0, dot(N, V)) * max(0.0, dot(N, L));
+        vec3 specular = numerator / max(denominator, 0.001);
+
+        //
+        vec3 Ks = F;
+        vec3 Kd = (vec3(1.0) - Ks) * (1.0 - metallic);
+
+        //
+        float NdotL = max(0.0, dot(N, L));
+        Lo += (Kd * albedo.rgb / PI + specular) * radiance * NdotL;
+    }
+
+    vec3 ambient = vec3(0.03) * albedo.rgb * ao;
     vec3 color = ambient + Lo;
-	
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));  
-   
-    FragColor = vec4(color, 1.0);
+
+    // Pretend directional light is used
+    color += u_directional_light.color * 0.0001;
+
+    // Gamma correct
+    color /= color + vec3(1.0);
+    color = pow(color, vec3(1.0/2.2));
+
+    f_color = vec4(color, albedo.a);
 }
 ";
-*/
