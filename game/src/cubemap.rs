@@ -43,11 +43,27 @@ impl CubemapFace {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct CubemapArrayInfo {
     // Parameters at creation
     pub nb_levels: u32,
     pub internal_format: GpuTextureInternalFormat,
     pub size: Extent2<u32>,
     pub nb_cubemaps: u32,
+}
+
+impl CubemapArrayInfo {
+    pub fn memory_usage(&self) -> usize {
+        let mut sum = 0;
+        for level in 0 .. self.nb_levels {
+            sum += self.memory_usage_at_level(level);
+        }
+        sum
+    }
+    pub fn memory_usage_at_level(&self, level: u32) -> usize {
+        assert!(level < self.nb_levels);
+        let size = self.size.map(|x| (x >> level) as usize);
+        let bits = self.nb_cubemaps as usize * 6 * size.product() * self.internal_format.pixel_bits().expect("This internal format has no defined pixel size");
+        (bits + 7) / 8
+    }
 }

@@ -56,37 +56,29 @@ impl Gameplay {
             leaf.skybox_cubemap_selector = Some(CubemapSelector { array_id: cubemap::RGB8_1L_1024X1024, cubemap: 0, });
         }
 
-        g.cubemap_array_create(cubemap::RGB8_1L_1X1, CubemapArrayInfo {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::new(1, 1),
-            nb_cubemaps: 16,
-        });
-        g.cubemap_array_create(cubemap::RGB8_1L_1024X1024, CubemapArrayInfo {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(1024),
-            nb_cubemaps: 6,
-        });
+        let cubemap_array_infos = [
+            (cubemap::RGB8_1L_1X1, CubemapArrayInfo { nb_levels: 1, internal_format: GpuTextureInternalFormat::RGB8, size: Extent2::one(), nb_cubemaps: 16, }),
+            (cubemap::RGB8_1L_1024X1024, CubemapArrayInfo { nb_levels: 1, internal_format: GpuTextureInternalFormat::RGB8, size: Extent2::broadcast(1024), nb_cubemaps: 6, }),
+        ];
+        let texture2d_array_infos = [
+            (texture2d::RGB8_1L_1X1, Texture2DArrayInfo { nb_levels: 1, internal_format: GpuTextureInternalFormat::RGB8, size: Extent2::one(), nb_slots: 2, }),
+            (texture2d::RGB8_1L_256X256, Texture2DArrayInfo { nb_levels: 1, internal_format: GpuTextureInternalFormat::RGB8, size: Extent2::broadcast(256), nb_slots: 3, }),
+            (texture2d::RGB8_1L_1024X1024, Texture2DArrayInfo { nb_levels: 1, internal_format: GpuTextureInternalFormat::RGB8, size: Extent2::broadcast(1024), nb_slots: 2, }),
+        ];
 
-        g.texture2d_array_create(texture2d::RGB8_1L_1X1, Texture2DArrayInfo {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(1),
-            nb_slots: 2,
-        });
-        g.texture2d_array_create(texture2d::RGB8_1L_256X256, Texture2DArrayInfo {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(256),
-            nb_slots: 3,
-        });
-        g.texture2d_array_create(texture2d::RGB8_1L_1024X1024, Texture2DArrayInfo {
-            nb_levels: 1,
-            internal_format: GpuTextureInternalFormat::RGB8,
-            size: Extent2::broadcast(1024),
-            nb_slots: 2,
-        });
+
+        // 512 Mib of memory
+        let total_mem = 512 * 1024 * 1024;
+        // TODO set this limit for GPU memory; take texture arrays into account
+
+        for (array_id, info) in cubemap_array_infos.iter() {
+            info!("Memory usage of {:?}: {}", array_id, info.memory_usage());
+            g.cubemap_array_create(*array_id, *info);
+        }
+        for (array_id, info) in texture2d_array_infos.iter() {
+            info!("Memory usage of {:?}: {}", array_id, info.memory_usage());
+            g.texture2d_array_create(*array_id, *info);
+        }
 
         fn pixel(rgb: Rgb<u8>) -> CpuSubImage2D {
             CpuSubImage2D::from_rgb_u8_pixel(rgb)
