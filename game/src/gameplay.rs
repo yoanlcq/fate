@@ -49,6 +49,17 @@ pub struct Gameplay {
     texture2d_requests: Vec<Texture2DRequest>,
 }
 
+fn format_mem(b: usize) -> String {
+    let kb = b / 1024;
+    if kb == 0 { return format!("{} b", b); }
+    let mib = kb / 1024;
+    if mib == 0 { return format!("{} Kb", kb); }
+    let gib = mib / 1024;
+    if gib == 0 { return format!("{} MiB", mib); }
+    
+    format!("{} GiB", gib)
+}
+
 impl Gameplay {
     pub fn new(g: &mut G) -> Self {
         {
@@ -67,18 +78,33 @@ impl Gameplay {
         ];
 
 
-        // 512 Mib of memory
-        let total_mem = 512 * 1024 * 1024;
-        // TODO set this limit for GPU memory; take texture arrays into account
+        let mut tex_mem = 0;
 
         for (array_id, info) in cubemap_array_infos.iter() {
-            info!("Memory usage of {:?}: {}", array_id, info.memory_usage());
+            tex_mem += info.memory_usage();
+            info!("Memory usage of {:?}: {}", array_id, format_mem(info.memory_usage()));
             g.cubemap_array_create(*array_id, *info);
         }
         for (array_id, info) in texture2d_array_infos.iter() {
-            info!("Memory usage of {:?}: {}", array_id, info.memory_usage());
+            tex_mem += info.memory_usage();
+            info!("Memory usage of {:?}: {}", array_id, format_mem(info.memory_usage()));
             g.texture2d_array_create(*array_id, *info);
         }
+
+        // Use max. 512 Mib total on the GPU
+        let max_mem = 512 * 1024 * 1024;
+        // Max. 2 Mib of scratch space (misc unpredictable allocations)
+        let scratch_mem = 2 * 1024 * 1024;
+
+        // 432 Mib
+        let max_chunks = 3*3*3;
+        let chunk_mem = 8 * 1024 * 1024;
+
+        info!("tex_mem         : {}", format_mem(tex_mem));
+        info!("scratch_mem     : {}", format_mem(scratch_mem));
+        info!("total_chunks_mem: {}", format_mem(max_chunks * chunk_mem));
+        info!("max_mem         : {}", format_mem(max_mem));
+        assert!(tex_mem + scratch_mem + max_chunks * chunk_mem <= max_mem);
 
         fn pixel(rgb: Rgb<u8>) -> CpuSubImage2D {
             CpuSubImage2D::from_rgb_u8_pixel(rgb)
